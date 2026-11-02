@@ -1,488 +1,266 @@
-# 🏆 TOTAL RECALL HACKATHON: WINNING BLUEPRINT
-## **YEARBOUND** — Make a Pact With Your Future Self
-
-**Hackathon:** Tatum × Walrus Memory: "Total Recall"  
-**Dates:** October 20 – November 10, 2026  
-**Track:** Consumer Finance Apps  
-**Prize Target:** 1st Place ($500) + Best Walrus Memory ($500) + Best Tatum AI Builder ($500) + Best Agent Payments ($500) = **Up to $2,000**
+# 📜 YEARBOUND: THE DEFINITIVE PRODUCT BIBLE
+**Project Codename:** Yearbound  
+**Track:** Consumer Finance Apps (Tatum × Walrus "Total Recall" Hackathon)  
+**Target:** 1st Place Track ($500) + Best Walrus Memory ($500) + Best Tatum AI Builder ($500) + Best Agent Payments ($500) = **$2,000 Sweep**  
+**Engineering Contract:** Every promise in this document corresponds 1:1 with verifiable code in the repository.
 
 ---
 
-## ⚠️ MANDATORY ENGINEERING STANDARDS (ZERO AI-SLOP POLICY)
-*This project is evaluated under rigorous technical review. Every commit and line of code must strictly adhere to:*
+## 1. PRODUCT ESSENCE & CORE DIFFERENTIATION
 
-1. **Zero AI Slopism & Production-Grade Code Quality:**
-   * No lazy placeholder comments (e.g. `// Add your logic here`, `// TODO: handle error`).
-   * No dummy mock implementations disguised as real logic — every integration must be fully wired or explicitly handled with clean fallbacks.
-   * Strict TypeScript (`strict: true`, no `any`, explicit interfaces/types for all domain models, props, and API payloads).
-   * Robust error handling with graceful recovery, typed exceptions, and user-facing feedback.
-2. **Intentional & Disciplined Commit Structure:**
-   * Clean atomic git commits following Conventional Commits (`feat:`, `fix:`, `chore:`, `refactor:`, `docs:`, `test:`).
-   * Each commit must represent a single logical, testable unit of progress with descriptive messages.
-   * No monolithic "dump all files" commits.
-3. **Modular & Cohesive Architecture:**
-   * Clear separation of concerns:
-     * `lib/walrus.ts`: Pure Walrus Memory SDK wrappers and job handlers.
-     * `lib/tatum.ts`: Tatum Sui RPC calls, object queries, and indexer reads.
-     * `lib/vault-x402.ts`: HTTP 402 challenge parser, payment verification, and Sui settlement.
-     * `lib/agent-tools.ts`: Strongly typed Vercel AI SDK tool definitions.
-     * `app/api/*`: Thin, resilient API route controllers.
-     * `components/*`: Accessible, reusable UI components built with Tailwind CSS.
-4. **Primary AI Engine:**
-   * **Google Gemini (`@ai-sdk/google`)** powering the Vercel AI SDK streaming agent.
+### 1.1 What We Are NOT Building
+* We are **NOT** building a generic AI chatbot where users type into an empty text prompt.
+* We are **NOT** building a passive personal finance dashboard that only shows charts of money already spent.
+* We are **NOT** building an honor-system habit tracker where users manually tick checkboxes.
+
+### 1.2 What We ARE Building
+**Yearbound is an Accountable Consumer Finance App & Enforcing Wallet.** 
+It couples an in-app payment engine with an opinionated, **Duolingo-style mascot companion ("Wally")** whose brain is powered by **Walrus Memory** and whose eyes are powered by **Tatum Sui RPC**.
+
+When a user spends or transfers money inside the app:
+1. Every transaction requires a **Mandatory Transaction Note / Memo**.
+2. At the exact **Point of Payment**, the mascot intercepts and cross-references the transaction against New Year's promises stored in Walrus Memory.
+3. If a commitment is broken (e.g. buying cigarettes, sending money to a forbidden ex-partner, or exceeding spending caps), the mascot **taunts the user using their own past words** and **forces an x402 penalty toll** into a time-locked Sui vault before the payment can clear.
+4. On **December 24–25 (Christmas)**, the vault unlocks, returning 100% of the accumulated funds to the user as a financial gift from their disciplined past self.
 
 ---
 
-## 1. The Concept
+## 2. THE MASCOT ("WALLY THE ENFORCER"): BEHAVIORAL ENGAGEMENT MODEL
 
-> **Yearbound** is an AI-powered commitment and accountability app that helps people follow through on personal goals by attaching **financial consequences** to broken commitments.
+The mascot is the living personality of the app. It prevents the product from feeling like an intimidating bank or a sterile spreadsheet.
 
-Every January, users define their goals, personal rules, and the monetary penalties for breaking them. Throughout the year, when a commitment is broken, the corresponding amount is deposited into a **personal vault on Sui**, where it remains locked until December 31. The money still belongs to the user — it's just temporarily inaccessible.
+### 2.1 Mascot Visual State Machine
+The mascot has 5 distinct visual and behavioral states:
 
-The AI agent **remembers everything**: goals, rules, exceptions, slip-up patterns, emotional context, and recurring struggles. It uses this evolving memory to make accountability *proactive*, not reactive.
-
-**The principle:** Breaking a commitment doesn't make you poorer — it makes your money temporarily inaccessible.
-
----
-
-## 2. Judging Criteria: Score Maximization Matrix
-
-| Category | Weight | What Judges Want | How Yearbound Delivers a Perfect Score |
-| :--- | :---: | :--- | :--- |
-| **Walrus & Tatum Integration** | **30%** | Meaningful, creative use of Walrus Memory on Mainnet + Tatum Sui RPC/Data APIs | • Year-long persistent memory of commitments, rules, exceptions, and behavioral patterns stored on Walrus Mainnet (≥10 memories).<br>• `memwal.recall()` drives every accountability check.<br>• Tatum Sui RPC queries vault balance, deposit history, and wallet state in real time. |
-| **Technical Quality** | **30%** | Clean, bug-free code; solid Sui RPC integration; resilience | • TypeScript + Next.js + Sui Move vault contract.<br>• Modular agent architecture with clear separation: Memory Layer → Reasoning Layer → Payment Layer.<br>• Error-resilient `waitForRememberJob` handling and RPC fallbacks. |
-| **Creativity & Novelty** | **20%** | Original idea; real consumer problem; deep "memory" theme | • No one else will combine accountability + financial escrow + evolving AI memory.<br>• The vault mechanic is novel: money isn't lost, it's locked.<br>• Memory isn't just storage — it shapes how the agent intervenes over months. |
-| **Presentation** | **20%** | README, blog post, 2–3 min video demo, public GitHub | • Compelling demo arc: January setup → mid-year intervention → pattern recognition → December release.<br>• Clean blog post + polished video with voiceover. |
-
----
-
-## 3. Bonus Bounties: The Triple Crown ($1,500 Extra)
-
-```mermaid
-flowchart LR
-    Y["YEARBOUND"] --> B1["🧠 Best Walrus Memory\n$500"]
-    Y --> B2["💳 Best Agent Payments\n$500"]
-    Y --> B3["🔧 Best Tatum AI Builder\n$500"]
-
-    B1 --- E1["Year-long evolving memory:\ncommitments → slip-ups → pattern\nrecognition → adapted interventions"]
-    B2 --- E2["Vault exposed as x402 endpoint:\nAgent hits POST /deposit-penalty\n→ gets 402 challenge → signs Sui\npayment → vault executes"]
-    B3 --- E3["UI scaffolded with ai.tatum.io\n+ Tatum Sui RPC for all\non-chain data queries"]
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                        MASCOT STATE MACHINE                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ 1. 😇 Proud / Festive  → Triggered when savings goals are met or        │
+│                          clean streaks are maintained.                 │
+│                          "30 days without an unapproved transfer!"     │
+│                                                                        │
+│ 2. 🧐 Suspicious       → Triggered when a transaction note contains     │
+│                          questionable keywords or amount exceeds $50.  │
+│                          "What exactly is this 'late night snack'?"    │
+│                                                                        │
+│ 3. 😏 Smug / Roasting   → Triggered upon rule violation. Quotes the     │
+│                          user's own January words back to them.        │
+│                          "Remember Jan 2? 'I will NEVER send funds to  │
+│                          0xSarah again.' Yet here we are."             │
+│                                                                        │
+│ 4. 😤 Enforcing Lock   → Triggered during x402 vault penalty deposit.  │
+│                          Plays lock animation & updates vault total.   │
+│                          "10 SUI locked in Christmas Vault. No takesies│
+│                          backsies until December 25."                  │
+│                                                                        │
+│ 5. 🎅 Santa / Payoff   → Triggered on Dec 24–25. Unlocks the smart     │
+│                          contract and delivers the Year-End Audit.     │
+│                          "You survived. Here's your $450 back."        │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Why Yearbound Naturally Qualifies for All Three:
+### 2.2 Memory-Driven Dialogue (Not Scripted Quotes)
+The mascot never repeats generic motivational platitudes. Every intervention is generated using **Walrus Memory recall**, injecting:
+* The exact timestamp when the user made the promise.
+* The specific words and rationale the user gave in January.
+* Historical frequency of slip-ups (e.g., *"This is your 3rd time trying this on a Friday"*).
 
-| Bounty | Requirement | Yearbound's Natural Fit |
+---
+
+## 3. COMPONENT 1: JANUARY ONBOARDING (PACT FORMATION)
+
+The user begins the commitment year through a structured 4-step onboarding wizard.
+
+### 3.1 What We Collect & Store
+The app captures four concrete financial resolution categories:
+
+| Resolution Category | Real-World Example | How the App Enforces It |
 | :--- | :--- | :--- |
-| **Best Walrus Memory ($500)** | Deepest learning loop — memories visibly change agent behavior over time | The agent starts with raw commitments in January. By March it has learned *"User always breaks gym commitment on Fridays after long work weeks"* and intervenes preemptively. By June it adjusts its tone and timing based on accumulated context. The memory isn't static — it's a living behavioral model. |
-| **Best Agent Payments ($500)** | x402 or MPP micropayments settled on Sui | **Vault-as-x402-gated-endpoint:** The penalty vault is exposed as an HTTP service. When the agent needs to deposit a penalty, it hits `POST /deposit-penalty` → receives a `402 Payment Required` challenge (with amount, currency, Sui destination) → autonomously signs and attaches the Sui payment via `X-PAYMENT` header → vault verifies and executes the deposit. This is legitimate x402 — the agent goes through a real HTTP payment protocol, not a raw `moveCall`. |
-| **Best Tatum AI Builder ($500)** | Best shippable product using `ai.tatum.io` + Tatum RPCs | Scaffold the frontend and Sui integration flow via Tatum AI Builder. Use Tatum Sui RPC for all vault balance queries, deposit history, and wallet monitoring. |
+| **1. Forbidden Recipients** | "Never send money to my ex (`0xSarah...`)" or "No casino/betting contracts" | Exact recipient address matching on outbound transfers. |
+| **2. Addictions & Prohibited Categories** | "No cigarettes", "No alcohol", "No fast food", "No Steam sales" | Keyword & semantic matching on the **Mandatory Transaction Memo**. |
+| **3. Spending Caps** | "No single discretionary transaction over 50 SUI" | Numerical threshold comparison at transaction submission. |
+| **4. Income & Inflow Targets** | "I want to make 4,000 SUI / month from freelancing" | Tatum RPC monitors wallet incoming transaction blocks. |
 
----
+### 3.2 Penalty & Escrow Setup
+For each commitment, the user defines:
+* **The Penalty Amount:** Fixed SUI amount (e.g. 10 SUI per violation).
+* **Escalation Rules:** Whether repeated violations within 30 days trigger an escalating penalty (e.g. +5 SUI per repeat offense).
+* **Agreed Exceptions:** Strict exemptions (e.g. *"Medical emergencies"*, *"Rent to 0xLandlord"*).
 
-## 4. Product Design: How Yearbound Works
-
-### User Journey
-
-```mermaid
-flowchart TD
-    A["🎆 January 1st\nNew Commitment Year Begins"] --> B["User Defines Commitments"]
-    B --> B1["Goal: Exercise 4x/week\nPenalty: $10 per missed session"]
-    B --> B2["Goal: No impulse purchases > $50\nPenalty: $25 per violation"]
-    B --> B3["Goal: Read 2 books/month\nPenalty: $15 per missed book"]
-
-    B1 & B2 & B3 --> C["Agent Writes All Rules\nto Walrus Memory on Mainnet"]
-
-    C --> D["📅 Throughout the Year"]
-    D --> D1["User checks in via chat\n(natural language)"]
-    D --> D2["Agent monitors wallet\nvia Tatum Sui RPC"]
-
-    D1 & D2 --> E{"Commitment\nBroken?"}
-    E -->|Yes| F["Agent deposits penalty\ninto Sui Vault via x402"]
-    E -->|No| G["Agent acknowledges progress\n& updates memory"]
-
-    F --> H["Agent writes slip-up context\nto Walrus Memory"]
-    H --> I["Over time: Agent recognizes\npatterns & intervenes proactively"]
-
-    G --> J["🎄 December 31st\nVault Unlocks — Money Released"]
-    F --> J
-```
-
-### The 4 Memory Layers (Stored on Walrus Mainnet)
-
-| Layer | What's Stored | Example Memory | How It Evolves |
-| :--- | :--- | :--- | :--- |
-| **1. Commitment Rules** | Goals, penalties, deadlines, exceptions | *"Exercise 4x/week. Penalty: \$10/miss. Exception: sick days with proof."* | Rules can be amended mid-year via conversation; agent tracks all amendments with timestamps. |
-| **2. Accountability Log** | Every check-in, slip-up, and penalty event | *"March 14: User missed gym (3rd Friday miss in a row). \$10 deposited to vault. Total vault: \$85."* | Grows throughout the year — forms the raw data for pattern recognition. |
-| **3. Behavioral Patterns** | Agent-derived insights from accumulated data | *"User consistently breaks gym commitment on Fridays after weeks with >3 late work nights."* | Agent periodically synthesizes new patterns from the accountability log and writes them as separate memories. |
-| **4. Emotional Context & Reflections** | User's own words about why they slipped | *"User said: 'I was exhausted and stressed about the project deadline. I know I should have gone but I just couldn't.'"* | Agent references these during future interventions to show empathy and understanding rather than being a cold enforcer. |
-
-### The Proactive Intervention Engine
-
-This is how memory makes the agent **get smarter over time** (critical for the Best Walrus Memory bounty):
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│  MONTH 1 (Cold Start — No History)                                  │
-│  Agent: "Did you go to the gym today?"                              │
-│  User: "No, I skipped."                                             │
-│  Agent: "Got it. $10 penalty deposited to your vault. Keep going!"  │
-├─────────────────────────────────────────────────────────────────────┤
-│  MONTH 3 (Pattern Recognized)                                       │
-│  It's Thursday evening. Agent proactively messages:                  │
-│  "Hey — I've noticed you tend to skip the gym on Fridays after      │
-│   long work weeks. Tomorrow is Friday. Want to plan a shorter       │
-│   30-min session instead of skipping entirely?"                     │
-├─────────────────────────────────────────────────────────────────────┤
-│  MONTH 6 (Deep Context)                                             │
-│  User tries to make an impulse $120 purchase on Sui.                │
-│  Agent (via Tatum RPC + Walrus recall):                             │
-│  "Hold on — you set a $50 impulse limit in January. You also told  │
-│   me in April that you regretted a similar purchase. That's a $25   │
-│   penalty if you proceed. Your vault is at $210. Still want to?"    │
-├─────────────────────────────────────────────────────────────────────┤
-│  MONTH 12 (Year-End)                                                │
-│  "🎉 Your commitment year is complete! Here's your recap:           │
-│   • 47/52 gym weeks completed (90%)                                 │
-│   • 3 impulse violations caught and penalized                       │
-│   • $340 accumulated in vault — now unlocked and returned to you.   │
-│   • Your biggest growth area: Friday discipline improved 60%        │
-│     after we started the Thursday check-in in March."               │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 5. Technical Architecture
-
-```mermaid
-flowchart TD
-    subgraph Client ["Frontend (Next.js + Tatum AI Builder)"]
-        UI["Yearbound Chat & Dashboard"]
-        WA["Sui Wallet Adapter"]
-    end
-
-    subgraph Agent ["AI Agent Layer"]
-        LLM["LLM Engine\n(Gemini / GPT)"]
-        Tools["Tool Calls:\nremember • recall\nvault_deposit • check_balance"]
-    end
-
-    subgraph Infra ["Decentralized Infrastructure"]
-        WM["Walrus Memory Mainnet\n(@mysten-incubation/memwal)"]
-        TR["Tatum Sui RPC\n& Data APIs"]
-        Sui["Sui Blockchain"]
-        Vault["Yearbound Vault\n(Sui Move Escrow Contract)"]
-    end
-
-    UI <--> LLM
-    WA <--> Sui
-    LLM <--> Tools
-    Tools <--> WM
-    Tools <--> TR
-    TR <--> Sui
-    Tools -- "x402 402-challenge\n+ signed payment" --> VaultSvc
-    VaultSvc["Vault x402 Endpoint\n(Express/Hono)"]
-    VaultSvc -- "executes deposit\non-chain" --> Vault
-    Vault <--> Sui
-```
-
-### 5.1 x402 Vault Endpoint (The Agent Payments Bounty Play)
-
-The vault deposit is gated behind a real x402 flow. The agent doesn't call the Move contract directly — it goes through an HTTP payment protocol.
-
-```typescript
-// vault-x402.ts — Express endpoint that gates deposits behind HTTP 402
-import express from "express";
-import { verifyX402Payment, settleSuiPayment } from "./x402-utils";
-
-const app = express();
-app.use(express.json());
-
-// POST /deposit-penalty — x402-gated vault deposit
-app.post("/deposit-penalty", async (req, res) => {
-  const { amount, commitment_id, reason } = req.body;
-  const paymentHeader = req.headers["x-payment"];
-
-  // Step 1: If no payment attached, return 402 challenge
-  if (!paymentHeader) {
-    return res.status(402).json({
-      status: "payment_required",
-      payment: {
-        scheme: "exact",
-        network: "sui",
-        currency: "SUI",
-        amount: amount,  // penalty amount in SUI
-        destination: process.env.VAULT_OBJECT_ID!,
-        description: `Yearbound penalty: ${reason}`,
-        expires: new Date(Date.now() + 5 * 60_000).toISOString(),
-      },
-    });
-  }
-
-  // Step 2: Verify the signed Sui payment
-  const verification = await verifyX402Payment(paymentHeader, amount);
-  if (!verification.valid) {
-    return res.status(400).json({ error: "Invalid payment signature" });
-  }
-
-  // Step 3: Settle on-chain — execute the Move deposit_penalty call
-  const txHash = await settleSuiPayment(verification.signedTx);
-
-  // Step 4: Return success with on-chain proof
-  return res.status(200).json({
-    status: "deposited",
-    tx_hash: txHash,
-    vault_balance: verification.newBalance,
-    commitment_id,
-    reason,
-  });
-});
-```
-
-**Agent-side x402 client** (how the Yearbound agent handles the 402 → pay → retry loop):
-
-```typescript
-// agent-x402-client.ts — Agent autonomously handles 402 challenges
-export async function agentDepositPenalty(
-  amount: number,
-  commitmentId: string,
-  reason: string,
-  agentWallet: SuiKeypair,
-) {
-  // Step 1: Hit the vault endpoint (will get 402)
-  const initial = await fetch(`${VAULT_SERVICE_URL}/deposit-penalty`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ amount, commitment_id: commitmentId, reason }),
-  });
-
-  if (initial.status !== 402) throw new Error("Unexpected response");
-
-  // Step 2: Parse the 402 payment challenge
-  const challenge = await initial.json();
-  const { network, currency, amount: reqAmount, destination } = challenge.payment;
-
-  // Step 3: Autonomously sign the Sui payment
-  const signedPayment = await signSuiPayment(agentWallet, {
-    amount: reqAmount,
-    destination,
-    currency,
-  });
-
-  // Step 4: Retry with X-PAYMENT header attached
-  const result = await fetch(`${VAULT_SERVICE_URL}/deposit-penalty`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-PAYMENT": signedPayment,
-    },
-    body: JSON.stringify({ amount, commitment_id: commitmentId, reason }),
-  });
-
-  return await result.json(); // { status: "deposited", tx_hash, vault_balance }
-}
-```
-
-### 5.2 Sui Move Vault Contract
-
-The vault is a time-locked escrow. Only the owner can deposit (via the agent), and withdrawals unlock on a specific date.
-
-```move
-module yearbound::vault {
-    use sui::coin::{Self, Coin};
-    use sui::sui::SUI;
-    use sui::clock::Clock;
-
-    public struct Vault has key, store {
-        id: UID,
-        owner: address,
-        balance: Balance<SUI>,
-        unlock_timestamp_ms: u64, // Dec 31 midnight
-    }
-
-    // Create a new commitment year vault
-    public entry fun create_vault(
-        unlock_timestamp_ms: u64,
-        ctx: &mut TxContext,
-    ) {
-        let vault = Vault {
-            id: object::new(ctx),
-            owner: tx_context::sender(ctx),
-            balance: balance::zero<SUI>(),
-            unlock_timestamp_ms,
-        };
-        transfer::share_object(vault);
-    }
-
-    // Agent deposits penalty when commitment is broken
-    public entry fun deposit_penalty(
-        vault: &mut Vault,
-        payment: Coin<SUI>,
-    ) {
-        coin::put(&mut vault.balance, payment);
-    }
-
-    // User withdraws after unlock date
-    public entry fun withdraw(
-        vault: &mut Vault,
-        clock: &Clock,
-        ctx: &mut TxContext,
-    ) {
-        assert!(tx_context::sender(ctx) == vault.owner, 0);
-        assert!(clock::timestamp_ms(clock) >= vault.unlock_timestamp_ms, 1);
-
-        let amount = balance::value(&vault.balance);
-        let withdrawn = coin::take(&mut vault.balance, amount, ctx);
-        transfer::public_transfer(withdrawn, vault.owner);
-    }
-}
-```
-
-### 5.3 Walrus Memory Integration
-
-```typescript
-import { MemWal } from "@mysten-incubation/memwal";
-
-export const memwal = MemWal.create({
-  key: process.env.WALRUS_DELEGATE_KEY!,
-  accountId: process.env.WALRUS_ACCOUNT_ID!,
-  serverUrl: process.env.WALRUS_RELAYER_URL!,
-  namespace: "yearbound",
-});
-
-// Store a new commitment rule
-export async function storeCommitment(commitment: {
-  goal: string;
-  penalty_amount: number;
-  frequency: string;
-  exceptions: string[];
-}) {
-  const job = await memwal.remember(
-    JSON.stringify({
-      type: "commitment_rule",
-      ...commitment,
-      created_at: new Date().toISOString(),
-      status: "active",
-    })
-  );
-  await memwal.waitForRememberJob(job.job_id);
-  return job;
-}
-
-// Store a slip-up event with emotional context
-export async function recordSlipUp(event: {
-  commitment_id: string;
-  user_explanation: string;
-  penalty_deposited: number;
-  vault_tx_hash: string;
-}) {
-  const job = await memwal.remember(
-    JSON.stringify({
-      type: "accountability_event",
-      ...event,
-      timestamp: new Date().toISOString(),
-    })
-  );
-  await memwal.waitForRememberJob(job.job_id);
-  return job;
-}
-
-// Recall all context before making an accountability decision
-export async function recallContext(situation: string) {
-  return await memwal.recall({
-    query: situation,
-    limit: 10,
-  });
-}
-```
-
-### 5.4 Tatum Sui RPC Integration
-
-```typescript
-const TATUM_RPC = process.env.TATUM_SUI_RPC_URL!;
-const TATUM_KEY = process.env.TATUM_API_KEY!;
-
-// Check vault balance via Tatum
-export async function getVaultBalance(vaultObjectId: string) {
-  const res = await fetch(TATUM_RPC, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": TATUM_KEY,
-    },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "sui_getObject",
-      params: [vaultObjectId, { showContent: true }],
-    }),
-  });
-  const data = await res.json();
-  return data.result?.data?.content?.fields?.balance;
-}
-
-// Get recent wallet transactions to detect spending patterns
-export async function getRecentTransactions(address: string) {
-  const res = await fetch(TATUM_RPC, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": TATUM_KEY,
-    },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "suix_queryTransactionBlocks",
-      params: [
-        { filter: { FromAddress": address } },
-        null, 10, true,
-      ],
-    }),
-  });
-  return (await res.json()).result;
+### 3.3 Walrus Genesis Storage
+At the completion of onboarding, the agent commits a batch of structured `commitment_rule` blobs to **Walrus Mainnet**:
+```json
+{
+  "type": "commitment_rule",
+  "commitment_id": "cmt_jan2026_01",
+  "title": "Strict Ex-Partner Payment Blacklist",
+  "category": "forbidden_recipient",
+  "target_address": "0x3b89...ex_partner",
+  "penalty_amount_sui": 15,
+  "escalation_step_sui": 5,
+  "user_verbatim_quote": "I swear to never send her a dime again. If I do, take my money.",
+  "created_at": "2026-01-01T12:00:00Z",
+  "status": "active"
 }
 ```
 
 ---
 
-## 6. Sprint Roadmap (Nov 2 – Nov 10)
+## 4. COMPONENT 2: THE ENFORCING WALLET & IN-APP PAYMENT FLOW
+
+Yearbound is an active payment tool, not a spectator. Users initiate transfers and payments directly through the app.
 
 ```mermaid
-flowchart LR
-    P1["Day 1-2\nNov 2-3\n🏗️ Foundation"] --> P2["Day 3-4\nNov 4-5\n🧠 Memory + Vault"]
-    P2 --> P3["Day 5-6\nNov 6-7\n🤖 Agent + Payments"]
-    P3 --> P4["Day 7\nNov 8\n🧪 Mainnet + Testing"]
-    P4 --> P5["Day 8-9\nNov 9-10\n🎬 Polish + Submit"]
+sequenceDiagram
+    autonumber
+    actor User
+    participant App as Yearbound Wallet UI
+    participant Mascot as Mascot Reasoning Engine
+    participant Walrus as Walrus Memory (Mainnet)
+    participant x402 as x402 Penalty Toll Gateway
+    participant Tatum as Tatum Sui RPC
+    participant Sui as Sui Blockchain (Vault Contract)
+
+    User->>App: Enter Recipient, Amount & Mandatory Memo
+    App->>Mascot: Intercept Intent(Recipient, Amount, Memo)
+    Mascot->>Walrus: memwal.recall(Recipient, Memo keywords)
+    Walrus-->>Mascot: Return Commitment Rules + Historical Infractions
+    
+    alt Rule Violation Detected (e.g. Memo = "Cigarettes")
+        Mascot->>App: Display 😡 Roasting State + Quote Jan 1st Promise
+        App->>x402: Request Transaction Clearance
+        x402-->>App: HTTP 402 Payment Required (Toll: 10 SUI to Vault)
+        User->>App: Click "Accept Penalty & Proceed"
+        App->>Sui: Atomic Execution (Send Payment + Deposit 10 SUI into Vault)
+        Sui-->>App: Tx Confirmed
+        App->>Walrus: memwal.remember(Accountability Event + Slip-up Memo)
+        Mascot->>App: Display 🔒 Enforcing State ("10 SUI locked till Dec 25")
+    else Clean Transaction
+        Mascot->>App: Display 😇 Proud State ("Clean transfer approved!")
+        App->>Tatum: Broadcast Transaction Block
+        Tatum-->>App: Success
+    end
 ```
 
-| Phase | Dates | Deliverables |
+### 4.1 Mandatory Transaction Memos (The Semantic Anchor)
+Why transaction memos?
+* In decentralized finance, transfer recipients are often opaque hex addresses.
+* Requiring a memo (e.g. "dinner", "cigs", "groceries", "transfer to coworker") anchors the real-world semantic purpose to the on-chain action.
+* If a user writes "cigs" or "vape" or leaves a suspicious field, the mascot cross-references it against Walrus Memory. If they try to circumvent with gibberish (e.g. "asdf"), the mascot rejects the transfer: *"Explain what this transaction is for before I sign it."*
+
+---
+
+## 5. COMPONENT 3: x402 PENALTY TOLL PROTOCOL
+
+### 5.1 How x402 is Structurally Used
+We do not fake x402 with a generic function call. The penalty mechanism is a **real HTTP-native micropayment gateway**:
+
+1. **The Challenge (`402 Payment Required`):**
+   When the app detects a broken pact, the internal transfer service refuses to broadcast the transaction and returns a standard HTTP 402 challenge:
+   ```json
+   {
+     "status": "payment_required",
+     "payment": {
+       "scheme": "exact",
+       "network": "sui",
+       "currency": "SUI",
+       "amount_sui": 10,
+       "destination": "0xVault_Christmas_Escrow_Object_ID",
+       "description": "Violation Penalty: Prohibited tobacco purchase",
+       "nonce": "yb_x402_1730551200_9b1a"
+     }
+   }
+   ```
+2. **The Signature:**
+   The user's client signs the payment authorization for the penalty fee.
+3. **The Settlement:**
+   The app bundles the penalty deposit into the Sui transaction via a Programmable Transaction Block (PTB) or relays it through the x402 settlement endpoint, locking the SUI into the Move Vault.
+
+---
+
+## 6. COMPONENT 4: THE SUI MOVE CHRISTMAS ESCROW VAULT
+
+### 6.1 Strict Smart Contract Immutability
+To ensure the funds are genuinely locked away and impossible for the user to retrieve prematurely:
+
+1. **No Early Exit:** The Move smart contract (`contracts/yearbound/sources/vault.move`) contains **zero** emergency withdrawal methods, admin keys, or backdoor escape hatches.
+2. **Time-Lock Enforcement:** The withdrawal function explicitly checks the Sui network clock:
+   ```move
+   assert!(clock::timestamp_ms(clock) >= vault.unlock_timestamp_ms, EVaultStillLocked);
+   ```
+3. **Unlock Date:** Pre-configured during vault creation to **December 25, 00:00:00 UTC** of the commitment year.
+4. **Ownership:** Only the user's Sui address can trigger `withdraw()`. The agent cannot steal or redirect the funds; it can only *deposit* into the vault.
+
+---
+
+## 7. COMPONENT 5: TATUM SUI RPC & DATA INTELLIGENCE LAYER
+
+Tatum is the agent's real-time sensory network on the blockchain.
+
+### 7.1 Active Responsibilities
+| Task | Tatum API / RPC Method | Frequency |
 | :--- | :--- | :--- |
-| **1. Foundation** | Nov 2–3 | • Init repo, Next.js + Tailwind + Sui dApp Kit.<br>• Get Tatum API key + Walrus delegate key/account.<br>• Scaffold UI with `ai.tatum.io` (unlocks Tatum AI Builder bounty).<br>• Write & deploy Sui Move vault contract on testnet. |
-| **2. Memory + Vault** | Nov 4–5 | • Integrate `@mysten-incubation/memwal` — implement `storeCommitment`, `recordSlipUp`, `recallContext`.<br>• Connect Tatum Sui RPC for vault balance and transaction queries.<br>• Build commitment setup flow (define goals, penalties, exceptions). |
-| **3. Agent + Payments** | Nov 6–7 | • Wire LLM agent with tool calls: `remember`, `recall`, `deposit_penalty`, `check_vault`.<br>• Implement x402/MPP for autonomous penalty deposits (unlocks Agent Payments bounty).<br>• Build proactive intervention logic (pattern detection from accumulated memories). |
-| **4. Mainnet Seeding** | Nov 8 | • Deploy vault contract to Sui Mainnet.<br>• **Seed ≥ 10 memories on Walrus Mainnet** with verifiable job IDs.<br>• Run full demo flow: commitment → slip-up → penalty → pattern recognition.<br>• Stress test recall accuracy. |
-| **5. Submit** | Nov 9–10 | • Record 2.5-min demo video (see script below).<br>• Write & publish blog post.<br>• Polish README with Mainnet proof (job IDs, vault object ID, tx hashes).<br>• **Submit before deadline.** |
+| **Income Target Tracking** | `suix_queryTransactionBlocks` (Filter: `ToAddress`) | Daily check of incoming SUI/stablecoin funds to measure progress toward "Make $4,000/mo". |
+| **Wallet Balance Auditing** | `suix_getAllBalances` | Queried on app launch and pre-transaction check. |
+| **Vault State Inspection** | `sui_getObject` (Vault Object ID) | Real-time tracking of locked penalty SUI. |
+| **Transaction Execution** | `sui_executeTransactionBlock` | Relaying approved outbound transfers. |
 
 ---
 
-## 7. Demo Video Script (2.5 Minutes)
+## 8. COMPONENT 6: WALRUS MEMORY 4-LAYER COGNITIVE BRAIN
 
-| Timestamp | Content |
-| :--- | :--- |
-| **0:00–0:20** | *Hook:* "Every January, millions make resolutions. By February, 80% have quit. What if your money held you accountable?" |
-| **0:20–0:50** | *Setup:* Show January commitment flow — user defines 3 goals with penalties. Agent writes rules to Walrus Memory. Vault contract created on Sui. |
-| **0:50–1:30** | *The Recall Moment:* Fast-forward to Month 3. User checks in — "I skipped the gym." Agent recalls the commitment via `memwal.recall()`, confirms the rule, and autonomously deposits \$10 into the Sui vault via x402. Show Tatum RPC vault balance updating. |
-| **1:30–2:00** | *Pattern Recognition:* Show agent proactively messaging on a Thursday: "You've missed 3 Fridays in a row after long weeks. Want to plan a lighter session tomorrow?" — powered by synthesized behavioral patterns in Walrus Memory. |
-| **2:00–2:20** | *Tech Stack:* Quick architecture slide — Walrus Memory + Tatum Sui RPC + Sui Move Vault + x402 Payments. |
-| **2:20–2:30** | *Close:* "Yearbound — Make a pact with your future self." |
+Walrus Memory is the persistent behavioral cortex. It ensures the mascot gets sharper, more personal, and more context-aware over the 12 months.
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                     WALRUS 4-LAYER MEMORY GRAPH                        │
+├────────────────────────────────────────────────────────────────────────┤
+│ Layer 1: Genesis Pacts (Jan 1)                                         │
+│   • Core rules, blacklisted addresses, spending limits, exact quotes   │
+│                                                                        │
+│ Layer 2: Transaction & Accountability Log (Continuous)                 │
+│   • Every payment memo, time of day, amount, approved or penalized     │
+│   • Exact excuses captured: "I had a stressful day at the office"     │
+│                                                                        │
+│ Layer 3: Behavioral Pattern Synthesis (Every 5 Infractions)            │
+│   • Synthesized habits: "User's impulse transfers spike after 10 PM"   │
+│   • "User attempts to send funds to forbidden targets after payday"    │
+│                                                                        │
+│ Layer 4: Escalation & Dynamic Interventions                            │
+│   • Mascot references past excuses: "You said work was stressful last   │
+│     time too. That excuse didn't work in March, it won't work now."    │
+│   • Enforces pre-agreed penalty step increases for repeat violations.  │
+└────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## 8. Submission Deliverables Checklist
+## 9. COMPONENT 7: THE CHRISTMAS UNLOCK (DECEMBER 24–25)
 
-- [ ] **Public GitHub Repository** — clean code, `.env.example`, comprehensive README
-- [ ] **Mainnet Proof in README** — 10+ Walrus Memory job IDs, vault object ID, penalty deposit tx hashes
-- [ ] **2.5-min Demo Video** — uploaded to YouTube/Loom
-- [ ] **Published Blog Post** (Dev.to / Medium) — *"Yearbound: How We Built a Year-Long Accountability Engine with Walrus Memory, Tatum RPCs, and Sui Escrow"*
-- [ ] **Live Demo** — deployed on Vercel or Walrus Sites
-- [ ] **Tatum AI Builder workflow** documented in blog post (for bonus bounty)
-- [ ] **x402 / MPP payment flow** demonstrated in demo (for bonus bounty)
+On December 24–25, Yearbound transitions from Enforcer to Celebrant.
+
+1. **The Annual Reflection Audit:**
+   The mascot synthesizes all 4 layers of Walrus Memory to output the user's **Yearbound Discipline Report**:
+   * Total transactions evaluated.
+   * Total penalties intercepted and locked.
+   * Behavioral patterns that improved (e.g. *"Late night impulse spending reduced by 72% between March and November"*).
+   * Exact quote of the hardest moment overcome.
+2. **The Fund Release:**
+   The UI presents the **Unlock Christmas Gift** action. One click invokes `vault::withdraw`, returning 100% of the accumulated SUI to the user's primary wallet.
+
+---
+
+## 10. HACKATHON RUBRIC DEFENSE & BOUNTY MAPPING
+
+| Category | Weight | How Yearbound Wins |
+| :--- | :---: | :--- |
+| **Walrus & Tatum Integration** | **30%** | • Walrus Mainnet stores all 4 cognitive memory layers ($\ge 10$ live memories).<br>• Tatum RPC powers wallet monitoring, income goal tracking, and vault state reads. |
+| **Technical Quality** | **30%** | • Strict TypeScript Next.js 16 App Router architecture.<br>• Real Sui Move time-locked escrow contract with zero backdoors.<br>• Resilient fallback handling (`MemWalMock` + public RPC) and error recovery. |
+| **Creativity & Novelty** | **20%** | • Duolingo-style behavioral mascot with persistent memory.<br>• Moves away from boring chatboxes to an enforcing wallet interface with mandatory memos. |
+| **Presentation & Polish** | **20%** | • 2.5-min high-production video showing onboarding → transfer intercept → mascot roast → x402 vault deposit → Christmas unlock.<br>• Comprehensive README + published blog post. |
+
+### Bonus Bounty Checklist
+- [x] **Best Walrus Memory ($500):** Deepest learning loop where the mascot's roasts and interventions visibly evolve based on months of accumulated memory.
+- [x] **Best Agent Payments ($500):** Genuine HTTP 402 challenge/response flow gating forbidden transactions and settling penalties on Sui.
+- [x] **Best Tatum AI Builder ($500):** Scaffolding and full-stack Sui infrastructure completely integrated with Tatum RPCs.
