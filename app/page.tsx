@@ -1,353 +1,265 @@
 "use client";
 
-import { useState, useRef, useEffect, type FormEvent } from "react";
+import React, { useState } from "react";
+import Link from "next/link";
 import {
-  ShieldAlert,
+  Shield,
   Brain,
   Lock,
-  Flame,
+  Trophy,
   ArrowRight,
+  Play,
   Sparkles,
-  CheckCircle2,
-  AlertTriangle,
-  Coins,
-  History,
 } from "lucide-react";
+import { SolarCompass } from "@/components/ui/solar-compass";
+import {
+  YearboundBackground,
+  useYearboundBackground,
+  YearboundBackgroundProvider,
+  type BackgroundState,
+} from "@/components/ui/yearbound-background";
+import { MobileWalletView } from "@/components/ui/mobile-wallet-view";
 
-interface ChatMessage {
-  id: string;
-  role: "user" | "assistant" | "system";
-  content: string;
-  toolInvocations?: Array<{
-    toolName: string;
-    args: Record<string, unknown>;
-    result?: unknown;
-  }>;
-}
+function YearboundShowcaseContent() {
+  const { config, triggerViolationBurst, triggerCelebrationBurst, setState } =
+    useYearboundBackground();
 
-export default function YearboundApp() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const quickPrompts = [
-    "Commit to running 4x a week. 10 SUI penalty per missed run.",
-    "No impulse online purchases over $50. 25 SUI penalty.",
-    "I skipped my gym session today because I worked late.",
-    "How much money is currently locked in my Sui vault?",
-  ];
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, isLoading]);
-
-  const handleSendMessage = async (textToSend: string) => {
-    const trimmed = textToSend.trim();
-    if (!trimmed || isLoading) return;
-
-    const userMessage: ChatMessage = {
-      id: `usr_${Date.now()}`,
-      role: "user",
-      content: trimmed,
-    };
-
-    const newMessages = [...messages, userMessage];
-    setMessages(newMessages);
-    setInput("");
-    setIsLoading(true);
-
-    try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: newMessages.map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP ${response.status}`);
-      }
-
-      if (!response.body) {
-        throw new Error("No response body received from chat agent.");
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let assistantText = "";
-      const assistantMessageId = `asst_${Date.now()}`;
-
-      // Insert initial empty assistant message
-      setMessages((prev) => [
-        ...prev,
-        { id: assistantMessageId, role: "assistant", content: "" },
-      ]);
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        assistantText += chunk;
-
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === assistantMessageId
-              ? { ...msg, content: assistantText }
-              : msg
-          )
-        );
-      }
-    } catch (err: unknown) {
-      const errorMsg =
-        err instanceof Error ? err.message : "Failed to communicate with agent.";
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `err_${Date.now()}`,
-          role: "assistant",
-          content: `⚠️ Notice: ${errorMsg}`,
-        },
-      ]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    void handleSendMessage(input);
-  };
+  const [activeNav, setActiveNav] = useState("Home");
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans selection:bg-amber-500/30 selection:text-amber-200">
-      {/* Top Navigation */}
-      <header className="border-b border-neutral-800/80 bg-neutral-900/60 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-600 via-orange-500 to-amber-300 flex items-center justify-center shadow-lg shadow-amber-500/20">
-              <Lock className="w-5 h-5 text-neutral-950" />
-            </div>
-            <div>
-              <span className="font-bold text-lg tracking-tight bg-gradient-to-r from-amber-200 via-neutral-100 to-neutral-300 bg-clip-text text-transparent">
-                YEARBOUND
-              </span>
-              <span className="hidden sm:inline-block ml-2 text-xs font-mono text-neutral-400 border border-neutral-700/60 rounded px-1.5 py-0.5">
-                Total Recall Edition
-              </span>
-            </div>
+    <div className="relative min-h-screen flex flex-col justify-between">
+      {/* ======================================================================
+          TOP NAVIGATION BAR (Matching Reference Image)
+          ====================================================================== */}
+      <header className="w-full max-w-7xl mx-auto px-6 py-6 flex items-center justify-between z-20">
+        {/* Brand Logo */}
+        <div className="flex items-center gap-2.5 cursor-pointer">
+          <SolarCompass size={28} glow={true} />
+          <span className="font-serif text-2xl font-bold tracking-tight bg-gradient-to-r from-[#FFF2DE] to-[#FFAA44] bg-clip-text text-transparent">
+            Yearbound
+          </span>
+        </div>
+
+        {/* Center Nav Links */}
+        <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-[#A39E99]">
+          {["About", "How It Works", "Features", "FAQ"].map((item) => (
+            <button
+              key={item}
+              onClick={() => setActiveNav(item)}
+              className={`transition-colors hover:text-white ${
+                activeNav === item ? "text-[#FF8800] font-semibold" : ""
+              }`}
+            >
+              {item}
+            </button>
+          ))}
+        </nav>
+
+        {/* Right Action Pill */}
+        <div className="flex items-center gap-3">
+          {/* Quick Demo Flare State Toggles */}
+          <div className="hidden lg:flex items-center gap-1.5 bg-black/40 border border-white/10 rounded-full px-2.5 py-1 text-[11px] font-mono text-neutral-400">
+            <span>Flare State:</span>
+            <button
+              onClick={() => setState("active")}
+              className={`px-2 py-0.5 rounded-full transition-all ${
+                config.state === "active"
+                  ? "bg-[#FF6600] text-white font-semibold"
+                  : "hover:text-white"
+              }`}
+            >
+              Magma
+            </button>
+            <button
+              onClick={() => triggerViolationBurst(3000)}
+              className={`px-2 py-0.5 rounded-full transition-all ${
+                config.state === "violation"
+                  ? "bg-[#D82A00] text-white font-semibold"
+                  : "hover:text-[#FF6644]"
+              }`}
+            >
+              Penalty Surge
+            </button>
+            <button
+              onClick={() => triggerCelebrationBurst(3500)}
+              className={`px-2 py-0.5 rounded-full transition-all ${
+                config.state === "celebrate"
+                  ? "bg-[#FFAA00] text-black font-semibold"
+                  : "hover:text-[#FFD066]"
+              }`}
+            >
+              Christmas
+            </button>
           </div>
 
-          {/* Infrastructure Health Badges */}
-          <div className="flex items-center gap-2 sm:gap-4 text-xs font-mono">
-            <div className="flex items-center gap-1.5 bg-neutral-800/80 border border-neutral-700/50 rounded-full px-3 py-1 text-emerald-400">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              <Brain className="w-3.5 h-3.5" />
-              <span>Walrus Memory</span>
-            </div>
-            <div className="flex items-center gap-1.5 bg-neutral-800/80 border border-neutral-700/50 rounded-full px-3 py-1 text-amber-300">
-              <Coins className="w-3.5 h-3.5" />
-              <span>Tatum Sui RPC</span>
-            </div>
-          </div>
+          <button
+            onClick={() => triggerCelebrationBurst(3000)}
+            className="btn-flare-primary rounded-full px-5 py-2 text-xs sm:text-sm font-semibold tracking-wide flex items-center gap-1.5 shadow-lg"
+          >
+            <span>Get Started</span>
+            <ArrowRight size={14} />
+          </button>
         </div>
       </header>
 
-      {/* Main Content Layout */}
-      <main className="max-w-6xl mx-auto px-4 py-6 flex-1 w-full grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Sidebar: Vault & Commitments Summary */}
-        <aside className="space-y-5 lg:col-span-1">
-          {/* Personal Escrow Vault Card */}
-          <div className="rounded-2xl border border-neutral-800 bg-gradient-to-b from-neutral-900 to-neutral-950 p-5 shadow-xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl pointer-events-none"></div>
+      {/* ======================================================================
+          MAIN HERO VIEWPORT (Desktop Showcase Left + Mobile App Right)
+          ====================================================================== */}
+      <main className="w-full max-w-7xl mx-auto px-6 py-4 flex-1 flex flex-col justify-center z-10">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
+          {/* LEFT COLUMN: Editorial Hero Showcase */}
+          <div className="lg:col-span-7 space-y-8 pr-0 lg:pr-6">
+            <div className="space-y-4">
+              <h1 className="font-serif text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-[#F5F2EB] leading-[1.08]">
+                Make a Pact <br />
+                with Your{" "}
+                <span className="italic font-normal bg-gradient-to-r from-[#FF9433] via-[#FFAF52] to-[#FF7011] bg-clip-text text-transparent drop-shadow-[0_0_20px_rgba(255,110,20,0.45)]">
+                  Future Self.
+                </span>
+              </h1>
 
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs uppercase tracking-wider font-semibold text-neutral-400 flex items-center gap-1.5">
-                <Lock className="w-3.5 h-3.5 text-amber-400" />
-                Sui Escrow Vault
-              </span>
-              <span className="text-[11px] font-mono text-amber-400/90 bg-amber-950/60 border border-amber-800/40 px-2 py-0.5 rounded-full">
-                Locked till Dec 31
-              </span>
-            </div>
-
-            <div className="my-3">
-              <div className="text-3xl font-extrabold tracking-tight text-neutral-50 flex items-baseline gap-2">
-                15.00 <span className="text-sm font-semibold text-amber-400 font-mono">SUI</span>
-              </div>
-              <p className="text-xs text-neutral-400 mt-1">
-                Accumulated from 2 broken commitments. Released automatically to your wallet at year-end.
+              <p className="text-base sm:text-lg text-[#9E968F] font-normal max-w-lg leading-relaxed pt-1">
+                Set your goals. Stay accountable. <br />
+                Let Yearbound keep you on track — all year long.
               </p>
             </div>
 
-            <div className="pt-3 border-t border-neutral-800/80 flex items-center justify-between text-xs text-neutral-400 font-mono">
-              <span>Status: Active Escrow</span>
-              <span className="text-emerald-400 flex items-center gap-1">
-                <ShieldAlert className="w-3 h-3" /> x402 Enforced
-              </span>
-            </div>
-          </div>
+            {/* Action Buttons */}
+            <div className="flex flex-wrap items-center gap-4 pt-1">
+              <button
+                onClick={() => triggerViolationBurst(2500)}
+                className="btn-flare-primary rounded-full px-7 py-3.5 text-sm font-semibold tracking-wide flex items-center gap-2 shadow-xl"
+              >
+                <span>Start Your Year</span>
+                <ArrowRight size={16} />
+              </button>
 
-          {/* Active Commitments Feed */}
-          <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-neutral-200 flex items-center gap-2">
-                <Flame className="w-4 h-4 text-orange-400" /> Active Pacts
-              </h3>
-              <span className="text-xs text-neutral-400 font-mono">2 Pacts</span>
+              <button
+                onClick={() => triggerCelebrationBurst(3000)}
+                className="btn-flare-secondary rounded-full px-6 py-3.5 text-sm font-semibold tracking-wide flex items-center gap-2"
+              >
+                <Play size={14} className="fill-current text-[#FFAA55]" />
+                <span>Learn More</span>
+              </button>
             </div>
 
-            <div className="space-y-3">
-              <div className="p-3 rounded-xl bg-neutral-950/60 border border-neutral-800/80 space-y-1.5">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-medium text-neutral-200">Gym 4x Weekly</span>
-                  <span className="font-mono text-amber-400 font-semibold">10 SUI/miss</span>
-                </div>
-                <div className="flex items-center gap-2 text-[11px] text-neutral-400">
-                  <span className="text-emerald-400 flex items-center gap-0.5">
-                    <CheckCircle2 className="w-3 h-3" /> 3 Honored
-                  </span>
-                  <span>•</span>
-                  <span className="text-rose-400 flex items-center gap-0.5">
-                    <AlertTriangle className="w-3 h-3" /> 1 Missed
+            {/* 4 Feature Value Pillars (Matching Reference Image Bottom) */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-6 border-t border-white/10">
+              {/* Pillar 1 */}
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 text-[#FF8822]">
+                  <Shield size={16} />
+                  <span className="text-xs font-bold text-[#E8DFD3]">
+                    Set Commitments
                   </span>
                 </div>
+                <p className="text-[11px] text-[#8C857E] leading-relaxed">
+                  Define your goals for the year.
+                </p>
               </div>
 
-              <div className="p-3 rounded-xl bg-neutral-950/60 border border-neutral-800/80 space-y-1.5">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-medium text-neutral-200">No Online Impulse &gt; $50</span>
-                  <span className="font-mono text-amber-400 font-semibold">25 SUI/miss</span>
-                </div>
-                <div className="flex items-center gap-2 text-[11px] text-neutral-400">
-                  <span className="text-emerald-400 flex items-center gap-0.5">
-                    <CheckCircle2 className="w-3 h-3" /> 100% Honored
+              {/* Pillar 2 */}
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 text-[#FF9933]">
+                  <Brain size={16} />
+                  <span className="text-xs font-bold text-[#E8DFD3]">
+                    Get Checked
                   </span>
-                  <span>•</span>
-                  <span>Monitored via Tatum</span>
                 </div>
+                <p className="text-[11px] text-[#8C857E] leading-relaxed">
+                  We&apos;ll review transactions against your rules.
+                </p>
               </div>
-            </div>
 
-            <div className="rounded-lg bg-neutral-950/40 p-3 border border-neutral-800/50 text-[11px] text-neutral-400">
-              💡 <span className="font-medium text-neutral-300">The Principle:</span> Breaking a commitment doesn&apos;t make you poorer; it makes your funds temporarily inaccessible.
-            </div>
-          </div>
-        </aside>
+              {/* Pillar 3 */}
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 text-[#FF6611]">
+                  <Lock size={16} />
+                  <span className="text-xs font-bold text-[#E8DFD3]">
+                    Face Consequences
+                  </span>
+                </div>
+                <p className="text-[11px] text-[#8C857E] leading-relaxed">
+                  Break a rule? A penalty is applied.
+                </p>
+              </div>
 
-        {/* Right Area: Interactive Agent Chat & Memory Execution */}
-        <section className="lg:col-span-2 flex flex-col h-[750px] rounded-2xl border border-neutral-800 bg-neutral-900/40 backdrop-blur-sm overflow-hidden shadow-2xl">
-          {/* Chat Header */}
-          <div className="px-5 py-4 border-b border-neutral-800/80 bg-neutral-900/80 flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-3 h-3 rounded-full bg-amber-400 animate-pulse"></div>
-              <div>
-                <h2 className="text-sm font-semibold text-neutral-200">Yearbound Co-Pilot</h2>
-                <p className="text-xs text-neutral-400 font-mono">
-                  Autonomous Memory Layer: Walrus Mainnet
+              {/* Pillar 4 */}
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 text-[#FFAA22]">
+                  <Trophy size={16} />
+                  <span className="text-xs font-bold text-[#E8DFD3]">
+                    Unlock Rewards
+                  </span>
+                </div>
+                <p className="text-[11px] text-[#8C857E] leading-relaxed">
+                  Stay consistent and get your funds back.
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-neutral-400 bg-neutral-800/60 px-2.5 py-1 rounded-md border border-neutral-700/50">
-              <History className="w-3.5 h-3.5 text-amber-400" />
-              <span>Cross-Session Total Recall</span>
+
+            {/* Bottom Slogan Banner (From Reference Mockup) */}
+            <div className="pt-2">
+              <div className="solar-card rounded-2xl p-4 border border-[#FF6600]/20 flex items-center justify-between">
+                <div>
+                  <h3 className="font-serif text-lg text-[#F5F2EB]">
+                    A year of discipline.{" "}
+                    <span className="italic text-[#FF8D33]">
+                      A lifetime of progress.
+                    </span>
+                  </h3>
+                  <p className="text-xs text-[#9E968F] mt-0.5">
+                    Decentralized memory on Walrus Mainnet. Sui time-locked escrow.
+                  </p>
+                </div>
+                <div className="hidden sm:block">
+                  <SolarCompass size={32} glow={false} />
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Messages Scroll Area */}
-          <div className="flex-1 overflow-y-auto p-5 space-y-4">
-            {messages.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-4 text-neutral-400">
-                <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mb-1">
-                  <Sparkles className="w-6 h-6" />
-                </div>
-                <h3 className="text-base font-semibold text-neutral-200">
-                  Make a pact with your future self.
-                </h3>
-                <p className="text-xs leading-relaxed">
-                  Establish your commitment year. State your goals, assign penalties, and let your sovereign agent hold your money accountable until December 31.
-                </p>
-
-                {/* Quick Starters */}
-                <div className="w-full grid grid-cols-1 gap-2 pt-2 text-left">
-                  {quickPrompts.map((prompt, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => void handleSendMessage(prompt)}
-                      className="p-2.5 rounded-xl border border-neutral-800 bg-neutral-900/60 hover:bg-neutral-800/70 hover:border-neutral-700 text-xs text-neutral-300 transition-all flex items-center justify-between group"
-                    >
-                      <span className="truncate">{prompt}</span>
-                      <ArrowRight className="w-3.5 h-3.5 text-neutral-500 group-hover:text-amber-400 transition-colors shrink-0 ml-2" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex flex-col ${
-                    message.role === "user" ? "items-end" : "items-start"
-                  }`}
-                >
-                  <span className="text-[11px] font-mono text-neutral-500 mb-1">
-                    {message.role === "user" ? "You" : "Yearbound Co-Pilot"}
-                  </span>
-                  <div
-                    className={`p-3.5 rounded-2xl text-xs sm:text-sm max-w-[85%] leading-relaxed ${
-                      message.role === "user"
-                        ? "bg-amber-600 text-neutral-950 font-medium"
-                        : "bg-neutral-800/80 border border-neutral-700/60 text-neutral-200 whitespace-pre-wrap"
-                    }`}
-                  >
-                    {message.content}
-                  </div>
-                </div>
-              ))
-            )}
-
-            {isLoading && (
-              <div className="flex items-center gap-2 text-xs font-mono text-amber-400/80 italic">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span>
-                Recalling Walrus context and evaluating commitments...
-              </div>
-            )}
-            <div ref={messagesEndRef} />
+          {/* RIGHT COLUMN: Mobile App Interface (Exact Reference Parity) */}
+          <div className="lg:col-span-5 flex justify-center lg:justify-end">
+            <MobileWalletView onTriggerSurge={() => triggerViolationBurst(2800)} />
           </div>
-
-          {/* Chat Input Bar */}
-          <form
-            onSubmit={handleSubmit}
-            className="p-3 border-t border-neutral-800/80 bg-neutral-900/90 flex gap-2"
-          >
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Check in on your goal or set a new commitment..."
-              className="flex-1 bg-neutral-950 border border-neutral-800 focus:border-amber-500 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all"
-            />
-            <button
-              type="submit"
-              disabled={isLoading || !input.trim()}
-              className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-neutral-950 font-semibold text-xs sm:text-sm px-5 py-2.5 rounded-xl transition-all disabled:opacity-50 flex items-center gap-1.5 shrink-0"
-            >
-              <span>Send</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </form>
-        </section>
+        </div>
       </main>
+
+      {/* ======================================================================
+          FOOTER INFRASTRUCTURE STATUS
+          ====================================================================== */}
+      <footer className="w-full max-w-7xl mx-auto px-6 py-6 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between text-xs text-[#8C857E] font-mono z-20 gap-3">
+        <div className="flex items-center gap-2">
+          <SolarCompass size={14} glow={false} />
+          <span>Yearbound Protocol © 2026</span>
+          <span className="text-neutral-600">•</span>
+          <span>Total Recall Edition</span>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5 text-emerald-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span>Walrus Memory Mainnet</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-[#FFAA44]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#FFAA44]" />
+            <span>Tatum Sui RPC Gateway</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-[#FF6622]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#FF6622]" />
+            <span>x402 Protocol</span>
+          </div>
+        </div>
+      </footer>
     </div>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <YearboundBackgroundProvider>
+      <YearboundShowcaseContent />
+    </YearboundBackgroundProvider>
   );
 }

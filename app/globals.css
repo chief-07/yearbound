@@ -1,26 +1,163 @@
-@import "tailwindcss";
+/* ==========================================================================
+   YEARBOUND STYLES — SOLAR FLARE & OBSIDIAN GLASS
+   High-craft design system matching the reference aesthetic.
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600;1,700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --bg-void: #070403;
+  --bg-deep: #0D0705;
+  --bg-card: rgba(18, 10, 8, 0.78);
+  --border-rim: rgba(255, 115, 30, 0.22);
+  --border-rim-bright: rgba(255, 150, 50, 0.45);
+  --flare-amber: #FF7700;
+  --flare-gold: #FFAA00;
+  --flare-core: #FFE299;
+  --flare-crimson: #C82800;
+  --text-primary: #F5F1EB;
+  --text-muted: #9E968F;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--bg-void);
+  color: var(--text-primary);
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  overflow-x: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+.font-serif {
+  font-family: 'Playfair Display', Georgia, serif;
+}
+
+.font-mono {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Solar Glass Cards */
+.solar-card {
+  background: linear-gradient(
+    180deg,
+    rgba(28, 16, 12, 0.85) 0%,
+    rgba(15, 8, 6, 0.75) 100%
+  );
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--border-rim);
+  box-shadow: 
+    0 10px 35px -5px rgba(0, 0, 0, 0.7),
+    inset 0 1px 1px 0 rgba(255, 180, 100, 0.15);
+}
+
+.solar-card-hover {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.solar-card-hover:hover {
+  border-color: var(--border-rim-bright);
+  box-shadow: 
+    0 15px 45px -5px rgba(255, 85, 0, 0.15),
+    inset 0 1px 2px 0 rgba(255, 200, 120, 0.3);
+  transform: translateY(-2px);
+}
+
+/* Glowing Primary Button */
+.btn-flare-primary {
+  background: linear-gradient(135deg, #FF7A1A 0%, #D84200 100%);
+  color: #FFFFFF;
+  box-shadow: 
+    0 4px 20px rgba(255, 85, 0, 0.35),
+    inset 0 1px 1px rgba(255, 255, 255, 0.3);
+  transition: all 0.25s ease;
+}
+
+.btn-flare-primary:hover {
+  background: linear-gradient(135deg, #FF8D38 0%, #EA4C00 100%);
+  box-shadow: 
+    0 6px 28px rgba(255, 95, 0, 0.5),
+    inset 0 1px 2px rgba(255, 255, 255, 0.4);
+  transform: translateY(-1px);
+}
+
+/* Secondary Button */
+.btn-flare-secondary {
+  background: rgba(25, 14, 10, 0.6);
+  border: 1px solid rgba(255, 120, 40, 0.3);
+  color: #F5E8DF;
+  backdrop-filter: blur(12px);
+  transition: all 0.25s ease;
+}
+
+.btn-flare-secondary:hover {
+  background: rgba(45, 22, 14, 0.8);
+  border-color: rgba(255, 150, 60, 0.6);
+  color: #FFFFFF;
+}
+
+/* Keyframes for the Volumetric Flare */
+@keyframes flareBreathe {
+  0%, 100% {
+    opacity: 0.82;
+    transform: scaleY(1) scaleX(1);
+  }
+  50% {
+    opacity: 0.98;
+    transform: scaleY(1.08) scaleX(1.03);
+  }
+}
+
+@keyframes flareRaysSway {
+  0%, 100% {
+    transform: rotate(0deg) scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: rotate(1.5deg) scale(1.04);
+    opacity: 1;
+  }
+}
+
+@keyframes emberPulse {
+  0%, 100% {
+    opacity: 0.6;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-6px);
+  }
+}
+
+.animate-flare-breathe {
+  animation: flareBreathe 7s ease-in-out infinite;
+}
+
+.animate-rays-sway {
+  animation: flareRaysSway 11s ease-in-out infinite;
+}
+
+.animate-ember-pulse {
+  animation: emberPulse 4s ease-in-out infinite;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #080403;
+}
+::-webkit-scrollbar-thumb {
+  background: #381A12;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #682E1E;
 }
