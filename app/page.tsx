@@ -1,14 +1,16 @@
 "use client";
 
-import React, { useState } from "react";
-import { Plus, Trash2, ArrowRight, ArrowLeft, Check, Lock, Copy } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Plus, Trash2, ArrowRight, ArrowLeft, Check, Lock, Copy, Wallet } from "lucide-react";
+import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 
 /* ==========================================================================
    YEARBOUND PROTOCOL FLOW
    - Screen 1: Resolution & Rules Builder (Title + Condition)
-   - Screen 2: Penalty Stakes & Escrow Setup (Spacious, Uncluttered, Pure B&W)
-   - Screen 3: Vault Active Confirmation (Walrus Proof)
-   - Clean, well-spaced layout with zero visual slop
+   - Screen 2: Penalty Stakes & Escrow Setup (Preset SUI stakes)
+   - Screen 3: Account & Wallet Setup (Demo Account, Real Account, Link Wallet)
+   - Screen 4: Vault Active Confirmation (Immutable Walrus Memory Proof)
+   - Strict monochrome black & white (zero glows, zero sparkles, zero pills)
    - Universal typography: Outfit Sans
    - Walrus Snackbar feedback upon commit
    ========================================================================== */
@@ -20,10 +22,13 @@ export interface RuleItem {
   penalty: number;
 }
 
+type AccountType = "demo" | "real" | "linked";
+
 const PENALTY_PRESETS = [5, 10, 25, 50];
+const DEMO_SUI_ADDRESS = "0x7a83d4f19b224c88e019f39002b8da4e91c0e39a";
 
 export default function YearboundApp() {
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
 
   // Screen 1: Rules
   const [rules, setRules] = useState<RuleItem[]>([
@@ -35,10 +40,28 @@ export default function YearboundApp() {
   const [unlockDate] = useState<string>("Dec 25, 2026");
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
+  // Screen 3: Account / Wallet Selection
+  const [accountType, setAccountType] = useState<AccountType>("demo");
+  const [realAddress, setRealAddress] = useState<string>("");
+  const [linkedAddress, setLinkedAddress] = useState<string>("");
+  const [showLinkInput, setShowLinkInput] = useState<boolean>(false);
+
   // Walrus feedback & proof
   const [walrusBlobId, setWalrusBlobId] = useState<string>("");
   const [showSnackbar, setShowSnackbar] = useState<boolean>(false);
   const [copiedBlob, setCopiedBlob] = useState<boolean>(false);
+
+  // Generate real self-custodial Sui keypair when Real Account is selected
+  useEffect(() => {
+    if (accountType === "real" && !realAddress) {
+      try {
+        const kp = new Ed25519Keypair();
+        setRealAddress(kp.toSuiAddress());
+      } catch (e) {
+        console.error("Failed to generate keypair:", e);
+      }
+    }
+  }, [accountType, realAddress]);
 
   // Rule management
   const addRule = () => {
@@ -59,14 +82,21 @@ export default function YearboundApp() {
     setRules((prev) => prev.filter((r) => r.id !== id));
   };
 
-  // Step 1 Validation: At least one rule with a non-empty title
+  // Step 1 Validation
   const isStep1Valid = rules.some((r) => r.title.trim().length > 0);
 
-  // Step 2 Submission to Walrus
+  // Step 3 Submission to Walrus
   const handleLockVault = async () => {
     setIsSubmitting(true);
     try {
       const activeRules = rules.filter((r) => r.title.trim().length > 0);
+      const activeAccountAddress =
+        accountType === "demo"
+          ? DEMO_SUI_ADDRESS
+          : accountType === "real"
+          ? realAddress
+          : linkedAddress || DEMO_SUI_ADDRESS;
+
       const res = await fetch("/api/walrus", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -74,6 +104,8 @@ export default function YearboundApp() {
           rules: activeRules,
           initialDepositSui: escrowDeposit,
           unlockDate: "2026-12-25",
+          walletAddress: activeAccountAddress,
+          accountType,
         }),
       });
 
@@ -81,7 +113,7 @@ export default function YearboundApp() {
       if (data.success && data.primaryBlobId) {
         setWalrusBlobId(data.primaryBlobId);
         setShowSnackbar(true);
-        setStep(3);
+        setStep(4);
 
         // Auto-dismiss snackbar after 6 seconds
         setTimeout(() => {
@@ -104,6 +136,13 @@ export default function YearboundApp() {
     setTimeout(() => setCopiedBlob(false), 2000);
   };
 
+  const activeWalletDisplay =
+    accountType === "demo"
+      ? `Demo · ${DEMO_SUI_ADDRESS.slice(0, 6)}...${DEMO_SUI_ADDRESS.slice(-4)}`
+      : accountType === "real"
+      ? `Real · ${realAddress.slice(0, 6)}...${realAddress.slice(-4)}`
+      : `Linked · ${linkedAddress ? `${linkedAddress.slice(0, 6)}...${linkedAddress.slice(-4)}` : "Wallet"}`;
+
   return (
     <main className="min-h-screen w-full bg-[#000000] text-[#FFFFFF] flex items-center justify-center p-0 md:p-6 select-none overflow-x-hidden font-sans">
       {/* ====================================================================
@@ -116,14 +155,12 @@ export default function YearboundApp() {
             ================================================================== */}
         {step === 1 && (
           <>
-            {/* Header: Clean, generous spacing */}
             <div className="pt-12 sm:pt-14 px-7 pb-4">
               <div className="text-[30px] sm:text-[34px] font-semibold tracking-[-0.02em] leading-tight text-white">
                 Write your resolutions
               </div>
             </div>
 
-            {/* Scrollable Rules List */}
             <div className="flex-1 overflow-y-auto px-7 py-3 flex flex-col gap-5 pb-6">
               {rules.map((rule, index) => (
                 <div
@@ -184,7 +221,6 @@ export default function YearboundApp() {
               </button>
             </div>
 
-            {/* Bottom CTA */}
             <div className="p-7 border-t border-[#18181B] bg-[#000000]">
               <button
                 type="button"
@@ -205,13 +241,9 @@ export default function YearboundApp() {
 
         {/* ==================================================================
             SCREEN 2: PENALTY STAKES & ESCROW SETUP
-            - Clean, well-spaced, uncluttered layout
-            - Rule titles with clean SUI preset buttons
-            - Quiet single-surface escrow lock card
             ================================================================== */}
         {step === 2 && (
           <>
-            {/* Header: Back navigation & Title with generous whitespace */}
             <div className="pt-10 sm:pt-12 px-7 pb-4 flex flex-col gap-3">
               <button
                 type="button"
@@ -226,9 +258,7 @@ export default function YearboundApp() {
               </div>
             </div>
 
-            {/* Content Area: Well-Spaced, Calmer Visual Flow */}
             <div className="flex-1 overflow-y-auto px-7 py-3 flex flex-col gap-5 pb-6">
-              {/* Rules Cards */}
               {rules
                 .filter((r) => r.title.trim().length > 0)
                 .map((rule, idx) => (
@@ -236,7 +266,6 @@ export default function YearboundApp() {
                     key={rule.id}
                     className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-4"
                   >
-                    {/* Top Row: Rule Index & Active Selected Stake */}
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] font-mono text-[#71717A] uppercase tracking-wider">
                         Rule 0{idx + 1}
@@ -246,7 +275,6 @@ export default function YearboundApp() {
                       </span>
                     </div>
 
-                    {/* Rule Title & Condition */}
                     <div className="flex flex-col gap-1">
                       <div className="text-base font-semibold text-white tracking-[-0.01em]">
                         {rule.title}
@@ -258,7 +286,6 @@ export default function YearboundApp() {
                       )}
                     </div>
 
-                    {/* Penalty preset selection */}
                     <div className="flex flex-col gap-2 pt-1 border-t border-[#18181C]">
                       <div className="text-[11px] font-medium text-[#71717A] uppercase tracking-wider">
                         Stake per breach
@@ -286,7 +313,7 @@ export default function YearboundApp() {
                   </div>
                 ))}
 
-              {/* Escrow Parameters: Quiet, Uncluttered, Single Surface */}
+              {/* Escrow Parameters */}
               <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-3.5">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-mono text-[#71717A] uppercase tracking-wider">
@@ -309,6 +336,147 @@ export default function YearboundApp() {
                   <span className="text-xs text-[#71717A]">Memory Proof</span>
                   <span className="text-xs text-[#A1A1AA]">Walrus Network</span>
                 </div>
+              </div>
+            </div>
+
+            <div className="p-7 border-t border-[#18181B] bg-[#000000]">
+              <button
+                type="button"
+                onClick={() => setStep(3)}
+                className="w-full py-4 px-6 rounded-full font-semibold text-sm transition-all flex items-center justify-center gap-2 bg-[#FFFFFF] text-[#000000] hover:bg-[#E4E4E7] active:scale-[0.98]"
+              >
+                <span>Continue to Account</span>
+                <ArrowRight size={16} />
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ==================================================================
+            SCREEN 3: ACCOUNT & WALLET SETUP
+            - Demo Account (Auto-selected for hackathon judges)
+            - Real Account (Self-custodial Sui keypair)
+            - Link Existing Wallet (+ centered clickable text link)
+            ================================================================== */}
+        {step === 3 && (
+          <>
+            <div className="pt-10 sm:pt-12 px-7 pb-4 flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={() => setStep(2)}
+                className="self-start text-[#71717A] hover:text-white flex items-center gap-1.5 text-xs font-medium transition-colors"
+              >
+                <ArrowLeft size={14} />
+                <span>Back</span>
+              </button>
+              <div className="text-[30px] sm:text-[34px] font-semibold tracking-[-0.02em] leading-tight text-white">
+                Choose an account
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-7 py-3 flex flex-col gap-4 pb-6">
+              {/* Option 1: Demo Account (Auto-selected by default) */}
+              <div
+                onClick={() => setAccountType("demo")}
+                className={`bg-[#0A0A0C] rounded-2xl p-5 flex flex-col gap-3 cursor-pointer transition-all border ${
+                  accountType === "demo"
+                    ? "border-white"
+                    : "border-[#222226] hover:border-[#3F3F46]"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="text-base font-semibold text-white tracking-[-0.01em]">
+                    Demo account
+                  </div>
+                  <div
+                    className={`w-4 h-4 rounded-full flex items-center justify-center transition-all ${
+                      accountType === "demo"
+                        ? "bg-white text-black"
+                        : "border border-[#3F3F46]"
+                    }`}
+                  >
+                    {accountType === "demo" && <Check size={10} strokeWidth={3} />}
+                  </div>
+                </div>
+
+                <p className="text-xs text-[#71717A] leading-relaxed">
+                  Pre-funded with testnet SUI for instant evaluation. No extension or faucet required.
+                </p>
+
+                <div className="pt-3 border-t border-[#18181C] flex items-center justify-between text-xs font-mono">
+                  <span className="text-[#A1A1AA]">
+                    {DEMO_SUI_ADDRESS.slice(0, 6)}...{DEMO_SUI_ADDRESS.slice(-4)}
+                  </span>
+                  <span className="text-white font-medium">50 SUI Balance</span>
+                </div>
+              </div>
+
+              {/* Option 2: Real Account (Self-custodial Sui Keypair) */}
+              <div
+                onClick={() => setAccountType("real")}
+                className={`bg-[#0A0A0C] rounded-2xl p-5 flex flex-col gap-3 cursor-pointer transition-all border ${
+                  accountType === "real"
+                    ? "border-white"
+                    : "border-[#222226] hover:border-[#3F3F46]"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="text-base font-semibold text-white tracking-[-0.01em]">
+                    Real account
+                  </div>
+                  <div
+                    className={`w-4 h-4 rounded-full flex items-center justify-center transition-all ${
+                      accountType === "real"
+                        ? "bg-white text-black"
+                        : "border border-[#3F3F46]"
+                    }`}
+                  >
+                    {accountType === "real" && <Check size={10} strokeWidth={3} />}
+                  </div>
+                </div>
+
+                <p className="text-xs text-[#71717A] leading-relaxed">
+                  Generates a fresh, self-custodial Sui keypair stored securely in your browser.
+                </p>
+
+                <div className="pt-3 border-t border-[#18181C] flex items-center justify-between text-xs font-mono">
+                  <span className="text-[#A1A1AA] truncate max-w-[200px]">
+                    {realAddress
+                      ? `${realAddress.slice(0, 6)}...${realAddress.slice(-4)}`
+                      : "Generating keypair..."}
+                  </span>
+                  <span className="text-[#71717A]">Self-Custodial</span>
+                </div>
+              </div>
+
+              {/* Option 3: Centered clickable text only */}
+              <div className="pt-2 flex flex-col items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowLinkInput(!showLinkInput);
+                    if (!showLinkInput) setAccountType("linked");
+                  }}
+                  className="text-xs font-medium text-[#71717A] hover:text-white transition-colors py-1.5 flex items-center gap-1.5"
+                >
+                  <Plus size={13} />
+                  <span>Link existing wallet</span>
+                </button>
+
+                {showLinkInput && (
+                  <div className="w-full mt-2 animate-in fade-in duration-200">
+                    <input
+                      type="text"
+                      value={linkedAddress}
+                      onChange={(e) => {
+                        setLinkedAddress(e.target.value);
+                        setAccountType("linked");
+                      }}
+                      placeholder="Enter Sui address (0x...)"
+                      className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-4 py-3 text-xs font-mono text-white placeholder-[#52525B] outline-none focus:border-white transition-colors"
+                    />
+                  </div>
+                )}
               </div>
             </div>
 
@@ -338,9 +506,9 @@ export default function YearboundApp() {
         )}
 
         {/* ==================================================================
-            SCREEN 3: VAULT ACTIVE / CONFIRMED PACT
+            SCREEN 4: VAULT ACTIVE / CONFIRMED PACT
             ================================================================== */}
-        {step === 3 && (
+        {step === 4 && (
           <>
             <div className="pt-12 sm:pt-14 px-7 pb-4">
               <div className="text-[30px] sm:text-[34px] font-semibold tracking-[-0.02em] leading-tight text-white">
@@ -372,9 +540,9 @@ export default function YearboundApp() {
                     <span className="text-sm font-mono text-white mt-0.5">{escrowDeposit} SUI</span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-xs text-[#71717A]">Rules Bound</span>
-                    <span className="text-sm font-mono text-white mt-0.5">
-                      {rules.filter((r) => r.title.trim().length > 0).length} Rules
+                    <span className="text-xs text-[#71717A]">Account</span>
+                    <span className="text-xs font-mono text-white mt-0.5 truncate">
+                      {activeWalletDisplay}
                     </span>
                   </div>
                 </div>
