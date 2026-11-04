@@ -559,117 +559,128 @@ export default function YearboundApp() {
 
             <div
               onClick={() => setExpandedRuleId(null)}
-              className="flex-1 overflow-y-auto px-7 py-2 flex flex-col gap-3.5 pb-4 overscroll-contain"
+              className="flex-1 overflow-y-auto px-7 py-2 flex flex-col justify-between pb-4 overscroll-contain"
             >
-              {rules.map((rule, index) => {
-                const isExpanded = rule.id === expandedRuleId;
-                return isExpanded ? (
-                  /* EXPANDED RESOLUTION CARD */
-                  <div
-                    key={rule.id}
-                    onClick={(e) => e.stopPropagation()}
-                    className="bg-[#0A0A0C] border border-[#3F3F46] rounded-2xl p-4 flex flex-col gap-3 relative focus-within:border-white transition-all duration-300 ease-out shadow-sm"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-mono font-medium text-[#71717A] tracking-wider">
-                        0{index + 1}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setExpandedRuleId(null)}
-                          className="text-[10px] font-mono text-[#71717A] hover:text-white uppercase tracking-wider px-2 py-0.5 rounded hover:bg-[#18181C] transition-colors"
-                        >
-                          Done
-                        </button>
+              {/* STACK OF MINIMIZED RESOLUTIONS AT TOP */}
+              <div className="flex flex-col gap-2.5 transition-all duration-300 ease-out">
+                {rules.map((rule, index) => {
+                  if (rule.id === expandedRuleId) return null; // rendered in the centered active editor below
+                  return (
+                    <div
+                      key={rule.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpandedRuleId(rule.id);
+                      }}
+                      className="bg-[#0A0A0C] border border-[#222226] hover:border-[#3F3F46] rounded-2xl px-4 py-3.5 flex items-center justify-between cursor-pointer transition-all duration-300 ease-out active:scale-[0.99] animate-in fade-in slide-in-from-bottom-2"
+                    >
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <span className="text-sm font-mono font-medium text-[#71717A] shrink-0">
+                          0{index + 1}
+                        </span>
+                        <span className={`text-sm truncate ${rule.title ? "text-white font-medium" : "text-[#52525B]"}`}>
+                          {rule.title || "Untitled resolution"}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[10px] text-[#71717A] uppercase tracking-wider">Edit</span>
                         {rules.length > 1 && (
                           <button
                             type="button"
-                            onClick={() => removeRule(rule.id)}
-                            className="text-[#71717A] hover:text-[#EF4444] p-1 transition-colors active:scale-95"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeRule(rule.id);
+                            }}
+                            className="text-[#52525B] hover:text-[#EF4444] p-1 transition-colors"
                             title="Remove resolution"
                           >
-                            <Trash2 size={13} />
+                            <Trash2 size={12} />
                           </button>
                         )}
                       </div>
                     </div>
+                  );
+                })}
+              </div>
 
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[11px] font-medium text-[#A1A1AA]">
-                        Title
-                      </label>
-                      <input
-                        type="text"
-                        value={rule.title}
-                        onChange={(e) => updateRule(rule.id, "title", e.target.value)}
-                        placeholder="e.g. No Late-Night Takeout"
-                        className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-[#52525B] outline-none focus:border-white transition-colors"
-                      />
-                    </div>
+              {/* CENTER MIDDLE OF SCREEN: ACTIVE EDITOR + CENTERED ADD BUTTON */}
+              <div className="flex-1 flex flex-col justify-center items-center py-6 min-h-[200px] transition-all duration-300 ease-out">
+                {/* Active Expanded Resolution Card (Centered above the button) */}
+                {(() => {
+                  const expandedRule = rules.find((r) => r.id === expandedRuleId);
+                  if (!expandedRule) return null;
+                  const expandedIndex = rules.findIndex((r) => r.id === expandedRule.id);
+                  return (
+                    <div
+                      key={expandedRule.id}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-full bg-[#0A0A0C] border border-[#3F3F46] rounded-2xl p-4 flex flex-col gap-3 relative focus-within:border-white transition-all duration-300 ease-out shadow-xl mb-4 animate-in fade-in zoom-in-95"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-mono font-medium text-[#71717A] tracking-wider">
+                          0{expandedIndex + 1}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedRuleId(null)}
+                            className="text-[10px] font-mono text-[#71717A] hover:text-white uppercase tracking-wider px-2 py-0.5 rounded hover:bg-[#18181C] transition-colors"
+                          >
+                            Done
+                          </button>
+                          {rules.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeRule(expandedRule.id)}
+                              className="text-[#71717A] hover:text-[#EF4444] p-1 transition-colors active:scale-95"
+                              title="Remove resolution"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
 
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[11px] font-medium text-[#A1A1AA]">
-                        Condition
-                      </label>
-                      <textarea
-                        value={rule.condition}
-                        onChange={(e) => updateRule(rule.id, "condition", e.target.value)}
-                        placeholder="e.g. Any food delivery ordered between 10 PM and 5 AM"
-                        rows={2}
-                        className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-3.5 py-2 text-sm text-white placeholder-[#52525B] outline-none focus:border-white transition-colors resize-none leading-relaxed"
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  /* MINIMIZED RESOLUTION CARD */
-                  <div
-                    key={rule.id}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setExpandedRuleId(rule.id);
-                    }}
-                    className="bg-[#0A0A0C] border border-[#222226] hover:border-[#3F3F46] rounded-2xl px-4 py-3.5 flex items-center justify-between cursor-pointer transition-all duration-300 ease-out active:scale-[0.99]"
-                  >
-                    <div className="flex items-center gap-3.5 min-w-0">
-                      <span className="text-sm font-mono font-medium text-[#71717A] shrink-0">
-                        0{index + 1}
-                      </span>
-                      <span className={`text-sm truncate ${rule.title ? "text-white font-medium" : "text-[#52525B]"}`}>
-                        {rule.title || "Untitled resolution"}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[10px] text-[#71717A] uppercase tracking-wider">Edit</span>
-                      {rules.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeRule(rule.id);
-                          }}
-                          className="text-[#52525B] hover:text-[#EF4444] p-1 transition-colors"
-                          title="Remove resolution"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[11px] font-medium text-[#A1A1AA]">
+                          Title
+                        </label>
+                        <input
+                          type="text"
+                          value={expandedRule.title}
+                          onChange={(e) => updateRule(expandedRule.id, "title", e.target.value)}
+                          placeholder="e.g. No Late-Night Takeout"
+                          className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-[#52525B] outline-none focus:border-white transition-colors"
+                          autoFocus
+                        />
+                      </div>
 
-              {/* Centered Add Another Resolution Button */}
-              <div className="flex justify-center pt-2 pb-1">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[11px] font-medium text-[#A1A1AA]">
+                          Condition
+                        </label>
+                        <textarea
+                          value={expandedRule.condition}
+                          onChange={(e) => updateRule(expandedRule.id, "condition", e.target.value)}
+                          placeholder="e.g. Any food delivery ordered between 10 PM and 5 AM"
+                          rows={2}
+                          className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-3.5 py-2 text-sm text-white placeholder-[#52525B] outline-none focus:border-white transition-colors resize-none leading-relaxed"
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Centered Add Button */}
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     addRule();
                   }}
-                  className="py-2.5 px-5 border border-dashed border-[#2E2E33] hover:border-[#52525B] hover:bg-[#0A0A0C] text-[#A1A1AA] hover:text-white rounded-full flex items-center justify-center gap-2 text-xs font-medium transition-all duration-200 active:scale-95 shadow-sm"
+                  className="py-3 px-6 border border-dashed border-[#2E2E33] hover:border-[#52525B] hover:bg-[#0A0A0C] text-[#A1A1AA] hover:text-white rounded-full flex items-center justify-center gap-2 text-xs font-medium transition-all duration-200 active:scale-95 shadow-sm"
                 >
-                  <Plus size={13} />
+                  <Plus size={14} />
                   <span>Add another resolution</span>
                 </button>
               </div>
@@ -730,7 +741,7 @@ export default function YearboundApp() {
                       {rule.title}
                     </div>
 
-                    <div className="flex flex-col gap-2 pt-1 border-t border-[#18181C]">
+                    <div className="flex flex-col gap-2 pt-0.5">
                       <div className="text-[11px] font-medium text-[#71717A] uppercase tracking-wider">
                         Stake per breach
                       </div>
