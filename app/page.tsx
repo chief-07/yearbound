@@ -69,7 +69,14 @@ export interface WalrusMemoryBlob {
 
 type AccountType = "demo" | "real" | "linked";
 type NavTab = "home" | "resolutions" | "vault" | "settings";
-type SendSubStep = "amount" | "memo" | "checking" | "approved" | "breach";
+type SendSubStep =
+  | "amount"
+  | "memo"
+  | "checking"
+  | "approved"
+  | "breach"
+  | "honored"
+  | "penalty_recorded";
 
 const PENALTY_PRESETS = [5, 10, 25, 50];
 const AMOUNT_PRESETS = [5, 10, 15, 25];
@@ -165,6 +172,8 @@ export default function YearboundApp() {
   const [isMemoryInspectorOpen, setIsMemoryInspectorOpen] = useState<boolean>(false);
   const [isAddResolutionOpen, setIsAddResolutionOpen] = useState<boolean>(false);
   const [expandedJsonBlobId, setExpandedJsonBlobId] = useState<string | null>(null);
+  const [selectedMemoryRuleId, setSelectedMemoryRuleId] = useState<string | null>(null);
+  const [latestFineBlobId, setLatestFineBlobId] = useState<string>("");
 
   // Add Resolution Drawer form state
   const [newRuleTitle, setNewRuleTitle] = useState<string>("");
@@ -515,9 +524,8 @@ export default function YearboundApp() {
       );
       setEscrowDeposit((prev) => prev + penaltyAmt);
       setAvailableBalance((prev) => Math.max(0, prev - transferAmt - penaltyAmt));
-
-      closeSendFlow();
-      triggerSnackbar("10 SUI Penalty Deposited to x402 Vault", `Logged to Walrus · Blob #${fineBlobId.slice(0, 10)}...`, fineBlobId);
+      setLatestFineBlobId(fineBlobId);
+      setSendSubStep("penalty_recorded");
     } catch {
       alert("Error logging penalty to Walrus memory.");
     } finally {
@@ -1231,62 +1239,103 @@ export default function YearboundApp() {
             {activeTab === "resolutions" && (
               <div className="flex-1 overflow-y-auto px-7 pt-6 sm:pt-8 pb-28 flex flex-col gap-4 animate-in fade-in duration-200 overscroll-contain">
                 <div className="text-[30px] sm:text-[34px] font-semibold tracking-[-0.02em] leading-tight text-white">
-                  Committed Resolutions
-                </div>
-
-                {/* Walrus Provenance Bar */}
-                <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-4 flex items-center justify-between gap-3">
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-[10px] font-mono text-[#71717A] uppercase tracking-wider">
-                      Resolved From Walrus Memory
-                    </span>
-                    <span className="text-xs font-mono text-white truncate mt-0.5">
-                      Blob #{walrusBlobId ? `${walrusBlobId.slice(0, 14)}...` : "d4a97f2e8c9b..."}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsMemoryInspectorOpen(true)}
-                    className="text-xs font-medium text-[#A1A1AA] hover:text-white flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#18181C] border border-[#27272A] transition-colors shrink-0 active:scale-95"
-                  >
-                    <span>Inspect Proof</span>
-                    <ExternalLink size={12} />
-                  </button>
+                  Saved Resolutions
                 </div>
 
                 {/* Resolutions List */}
                 <div className="flex flex-col gap-3">
-                  {activeRulesList.map((rule, idx) => (
-                    <div
-                      key={rule.id}
-                      className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-2.5"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-mono text-[#71717A] uppercase tracking-wider">
-                          Resolution 0{idx + 1}
-                        </span>
-                        <span className="text-xs font-mono text-white bg-[#18181C] px-2 py-0.5 rounded border border-[#27272A]">
-                          {rule.penalty} SUI Penalty
-                        </span>
+                  {activeRulesList.map((rule, idx) => {
+                    const isExpanded = selectedMemoryRuleId === rule.id;
+                    return (
+                      <div
+                        key={rule.id}
+                        onClick={() => setSelectedMemoryRuleId(isExpanded ? null : rule.id)}
+                        className={`bg-[#0A0A0C] border rounded-2xl p-5 flex flex-col gap-2.5 cursor-pointer transition-all duration-200 ${
+                          isExpanded
+                            ? "border-white/40 ring-1 ring-white/10"
+                            : "border-[#222226] hover:border-[#3F3F46]"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-mono font-medium text-[#71717A] tracking-wider">
+                            0{idx + 1}
+                          </span>
+                          <span className="text-xs font-mono text-white bg-[#18181C] px-2 py-0.5 rounded border border-[#27272A]">
+                            {rule.penalty} SUI Penalty
+                          </span>
+                        </div>
+                        <div className="text-base font-semibold text-white">
+                          {rule.title}
+                        </div>
+                        {rule.condition && (
+                          <p className="text-xs text-[#71717A] leading-relaxed">
+                            {rule.condition}
+                          </p>
+                        )}
+                        <div className="flex items-center justify-between border-t border-[#18181C] pt-2 mt-1">
+                          <span className="text-[10px] font-mono text-[#71717A]">
+                            Walrus Item #{idx + 1} · Enforced by Wally
+                          </span>
+                          <span className="text-[10px] font-mono text-white">
+                            {rule.breaches || 0} Breaches
+                          </span>
+                        </div>
+
+                        {/* Expandable Exact Walrus Memory Proof */}
+                        {isExpanded && (
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-[#131316] border border-[#27272A] rounded-xl p-3.5 flex flex-col gap-2.5 mt-2 animate-in fade-in duration-200"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-mono text-[#A1A1AA] uppercase tracking-wider">
+                                Walrus Memory Record
+                              </span>
+                              <span className="text-[10px] font-mono text-white">
+                                Verified
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between bg-[#0A0A0C] border border-[#1E1E22] rounded-lg px-2.5 py-1.5">
+                              <span className="text-[11px] font-mono text-white truncate mr-2">
+                                Blob #{walrusBlobId ? `${walrusBlobId.slice(0, 16)}...` : "d4a97f2e8c9b4e11..."}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const bid = walrusBlobId || "d4a97f2e8c9b4e11a2f6";
+                                  if (navigator?.clipboard?.writeText) {
+                                    navigator.clipboard.writeText(bid).catch(() => {});
+                                  }
+                                  triggerSnackbar("Copied Blob ID to clipboard", `Blob #${bid.slice(0, 12)}...`);
+                                }}
+                                className="text-[#71717A] hover:text-white p-1 transition-colors shrink-0"
+                                title="Copy Blob ID"
+                              >
+                                <Copy size={12} />
+                              </button>
+                            </div>
+
+                            <div className="text-[11px] font-mono text-[#71717A] leading-relaxed">
+                              Boundary: "{rule.condition || rule.title}"
+                            </div>
+
+                            <a
+                              href={`https://aggregator.walrus-testnet.walrus.space/v1/blobs/${walrusBlobId || "d4a97f2e8c9b4e11a2f6"}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-[11px] text-white hover:underline flex items-center gap-1 font-mono pt-0.5"
+                            >
+                              <span>Inspect on Walrus Aggregator</span>
+                              <ExternalLink size={11} />
+                            </a>
+                          </div>
+                        )}
                       </div>
-                      <div className="text-base font-semibold text-white">
-                        {rule.title}
-                      </div>
-                      {rule.condition && (
-                        <p className="text-xs text-[#71717A] leading-relaxed">
-                          {rule.condition}
-                        </p>
-                      )}
-                      <div className="flex items-center justify-between border-t border-[#18181C] pt-2 mt-1">
-                        <span className="text-[10px] font-mono text-[#71717A]">
-                          Walrus Item #{idx + 1} · Enforced by Wally
-                        </span>
-                        <span className="text-[10px] font-mono text-white">
-                          {rule.breaches || 0} Breaches
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
 
                   {/* Add Another Resolution Button */}
                   <button
@@ -1546,7 +1595,7 @@ export default function YearboundApp() {
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto px-7 py-2 flex flex-col gap-5 pb-4 overscroll-contain">
+                <div className="flex-1 overflow-y-auto px-7 py-4 flex flex-col gap-7 pb-4 overscroll-contain">
                   {/* Big Centered Amount Display */}
                   <div className="flex flex-col items-center justify-center pt-2">
                     <div className="flex items-baseline justify-center gap-2">
@@ -1554,14 +1603,14 @@ export default function YearboundApp() {
                         type="number"
                         value={sendAmount}
                         onChange={(e) => setSendAmount(e.target.value)}
-                        className="bg-transparent text-[52px] font-semibold font-mono text-center text-white outline-none w-48 tracking-tight"
+                        className="bg-transparent text-[54px] font-semibold font-mono text-center text-white outline-none w-48 tracking-tight"
                         placeholder="0"
                       />
                       <span className="text-xl font-mono text-[#71717A]">SUI</span>
                     </div>
 
                     {/* Quick Amount Preset Chips */}
-                    <div className="flex items-center gap-2 mt-2">
+                    <div className="flex items-center gap-2 mt-3">
                       {AMOUNT_PRESETS.map((amt) => (
                         <button
                           key={amt}
@@ -1580,7 +1629,7 @@ export default function YearboundApp() {
                   </div>
 
                   {/* Recipient Address Well */}
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-2 pt-2">
                     <label className="text-[12px] font-medium text-[#A1A1AA]">
                       Recipient Address
                     </label>
@@ -1592,14 +1641,9 @@ export default function YearboundApp() {
                       className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-4 py-3 text-xs font-mono text-white placeholder-[#52525B] outline-none focus:border-white transition-colors"
                     />
                   </div>
-
-                  {/* Tiny Disclaimer Text */}
-                  <div className="text-[11px] font-mono text-[#52525B] text-center tracking-tight pt-2">
-                    Walrus Memory validated · Tatum Sui RPC resolved
-                  </div>
                 </div>
 
-                <div className="p-6 border-t border-[#18181B] bg-[#000000]">
+                <div className="p-6 bg-[#000000] flex flex-col items-center gap-3">
                   <button
                     type="button"
                     onClick={() => setSendSubStep("memo")}
@@ -1613,6 +1657,9 @@ export default function YearboundApp() {
                     <span>Continue</span>
                     <ArrowRight size={16} />
                   </button>
+                  <div className="text-[11px] font-mono text-[#52525B] text-center tracking-tight">
+                    Walrus Memory validated · Tatum Sui RPC resolved
+                  </div>
                 </div>
               </>
             )}
@@ -1620,7 +1667,7 @@ export default function YearboundApp() {
             {/* SUB-STEP 2: COMPULSORY TRUTHFUL MEMO */}
             {sendSubStep === "memo" && (
               <>
-                <div className="pt-6 sm:pt-8 px-7 pb-3 flex flex-col gap-2.5">
+                <div className="pt-6 sm:pt-8 px-7 pb-2 flex flex-col gap-2.5">
                   <button
                     type="button"
                     onClick={() => setSendSubStep("amount")}
@@ -1629,52 +1676,47 @@ export default function YearboundApp() {
                     <ArrowLeft size={14} />
                     <span>Back</span>
                   </button>
-                  <div className="text-[30px] sm:text-[34px] font-semibold tracking-[-0.02em] leading-tight text-white">
-                    What is this for?
-                  </div>
-                </div>
-
-                <div className="flex-1 overflow-y-auto px-7 py-2 flex flex-col gap-4 pb-4 overscroll-contain">
-                  {/* Guilt Prompt & Compulsory Textarea */}
-                  <div className="flex flex-col gap-2">
-                    <p className="text-xs text-[#A1A1AA] leading-relaxed">
+                  <div className="flex flex-col gap-1">
+                    <div className="text-[30px] sm:text-[34px] font-semibold tracking-[-0.02em] leading-tight text-white">
+                      What is this for?
+                    </div>
+                    <p className="text-xs text-[#71717A] leading-relaxed">
                       Be honest with future you. What are you purchasing or sending?
                     </p>
-                    <textarea
-                      value={sendMemo}
-                      onChange={(e) => setSendMemo(e.target.value)}
-                      placeholder="e.g. Late-night food delivery..."
-                      rows={3}
-                      className="w-full bg-[#131316] border border-[#27272A] rounded-2xl p-4 text-sm text-white placeholder-[#52525B] outline-none focus:border-white transition-colors leading-relaxed resize-none"
-                    />
-                  </div>
-
-                  {/* Quick Pick Testing Chips for Judges */}
-                  <div className="flex flex-col gap-2 pt-1">
-                    <span className="text-[11px] font-mono uppercase tracking-wider text-[#71717A]">
-                      Quick pick examples
-                    </span>
-                    <div className="flex flex-col gap-2">
-                      {QUICK_MEMO_PICKS.map((item, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => setSendMemo(item.text)}
-                          className="bg-[#0A0A0C] border border-[#222226] hover:border-[#52525B] text-left p-3.5 rounded-xl transition-all duration-150 active:scale-[0.99] flex flex-col gap-0.5"
-                        >
-                          <span className="text-xs font-medium text-white">
-                            {item.label}
-                          </span>
-                          <span className="text-[11px] text-[#71717A] truncate">
-                            {item.text}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
                   </div>
                 </div>
 
-                <div className="p-6 border-t border-[#18181B] bg-[#000000]">
+                <div className="flex-1 overflow-y-auto px-7 py-3 flex flex-col gap-5 pb-4 overscroll-contain">
+                  {/* Guilt Prompt & Compulsory Textarea */}
+                  <textarea
+                    value={sendMemo}
+                    onChange={(e) => setSendMemo(e.target.value)}
+                    placeholder="e.g. Late-night food delivery..."
+                    rows={3}
+                    className="w-full bg-[#131316] border border-[#27272A] rounded-2xl p-4 text-sm text-white placeholder-[#52525B] outline-none focus:border-white transition-colors leading-relaxed resize-none"
+                  />
+
+                  {/* Quick Pick Testing Chips for Judges */}
+                  <div className="flex flex-col gap-2">
+                    {QUICK_MEMO_PICKS.map((item, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setSendMemo(item.text)}
+                        className="bg-[#0A0A0C] border border-[#222226] hover:border-[#52525B] text-left p-3.5 rounded-xl transition-all duration-150 active:scale-[0.99] flex flex-col gap-0.5"
+                      >
+                        <span className="text-xs font-medium text-white">
+                          {item.label}
+                        </span>
+                        <span className="text-[11px] text-[#71717A] truncate">
+                          {item.text}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="p-6 bg-[#000000]">
                   <button
                     type="button"
                     onClick={handleReviewAndCheck}
@@ -1803,10 +1845,10 @@ export default function YearboundApp() {
                 </div>
 
                 {/* Actions: Cancel vs Pay Fine */}
-                <div className="p-6 border-t border-[#18181B] bg-[#000000] flex flex-col gap-2.5">
+                <div className="p-6 bg-[#000000] flex flex-col gap-2.5">
                   <button
                     type="button"
-                    onClick={closeSendFlow}
+                    onClick={() => setSendSubStep("honored")}
                     className="w-full py-4 px-6 rounded-full font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 bg-[#FFFFFF] text-[#000000] hover:bg-[#E4E4E7] active:scale-[0.98]"
                   >
                     <span>Cancel & Honor Resolution</span>
@@ -1824,6 +1866,133 @@ export default function YearboundApp() {
                   </button>
                 </div>
               </>
+            )}
+
+            {/* SUB-STEP: RESOLUTION HONORED (CONGRATULATIONS / DISCIPLINE) */}
+            {sendSubStep === "honored" && (
+              <div className="flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-200">
+                <div className="pt-6 sm:pt-8 px-7 pb-3 flex flex-col gap-2.5">
+                  <div className="text-[30px] sm:text-[34px] font-semibold tracking-[-0.02em] leading-tight text-white">
+                    Resolution Honored
+                  </div>
+                  <p className="text-xs text-[#71717A] leading-relaxed">
+                    You chose discipline over impulse. Your streak stays intact and 0 SUI was forfeited.
+                  </p>
+                </div>
+
+                <div className="flex-1 overflow-y-auto px-7 py-2 flex flex-col gap-4 pb-4 overscroll-contain">
+                  <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-3.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-mono uppercase tracking-wider text-[#71717A]">
+                        Discipline Report
+                      </span>
+                      <span className="text-xs font-mono text-white">Streak Intact</span>
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-[#18181C] pt-3">
+                      <span className="text-xs text-[#A1A1AA]">Transfer Status</span>
+                      <span className="text-xs text-white font-medium">Cancelled by User</span>
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-[#18181C] pt-2.5">
+                      <span className="text-xs text-[#A1A1AA]">Penalty Avoided</span>
+                      <span className="text-xs font-mono font-semibold text-white">10 SUI</span>
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-[#18181C] pt-2.5">
+                      <span className="text-xs text-[#71717A]">Memory Ledger</span>
+                      <span className="text-xs font-mono text-[#A1A1AA]">No Infraction Committed</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-6 bg-[#000000]">
+                  <button
+                    type="button"
+                    onClick={closeSendFlow}
+                    className="w-full py-4 px-6 rounded-full font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 bg-[#FFFFFF] text-[#000000] hover:bg-[#E4E4E7] active:scale-[0.98]"
+                  >
+                    <span>Back to Dashboard</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* SUB-STEP: INFRACTION RECORDED (ANTI-CONGRATULATIONS / SOBERING REALITY) */}
+            {sendSubStep === "penalty_recorded" && (
+              <div className="flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-200">
+                <div className="pt-6 sm:pt-8 px-7 pb-3 flex flex-col gap-2.5">
+                  <div className="text-[30px] sm:text-[34px] font-semibold tracking-[-0.02em] leading-tight text-white">
+                    Penalty Recorded
+                  </div>
+                  <p className="text-xs text-[#71717A] leading-relaxed">
+                    10 SUI penalty has been deposited to the x402 Vault and logged immutably in Walrus memory.
+                  </p>
+                </div>
+
+                <div className="flex-1 overflow-y-auto px-7 py-2 flex flex-col gap-4 pb-4 overscroll-contain">
+                  <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-3.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-mono uppercase tracking-wider text-[#71717A]">
+                        Infraction Log
+                      </span>
+                      <span className="text-xs font-mono text-white">Breach Enforced</span>
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-[#18181C] pt-3">
+                      <span className="text-xs text-[#A1A1AA]">Penalty Deposit</span>
+                      <span className="text-xs font-mono font-semibold text-white">10 SUI → x402 Vault</span>
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-[#18181C] pt-2.5">
+                      <span className="text-xs text-[#A1A1AA]">Lock Expiry</span>
+                      <span className="text-xs text-[#A1A1AA]">Dec 25, 2026</span>
+                    </div>
+
+                    <div className="flex items-center justify-between bg-[#131316] border border-[#1E1E22] rounded-xl px-3 py-2 mt-1">
+                      <span className="text-[11px] font-mono text-[#A1A1AA] truncate mr-2">
+                        Blob #{latestFineBlobId ? `${latestFineBlobId.slice(0, 16)}...` : "blob_infr..."}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const bid = latestFineBlobId || "blob_infr";
+                          if (navigator?.clipboard?.writeText) {
+                            navigator.clipboard.writeText(bid).catch(() => {});
+                          }
+                          triggerSnackbar("Copied Penalty Blob ID", bid);
+                        }}
+                        className="text-[#71717A] hover:text-white p-1 transition-colors shrink-0"
+                        title="Copy Blob ID"
+                      >
+                        <Copy size={12} />
+                      </button>
+                    </div>
+
+                    {latestFineBlobId && (
+                      <a
+                        href={`https://aggregator.walrus-testnet.walrus.space/v1/blobs/${latestFineBlobId}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] text-white hover:underline flex items-center gap-1 font-mono pt-0.5"
+                      >
+                        <span>Inspect on Walrus Aggregator</span>
+                        <ExternalLink size={11} />
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                <div className="p-6 bg-[#000000]">
+                  <button
+                    type="button"
+                    onClick={closeSendFlow}
+                    className="w-full py-4 px-6 rounded-full font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 bg-[#FFFFFF] text-[#000000] hover:bg-[#E4E4E7] active:scale-[0.98]"
+                  >
+                    <span>Back to Dashboard</span>
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         )}
