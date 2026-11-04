@@ -10,6 +10,7 @@ const nextConfig: NextConfig = {
     '10.33.118.175',
     '10.33.118.175:3000',
     'localhost:3000',
+    '*.trycloudflare.com',
   ],
   images: {
     qualities: [75, 95],
