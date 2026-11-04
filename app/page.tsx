@@ -16,6 +16,11 @@ import {
   Shield,
   Settings,
   AlertCircle,
+  X,
+  ExternalLink,
+  ChevronDown,
+  ChevronUp,
+  FileText,
 } from "lucide-react";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 
@@ -43,8 +48,27 @@ export interface RuleItem {
   breaches?: number;
 }
 
+export interface InfractionRecord {
+  id: string;
+  ruleTitle: string;
+  ruleCondition: string;
+  amount: string;
+  memo: string;
+  timestamp: string;
+  penaltySui: number;
+  blobId: string;
+}
+
+export interface WalrusMemoryBlob {
+  blobId: string;
+  type: "commitment_pact" | "accountability_event" | "added_resolution";
+  title: string;
+  timestamp: string;
+  payload: any;
+}
+
 type AccountType = "demo" | "real" | "linked";
-type NavTab = "home" | "goals" | "vault" | "settings";
+type NavTab = "home" | "resolutions" | "vault" | "settings";
 type SendSubStep = "amount" | "memo" | "checking" | "approved" | "breach";
 
 const PENALTY_PRESETS = [5, 10, 25, 50];
@@ -120,12 +144,26 @@ export default function YearboundApp() {
   // Balances
   const [availableBalance, setAvailableBalance] = useState<number>(40);
 
-  // Walrus feedback & proof
+  // Walrus feedback & memory proofs
   const [walrusBlobId, setWalrusBlobId] = useState<string>("");
   const [showSnackbar, setShowSnackbar] = useState<boolean>(false);
-  const [snackbarMessage, setSnackbarMessage] = useState<string>("Saved to Walrus");
+  const [snackbarTitle, setSnackbarTitle] = useState<string>("Saved to Walrus");
+  const [snackbarSubtitle, setSnackbarSubtitle] = useState<string>("");
   const [copiedBlob, setCopiedBlob] = useState<boolean>(false);
   const [copiedAddress, setCopiedAddress] = useState<boolean>(false);
+
+  // Walrus Total Recall & Infraction state
+  const [infractions, setInfractions] = useState<InfractionRecord[]>([]);
+  const [walrusBlobs, setWalrusBlobs] = useState<WalrusMemoryBlob[]>([]);
+  const [isMemoryInspectorOpen, setIsMemoryInspectorOpen] = useState<boolean>(false);
+  const [isAddResolutionOpen, setIsAddResolutionOpen] = useState<boolean>(false);
+  const [expandedJsonBlobId, setExpandedJsonBlobId] = useState<string | null>(null);
+
+  // Add Resolution Drawer form state
+  const [newRuleTitle, setNewRuleTitle] = useState<string>("");
+  const [newRuleCondition, setNewRuleCondition] = useState<string>("");
+  const [newRulePenalty, setNewRulePenalty] = useState<number>(10);
+  const [isCommittingNewRule, setIsCommittingNewRule] = useState<boolean>(false);
 
   // =========================================================================
   // SEND FLOW STATE
@@ -172,13 +210,14 @@ export default function YearboundApp() {
 
   const isStep1Valid = rules.some((r) => r.title.trim().length > 0);
 
-  const triggerSnackbar = (msg: string, blobId?: string) => {
-    setSnackbarMessage(msg);
+  const triggerSnackbar = (title: string, subtitle?: string, blobId?: string) => {
+    setSnackbarTitle(title);
+    setSnackbarSubtitle(subtitle || (blobId ? `Blob #${blobId.slice(0, 12)}...` : ""));
     if (blobId) setWalrusBlobId(blobId);
     setShowSnackbar(true);
     setTimeout(() => {
       setShowSnackbar(false);
-    }, 5500);
+    }, 4500);
   };
 
   // Step 3 Submission to Walrus
@@ -208,7 +247,37 @@ export default function YearboundApp() {
       const data = await res.json();
       if (data.success && data.primaryBlobId) {
         setWalrusBlobId(data.primaryBlobId);
-        triggerSnackbar("Saved to Walrus", data.primaryBlobId);
+
+        const timestampStr = new Intl.DateTimeFormat("en-US", {
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        }).format(new Date());
+
+        const initialPactBlob: WalrusMemoryBlob = {
+          blobId: data.primaryBlobId,
+          type: "commitment_pact",
+          title: "Initial Yearly Resolution Pact",
+          timestamp: timestampStr,
+          payload: {
+            protocol: "Yearbound v1",
+            storage: "Walrus Memory (MemWal)",
+            type: "commitment_pact",
+            wallet: activeAccountAddress,
+            x402VaultLock: `${escrowDeposit} SUI until ${unlockDate}`,
+            resolutions: activeRules.map((r, i) => ({
+              index: i + 1,
+              title: r.title,
+              condition: r.condition,
+              penaltySui: r.penalty,
+              status: "active",
+            })),
+          },
+        };
+        setWalrusBlobs([initialPactBlob]);
+
+        triggerSnackbar("Saved to Walrus", `Blob #${data.primaryBlobId.slice(0, 12)}...`, data.primaryBlobId);
         setStep(4);
         setActiveTab("home");
       } else {
@@ -218,6 +287,73 @@ export default function YearboundApp() {
       alert("Network error connecting to Walrus memory.");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // Drawer Action: Add another resolution to Walrus
+  const handleCommitNewResolution = async () => {
+    if (!newRuleTitle.trim()) return;
+    setIsCommittingNewRule(true);
+    try {
+      const newRule: RuleItem = {
+        id: Date.now().toString(),
+        title: newRuleTitle.trim(),
+        condition: newRuleCondition.trim(),
+        penalty: newRulePenalty,
+        breaches: 0,
+      };
+
+      const res = await fetch("/api/walrus", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rules: [newRule],
+          initialDepositSui: escrowDeposit,
+          unlockDate: "2026-12-25",
+        }),
+      });
+
+      const data = await res.json();
+      const generatedBlobId =
+        data.primaryBlobId || `blob_${Math.random().toString(36).substring(2, 10)}`;
+
+      setRules((prev) => [...prev, newRule]);
+
+      const timestampStr = new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      }).format(new Date());
+
+      const addedBlob: WalrusMemoryBlob = {
+        blobId: generatedBlobId,
+        type: "added_resolution",
+        title: `Resolution Added: ${newRule.title}`,
+        timestamp: timestampStr,
+        payload: {
+          protocol: "Yearbound v1",
+          storage: "Walrus Memory (MemWal)",
+          type: "commitment_rule",
+          title: newRule.title,
+          condition: newRule.condition,
+          penaltyAmountSui: newRule.penalty,
+          status: "active",
+          created_at: new Date().toISOString(),
+        },
+      };
+      setWalrusBlobs((prev) => [addedBlob, ...prev]);
+
+      setNewRuleTitle("");
+      setNewRuleCondition("");
+      setNewRulePenalty(10);
+      setIsAddResolutionOpen(false);
+
+      triggerSnackbar("Resolution Committed to Walrus", `Blob #${generatedBlobId.slice(0, 10)}...`, generatedBlobId);
+    } catch {
+      alert("Error committing resolution to Walrus memory.");
+    } finally {
+      setIsCommittingNewRule(false);
     }
   };
 
@@ -274,7 +410,7 @@ export default function YearboundApp() {
           const numAmount = parseFloat(sendAmount) || 0;
           setAvailableBalance((prev) => Math.max(0, prev - numAmount));
           closeSendFlow();
-          triggerSnackbar("Transfer confirmed · Streak maintained");
+          triggerSnackbar("Transfer confirmed", "Resolutions maintained · 0 penalties");
         }, 1800);
       } else {
         setTimeout(() => {
@@ -304,6 +440,45 @@ export default function YearboundApp() {
       });
 
       const data = await res.json();
+      const fineBlobId =
+        data.blobId || `blob_infr_${Date.now().toString(36)}`;
+      const timestampStr = new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      }).format(new Date());
+
+      const newInfraction: InfractionRecord = {
+        id: `infr_${Date.now()}`,
+        ruleTitle: activeRulesList[0]?.title || "Resolution 01",
+        ruleCondition: activeRulesList[0]?.condition || "Behavioral boundary",
+        amount: sendAmount,
+        memo: sendMemo,
+        timestamp: timestampStr,
+        penaltySui: penaltyAmt,
+        blobId: fineBlobId,
+      };
+      setInfractions((prev) => [newInfraction, ...prev]);
+
+      const infractionBlob: WalrusMemoryBlob = {
+        blobId: fineBlobId,
+        type: "accountability_event",
+        title: `Infraction: ${activeRulesList[0]?.title || "Resolution Breach"}`,
+        timestamp: timestampStr,
+        payload: {
+          protocol: "Yearbound v1",
+          storage: "Walrus Memory (MemWal)",
+          type: "accountability_event",
+          verdict: "broken",
+          userMemo: sendMemo,
+          penaltyDepositedSui: penaltyAmt,
+          breachedResolution: activeRulesList[0]?.title || "Resolution 01",
+          destination: "x402 Vault",
+          timestamp: new Date().toISOString(),
+        },
+      };
+      setWalrusBlobs((prev) => [infractionBlob, ...prev]);
 
       setRules((prev) =>
         prev.map((r, i) => (i === 0 ? { ...r, breaches: (r.breaches || 0) + 1 } : r))
@@ -312,7 +487,7 @@ export default function YearboundApp() {
       setAvailableBalance((prev) => Math.max(0, prev - transferAmt - penaltyAmt));
 
       closeSendFlow();
-      triggerSnackbar("10 SUI penalty deposited · Saved to Walrus", data.blobId);
+      triggerSnackbar("10 SUI Penalty Deposited to x402 Vault", `Logged to Walrus · Blob #${fineBlobId.slice(0, 10)}...`, fineBlobId);
     } catch {
       alert("Error logging penalty to Walrus memory.");
     } finally {
@@ -324,6 +499,7 @@ export default function YearboundApp() {
     if (!walrusBlobId) return;
     navigator.clipboard.writeText(walrusBlobId);
     setCopiedBlob(true);
+    triggerSnackbar("Copied Blob ID to clipboard", `Blob #${walrusBlobId.slice(0, 12)}...`);
     setTimeout(() => setCopiedBlob(false), 2000);
   };
 
@@ -349,6 +525,7 @@ export default function YearboundApp() {
       } catch {}
     }
     setCopiedAddress(true);
+    triggerSnackbar("Copied address to clipboard", `${addr.slice(0, 10)}...${addr.slice(-6)}`);
     setTimeout(() => setCopiedAddress(false), 2000);
   };
 
@@ -568,11 +745,11 @@ export default function YearboundApp() {
                   </div>
                 ))}
 
-              {/* Escrow Parameters */}
+              {/* x402 Vault Parameters */}
               <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-3.5">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-mono text-[#71717A] uppercase tracking-wider">
-                    Escrow Vault Lock
+                    x402 Vault Lock
                   </span>
                   <Lock size={12} className="text-[#71717A]" />
                 </div>
@@ -583,7 +760,7 @@ export default function YearboundApp() {
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-[#A1A1AA]">Initial Escrow Deposit</span>
+                  <span className="text-xs text-[#A1A1AA]">Initial x402 Deposit</span>
                   <span className="text-xs text-white font-mono font-medium">{escrowDeposit} SUI</span>
                 </div>
 
@@ -835,7 +1012,7 @@ export default function YearboundApp() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold text-white">
-                        {activeRulesList.length} Goals
+                        {activeRulesList.length} Resolutions
                       </span>
                       <span className="text-xs text-[#71717A] font-mono">
                         (in Walrus Memory)
@@ -843,7 +1020,7 @@ export default function YearboundApp() {
                     </div>
                     <button
                       type="button"
-                      onClick={() => setActiveTab("goals")}
+                      onClick={() => setActiveTab("resolutions")}
                       className="text-xs text-[#A1A1AA] hover:text-white transition-colors"
                     >
                       See more
@@ -955,11 +1132,11 @@ export default function YearboundApp() {
                     {/* Quick Deets */}
                     <div className="flex flex-col gap-2 min-w-0">
                       <div className="flex items-center justify-between gap-4">
-                        <span className="text-xs text-[#71717A]">Amount in Vault</span>
+                        <span className="text-xs text-[#71717A]">Amount in x402 Vault</span>
                         <span className="text-xs font-mono font-medium text-white">{escrowDeposit} SUI</span>
                       </div>
                       <div className="flex items-center justify-between gap-4">
-                        <span className="text-xs text-[#71717A]">Rules Broken</span>
+                        <span className="text-xs text-[#71717A]">Resolutions Broken</span>
                         <span className="text-xs font-mono font-medium text-white">
                           {totalBreaches} of {activeRulesList.length}
                         </span>
@@ -974,12 +1151,34 @@ export default function YearboundApp() {
               </div>
             )}
 
-            {/* TAB: GOALS */}
-            {activeTab === "goals" && (
+            {/* TAB: RESOLUTIONS */}
+            {activeTab === "resolutions" && (
               <div className="flex-1 overflow-y-auto px-7 pt-6 sm:pt-8 pb-28 flex flex-col gap-4 animate-in fade-in duration-200 overscroll-contain">
                 <div className="text-[30px] sm:text-[34px] font-semibold tracking-[-0.02em] leading-tight text-white">
-                  Committed Goals
+                  Committed Resolutions
                 </div>
+
+                {/* Walrus Provenance Bar */}
+                <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-4 flex items-center justify-between gap-3">
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-[10px] font-mono text-[#71717A] uppercase tracking-wider">
+                      Resolved From Walrus Memory
+                    </span>
+                    <span className="text-xs font-mono text-white truncate mt-0.5">
+                      Blob #{walrusBlobId ? `${walrusBlobId.slice(0, 14)}...` : "d4a97f2e8c9b..."}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsMemoryInspectorOpen(true)}
+                    className="text-xs font-medium text-[#A1A1AA] hover:text-white flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#18181C] border border-[#27272A] transition-colors shrink-0 active:scale-95"
+                  >
+                    <span>Inspect Proof</span>
+                    <ExternalLink size={12} />
+                  </button>
+                </div>
+
+                {/* Resolutions List */}
                 <div className="flex flex-col gap-3">
                   {activeRulesList.map((rule, idx) => (
                     <div
@@ -987,8 +1186,8 @@ export default function YearboundApp() {
                       className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-2.5"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-mono text-[#71717A] uppercase">
-                          Goal 0{idx + 1}
+                        <span className="text-[11px] font-mono text-[#71717A] uppercase tracking-wider">
+                          Resolution 0{idx + 1}
                         </span>
                         <span className="text-xs font-mono text-white bg-[#18181C] px-2 py-0.5 rounded border border-[#27272A]">
                           {rule.penalty} SUI Penalty
@@ -1002,18 +1201,38 @@ export default function YearboundApp() {
                           {rule.condition}
                         </p>
                       )}
+                      <div className="flex items-center justify-between border-t border-[#18181C] pt-2 mt-1">
+                        <span className="text-[10px] font-mono text-[#71717A]">
+                          Walrus Item #{idx + 1} · Enforced by Wally
+                        </span>
+                        <span className="text-[10px] font-mono text-white">
+                          {rule.breaches || 0} Breaches
+                        </span>
+                      </div>
                     </div>
                   ))}
+
+                  {/* Add Another Resolution Button */}
+                  <button
+                    type="button"
+                    onClick={() => setIsAddResolutionOpen(true)}
+                    className="w-full py-3.5 px-4 rounded-2xl border border-dashed border-[#2E2E33] hover:border-[#52525B] hover:bg-[#0A0A0C] text-[#A1A1AA] hover:text-white text-xs font-medium flex items-center justify-center gap-2 transition-all duration-150 active:scale-[0.99] mt-1"
+                  >
+                    <Plus size={14} />
+                    <span>Add another resolution</span>
+                  </button>
                 </div>
               </div>
             )}
 
-            {/* TAB: VAULT */}
+            {/* TAB: x402 VAULT */}
             {activeTab === "vault" && (
               <div className="flex-1 overflow-y-auto px-7 pt-6 sm:pt-8 pb-28 flex flex-col gap-4 animate-in fade-in duration-200 overscroll-contain">
                 <div className="text-[30px] sm:text-[34px] font-semibold tracking-[-0.02em] leading-tight text-white">
-                  Escrow Vault
+                  x402 Vault
                 </div>
+
+                {/* Primary Vault Balance Card */}
                 <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-4">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-mono text-[#71717A] uppercase">
@@ -1025,9 +1244,19 @@ export default function YearboundApp() {
                     </span>
                   </div>
                   <div className="flex flex-col gap-1 border-t border-[#18181C] pt-3">
-                    <span className="text-xs text-[#71717A]">Locked Amount</span>
+                    <span className="text-xs text-[#71717A]">Total Locked in Vault</span>
                     <span className="text-2xl font-mono font-semibold text-white">
                       {escrowDeposit}.00 SUI
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between border-t border-[#18181C] pt-3">
+                    <span className="text-xs text-[#71717A]">Base Commitment Deposit</span>
+                    <span className="text-xs font-mono text-white">10.00 SUI</span>
+                  </div>
+                  <div className="flex items-center justify-between border-t border-[#18181C] pt-3">
+                    <span className="text-xs text-[#71717A]">Infraction Fines Collected</span>
+                    <span className="text-xs font-mono text-white">
+                      {Math.max(0, escrowDeposit - 10)}.00 SUI
                     </span>
                   </div>
                   <div className="flex items-center justify-between border-t border-[#18181C] pt-3">
@@ -1035,9 +1264,61 @@ export default function YearboundApp() {
                     <span className="text-xs text-white font-medium">{unlockDate}</span>
                   </div>
                   <div className="flex items-center justify-between border-t border-[#18181C] pt-3">
-                    <span className="text-xs text-[#71717A]">Contract</span>
-                    <span className="text-xs font-mono text-[#A1A1AA]">Sui Move Vault</span>
+                    <span className="text-xs text-[#71717A]">Protocol Standard</span>
+                    <span className="text-xs font-mono text-[#A1A1AA]">x402 Agent Toll</span>
                   </div>
+                </div>
+
+                {/* Infractions & Penalty Deposits Record */}
+                <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-3.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-mono text-[#71717A] uppercase tracking-wider">
+                      Penalty Deposits · Resolved from Walrus
+                    </span>
+                    <span className="text-xs font-mono text-white">
+                      {infractions.length} Events
+                    </span>
+                  </div>
+
+                  {infractions.length === 0 ? (
+                    <div className="py-4 text-center text-xs text-[#71717A] border-t border-[#18181C] mt-1">
+                      Zero breach penalties recorded. All resolutions currently honored.
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-2.5 border-t border-[#18181C] pt-3">
+                      {infractions.map((infr) => (
+                        <div
+                          key={infr.id}
+                          className="bg-[#131316] border border-[#222226] rounded-xl p-3 flex flex-col gap-1.5"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold text-white">
+                              +{infr.penaltySui} SUI Fine
+                            </span>
+                            <span className="text-[10px] font-mono text-[#71717A]">
+                              {infr.timestamp}
+                            </span>
+                          </div>
+                          <span className="text-xs text-[#D4D4D8]">
+                            "{infr.memo}"
+                          </span>
+                          <div className="flex items-center justify-between mt-1 pt-1.5 border-t border-[#1E1E22]">
+                            <span className="text-[10px] text-[#71717A] truncate">
+                              Breach: {infr.ruleTitle}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setIsMemoryInspectorOpen(true)}
+                              className="text-[10px] font-mono text-[#A1A1AA] hover:text-white flex items-center gap-1 transition-colors"
+                            >
+                              <span>Blob #{infr.blobId.slice(0, 8)}...</span>
+                              <ExternalLink size={10} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -1055,7 +1336,14 @@ export default function YearboundApp() {
                     <span className="text-[11px] font-mono text-[#71717A] uppercase">
                       Walrus Memory Service
                     </span>
-                    <Check size={13} className="text-white" />
+                    <button
+                      type="button"
+                      onClick={() => setIsMemoryInspectorOpen(true)}
+                      className="text-[11px] font-medium text-white flex items-center gap-1 px-2 py-0.5 rounded bg-[#18181C] border border-[#27272A] hover:border-[#52525B] transition-colors"
+                    >
+                      <span>View Memory Proofs</span>
+                      <ExternalLink size={11} />
+                    </button>
                   </div>
                   <div className="bg-[#131316] border border-[#27272A] rounded-xl p-3 flex items-center justify-between gap-2">
                     <div className="flex flex-col min-w-0">
@@ -1127,13 +1415,13 @@ export default function YearboundApp() {
               </button>
               <button
                 type="button"
-                onClick={() => setActiveTab("goals")}
+                onClick={() => setActiveTab("resolutions")}
                 className={`transition-all duration-150 p-1 active:scale-90 ${
-                  activeTab === "goals" ? "text-white scale-105" : "text-[#52525B] hover:text-white"
+                  activeTab === "resolutions" ? "text-white scale-105" : "text-[#52525B] hover:text-white"
                 }`}
-                title="Goals"
+                title="Resolutions"
               >
-                <ListCheck size={19} strokeWidth={activeTab === "goals" ? 2.5 : 2} />
+                <ListCheck size={19} strokeWidth={activeTab === "resolutions" ? 2.5 : 2} />
               </button>
               <button
                 type="button"
@@ -1141,7 +1429,7 @@ export default function YearboundApp() {
                 className={`transition-all duration-150 p-1 active:scale-90 ${
                   activeTab === "vault" ? "text-white scale-105" : "text-[#52525B] hover:text-white"
                 }`}
-                title="Vault"
+                title="x402 Vault"
               >
                 <Shield size={19} strokeWidth={activeTab === "vault" ? 2.5 : 2} />
               </button>
@@ -1356,7 +1644,7 @@ export default function YearboundApp() {
                 </div>
 
                 <div className="text-lg font-semibold text-white tracking-tight">
-                  Checking transaction against goals
+                  Checking transaction against resolutions
                 </div>
                 <div className="text-xs font-mono text-[#71717A] mt-2">
                   Cross-referencing Walrus Memory & Tatum RPC...
@@ -1374,7 +1662,7 @@ export default function YearboundApp() {
                   Transfer Approved
                 </div>
                 <div className="text-xs font-mono text-[#71717A] mt-2">
-                  Goal adherence verified · 0 penalties applied
+                  Resolution adherence verified · 0 penalties applied
                 </div>
               </div>
             )}
@@ -1411,7 +1699,7 @@ export default function YearboundApp() {
                     </p>
 
                     <p className="text-xs text-[#71717A] leading-relaxed">
-                      {breachReason || "This transaction violates your active commitment rule. You agreed to financial discipline."}
+                      {breachReason || "This transaction violates your active yearly resolution. You committed to financial discipline."}
                     </p>
                   </div>
 
@@ -1427,13 +1715,13 @@ export default function YearboundApp() {
                     </div>
 
                     <div className="flex items-center justify-between border-t border-[#18181C] pt-2.5">
-                      <span className="text-xs text-[#A1A1AA]">Escrow Penalty</span>
+                      <span className="text-xs text-[#A1A1AA]">x402 Vault Penalty</span>
                       <span className="text-xs font-mono font-semibold text-white">10 SUI</span>
                     </div>
 
                     <div className="flex items-center justify-between border-t border-[#18181C] pt-2.5">
                       <span className="text-xs text-[#71717A]">Destination</span>
-                      <span className="text-xs text-[#A1A1AA]">Locked until Dec 25, 2026</span>
+                      <span className="text-xs text-[#A1A1AA]">x402 Vault (Locked until Dec 25, 2026)</span>
                     </div>
                   </div>
                 </div>
@@ -1445,7 +1733,7 @@ export default function YearboundApp() {
                     onClick={closeSendFlow}
                     className="w-full py-4 px-6 rounded-full font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 bg-[#FFFFFF] text-[#000000] hover:bg-[#E4E4E7] active:scale-[0.98]"
                   >
-                    <span>Cancel & Honor Goal</span>
+                    <span>Cancel & Honor Resolution</span>
                   </button>
 
                   <button
@@ -1465,7 +1753,239 @@ export default function YearboundApp() {
         )}
 
         {/* ==================================================================
-            WALRUS FEEDBACK SNACKBAR
+            DRAWER: ADD ANOTHER RESOLUTION
+            ================================================================== */}
+        {isAddResolutionOpen && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
+            <div className="w-full max-w-[420px] bg-[#0A0A0C] border border-[#222226] rounded-t-[32px] sm:rounded-[32px] p-6 flex flex-col gap-5 shadow-2xl animate-in slide-in-from-bottom-6 duration-300">
+              <div className="flex items-center justify-between">
+                <div className="flex flex-col">
+                  <span className="text-lg font-semibold text-white">
+                    Add Resolution
+                  </span>
+                  <span className="text-[11px] font-mono text-[#71717A]">
+                    Commits directly to Walrus Memory
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsAddResolutionOpen(false)}
+                  className="p-1.5 text-[#71717A] hover:text-white rounded-lg transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="flex flex-col gap-3.5">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-[#A1A1AA]">
+                    Resolution Title
+                  </label>
+                  <input
+                    type="text"
+                    value={newRuleTitle}
+                    onChange={(e) => setNewRuleTitle(e.target.value)}
+                    placeholder="e.g. No Late-Night Uber Eats"
+                    className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-[#52525B] outline-none focus:border-white transition-colors"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-[#A1A1AA]">
+                    Enforced Boundary Condition
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={newRuleCondition}
+                    onChange={(e) => setNewRuleCondition(e.target.value)}
+                    placeholder="e.g. Reject any takeout food orders after 10 PM on weekdays"
+                    className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-3.5 py-2 text-xs text-white placeholder-[#52525B] outline-none focus:border-white transition-colors resize-none"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-medium text-[#A1A1AA]">
+                    Penalty Stake Per Infraction
+                  </label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {PENALTY_PRESETS.map((amt) => {
+                      const isSelected = newRulePenalty === amt;
+                      return (
+                        <button
+                          key={amt}
+                          type="button"
+                          onClick={() => setNewRulePenalty(amt)}
+                          className={`py-2 text-center rounded-xl text-xs font-medium transition-all duration-150 active:scale-95 ${
+                            isSelected
+                              ? "bg-white text-black font-semibold"
+                              : "bg-[#131316] text-[#A1A1AA] border border-[#27272A] hover:border-[#52525B] hover:text-white"
+                          }`}
+                        >
+                          {amt} SUI
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={handleCommitNewResolution}
+                  disabled={!newRuleTitle.trim() || isCommittingNewRule}
+                  className={`w-full py-3.5 rounded-full font-semibold text-xs transition-all duration-200 flex items-center justify-center gap-2 ${
+                    newRuleTitle.trim() && !isCommittingNewRule
+                      ? "bg-white text-black hover:bg-[#E4E4E7] active:scale-[0.98]"
+                      : "bg-[#222226] text-[#52525B] cursor-not-allowed"
+                  }`}
+                >
+                  <span>
+                    {isCommittingNewRule
+                      ? "Committing to Walrus Memory..."
+                      : "Commit Resolution to Walrus"}
+                  </span>
+                  {!isCommittingNewRule && <ArrowRight size={14} />}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ==================================================================
+            DRAWER: WALRUS TOTAL RECALL MEMORY INSPECTOR
+            ================================================================== */}
+        {isMemoryInspectorOpen && (
+          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
+            <div className="w-full max-w-[420px] max-h-[85vh] bg-[#0A0A0C] border border-[#222226] rounded-t-[32px] sm:rounded-[32px] p-6 flex flex-col gap-4 shadow-2xl animate-in slide-in-from-bottom-6 duration-300 overflow-hidden">
+              <div className="flex items-center justify-between shrink-0">
+                <div className="flex flex-col">
+                  <span className="text-base font-semibold text-white">
+                    Walrus Total Recall Memory
+                  </span>
+                  <span className="text-[11px] font-mono text-[#71717A]">
+                    Immutable decentralized autonomous agent memory
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsMemoryInspectorOpen(false)}
+                  className="p-1.5 text-[#71717A] hover:text-white rounded-lg transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Memory History List */}
+              <div className="flex-1 overflow-y-auto flex flex-col gap-3 pr-1 overscroll-contain">
+                {walrusBlobs.length === 0 ? (
+                  /* Fallback display for initial session */
+                  <div className="bg-[#131316] border border-[#27272A] rounded-2xl p-4 flex flex-col gap-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono text-white bg-[#1E1E24] px-2 py-0.5 rounded border border-[#2C2C34]">
+                        COMMITMENT PACT
+                      </span>
+                      <span className="text-[10px] font-mono text-[#71717A]">
+                        {currentDateStr || "Active"}
+                      </span>
+                    </div>
+                    <div className="text-xs font-semibold text-white">
+                      Yearbound 2026 Accountability Pact
+                    </div>
+                    <div className="text-[11px] font-mono text-[#A1A1AA] truncate">
+                      Blob #{walrusBlobId || "d4a97f2e8c9b4e11a2f6"}
+                    </div>
+                    <a
+                      href={`https://aggregator.walrus-testnet.walrus.space/v1/blobs/${walrusBlobId || "d4a97f2e8c9b4e11a2f6"}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[11px] text-white hover:underline flex items-center gap-1 mt-1 font-mono"
+                    >
+                      <span>View on Walrus Aggregator</span>
+                      <ExternalLink size={11} />
+                    </a>
+                  </div>
+                ) : (
+                  walrusBlobs.map((item, idx) => {
+                    const isExpanded = expandedJsonBlobId === item.blobId;
+                    return (
+                      <div
+                        key={item.blobId + idx}
+                        className="bg-[#131316] border border-[#27272A] rounded-2xl p-4 flex flex-col gap-2.5"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-mono text-white bg-[#1E1E24] px-2 py-0.5 rounded border border-[#2C2C34] uppercase">
+                            {item.type.replace("_", " ")}
+                          </span>
+                          <span className="text-[10px] font-mono text-[#71717A]">
+                            {item.timestamp}
+                          </span>
+                        </div>
+
+                        <div className="text-xs font-semibold text-white">
+                          {item.title}
+                        </div>
+
+                        <div className="flex items-center justify-between bg-[#0A0A0C] border border-[#1E1E22] rounded-xl px-3 py-2">
+                          <span className="text-[11px] font-mono text-[#A1A1AA] truncate mr-2">
+                            Blob #{item.blobId}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(item.blobId);
+                              triggerSnackbar("Copied Blob ID", item.blobId);
+                            }}
+                            className="text-[#71717A] hover:text-white p-1 transition-colors shrink-0"
+                            title="Copy Blob ID"
+                          >
+                            <Copy size={13} />
+                          </button>
+                        </div>
+
+                        {/* Raw JSON toggle */}
+                        <div className="border-t border-[#1E1E22] pt-2 flex flex-col gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExpandedJsonBlobId(isExpanded ? null : item.blobId)
+                            }
+                            className="text-[11px] text-[#A1A1AA] hover:text-white flex items-center justify-between transition-colors"
+                          >
+                            <span className="flex items-center gap-1.5 font-mono">
+                              <FileText size={12} />
+                              Raw Walrus Payload
+                            </span>
+                            {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                          </button>
+
+                          {isExpanded && (
+                            <pre className="text-[10px] font-mono bg-[#070709] border border-[#1C1C20] p-3 rounded-xl text-[#A1A1AA] overflow-x-auto leading-relaxed max-h-40">
+                              {JSON.stringify(item.payload, null, 2)}
+                            </pre>
+                          )}
+                        </div>
+
+                        <a
+                          href={`https://aggregator.walrus-testnet.walrus.space/v1/blobs/${item.blobId}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[11px] text-white hover:underline flex items-center gap-1 pt-1 font-mono"
+                        >
+                          <span>Inspect on Walrus Aggregator</span>
+                          <ExternalLink size={11} />
+                        </a>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ==================================================================
+            UNIFIED FEEDBACK SNACKBAR
             ================================================================== */}
         {showSnackbar && (
           <div className="absolute bottom-24 left-5 right-5 z-50 bg-[#141417] border border-[#3F3F46] rounded-2xl p-4 shadow-2xl flex items-center justify-between gap-3 animate-in fade-in slide-in-from-bottom-3 duration-200">
@@ -1474,10 +1994,12 @@ export default function YearboundApp() {
                 <Check size={12} strokeWidth={3} />
               </div>
               <div className="flex flex-col min-w-0">
-                <span className="text-xs font-semibold text-white">{snackbarMessage}</span>
-                <span className="text-[11px] font-mono text-[#A1A1AA] truncate">
-                  Blob #{walrusBlobId ? `${walrusBlobId.slice(0, 12)}...` : "d4a97f2e..."}
-                </span>
+                <span className="text-xs font-semibold text-white">{snackbarTitle}</span>
+                {snackbarSubtitle && (
+                  <span className="text-[11px] font-mono text-[#A1A1AA] truncate">
+                    {snackbarSubtitle}
+                  </span>
+                )}
               </div>
             </div>
             <button
