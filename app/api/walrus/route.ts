@@ -1,9 +1,37 @@
 import { NextResponse } from "next/server";
-import { walrusService, type CommitmentRulePayload } from "@/lib/walrus";
+import {
+  walrusService,
+  type CommitmentRulePayload,
+  type AccountabilityEventPayload,
+} from "@/lib/walrus";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+
+    // 1. Handling Accountability Event / Infraction Logging
+    if (body.type === "accountability_event") {
+      const payload: AccountabilityEventPayload = {
+        type: "accountability_event",
+        commitment_id: body.commitment_id || "pact_primary",
+        verdict: body.verdict || "broken",
+        user_explanation: body.user_explanation || "No explanation provided",
+        penalty_deposited_sui: Number(body.penalty_deposited_sui) || 10,
+        vault_tx_hash: body.vault_tx_hash || `0x_sui_ptb_${Date.now().toString(16)}`,
+        timestamp: new Date().toISOString(),
+      };
+
+      const rememberResult = await walrusService.remember(payload);
+      return NextResponse.json({
+        success: true,
+        blobId: rememberResult.blobId,
+        jobId: rememberResult.jobId,
+        payload,
+        isMock: walrusService.getIsMock(),
+      });
+    }
+
+    // 2. Handling Initial Commitment Rules Storage
     const { rules, initialDepositSui = 10, unlockDate = "2026-12-25" } = body;
 
     if (!rules || !Array.isArray(rules) || rules.length === 0) {
@@ -16,7 +44,6 @@ export async function POST(req: Request) {
     const commitmentId = `pact_${Date.now()}`;
     const results = [];
 
-    // Store each rule as an immutable commitment memory in Walrus
     for (const rule of rules) {
       const payload: CommitmentRulePayload = {
         type: "commitment_rule",
@@ -39,8 +66,8 @@ export async function POST(req: Request) {
       });
     }
 
-    // Pick the primary blobId for confirmation display
-    const primaryBlobId = results[0]?.blobId || `blob_${Math.random().toString(36).substring(2, 10)}`;
+    const primaryBlobId =
+      results[0]?.blobId || `blob_${Math.random().toString(36).substring(2, 10)}`;
 
     return NextResponse.json({
       success: true,
