@@ -96,7 +96,7 @@ const QUICK_MEMO_PICKS = [
 export default function YearboundApp() {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [activeTab, setActiveTab] = useState<NavTab>("home");
-  const [expandedRuleId, setExpandedRuleId] = useState<string>("1");
+  const [expandedRuleId, setExpandedRuleId] = useState<string | null>("1");
 
   // Live Date
   const [currentDateStr, setCurrentDateStr] = useState<string>("");
@@ -557,29 +557,42 @@ export default function YearboundApp() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-7 py-2 flex flex-col gap-3.5 pb-4 overscroll-contain">
+            <div
+              onClick={() => setExpandedRuleId(null)}
+              className="flex-1 overflow-y-auto px-7 py-2 flex flex-col gap-3.5 pb-4 overscroll-contain"
+            >
               {rules.map((rule, index) => {
                 const isExpanded = rule.id === expandedRuleId;
                 return isExpanded ? (
-                  /* EXPANDED RULE CARD */
+                  /* EXPANDED RESOLUTION CARD */
                   <div
                     key={rule.id}
-                    className="bg-[#0A0A0C] border border-[#3F3F46] rounded-2xl p-4 flex flex-col gap-3 relative focus-within:border-white transition-all duration-200 shadow-sm"
+                    onClick={(e) => e.stopPropagation()}
+                    className="bg-[#0A0A0C] border border-[#3F3F46] rounded-2xl p-4 flex flex-col gap-3 relative focus-within:border-white transition-all duration-300 ease-out shadow-sm"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-mono text-white uppercase tracking-wider font-semibold">
-                        Rule 0{index + 1} · Editing
+                      <span className="text-sm font-mono font-medium text-[#71717A] tracking-wider">
+                        0{index + 1}
                       </span>
-                      {rules.length > 1 && (
+                      <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => removeRule(rule.id)}
-                          className="text-[#71717A] hover:text-[#EF4444] p-1 transition-colors active:scale-95"
-                          title="Remove rule"
+                          onClick={() => setExpandedRuleId(null)}
+                          className="text-[10px] font-mono text-[#71717A] hover:text-white uppercase tracking-wider px-2 py-0.5 rounded hover:bg-[#18181C] transition-colors"
                         >
-                          <Trash2 size={13} />
+                          Done
                         </button>
-                      )}
+                        {rules.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeRule(rule.id)}
+                            className="text-[#71717A] hover:text-[#EF4444] p-1 transition-colors active:scale-95"
+                            title="Remove resolution"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     <div className="flex flex-col gap-1.5">
@@ -609,22 +622,25 @@ export default function YearboundApp() {
                     </div>
                   </div>
                 ) : (
-                  /* MINIMIZED RULE CARD */
+                  /* MINIMIZED RESOLUTION CARD */
                   <div
                     key={rule.id}
-                    onClick={() => setExpandedRuleId(rule.id)}
-                    className="bg-[#0A0A0C] border border-[#222226] hover:border-[#3F3F46] rounded-2xl px-4 py-3 flex items-center justify-between cursor-pointer transition-all duration-150 active:scale-[0.99]"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setExpandedRuleId(rule.id);
+                    }}
+                    className="bg-[#0A0A0C] border border-[#222226] hover:border-[#3F3F46] rounded-2xl px-4 py-3.5 flex items-center justify-between cursor-pointer transition-all duration-300 ease-out active:scale-[0.99]"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="text-[11px] font-mono text-[#71717A] uppercase shrink-0">
-                        Rule 0{index + 1}
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <span className="text-sm font-mono font-medium text-[#71717A] shrink-0">
+                        0{index + 1}
                       </span>
                       <span className={`text-sm truncate ${rule.title ? "text-white font-medium" : "text-[#52525B]"}`}>
-                        {rule.title || "Untitled rule"}
+                        {rule.title || "Untitled resolution"}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[10px] text-[#71717A] uppercase tracking-wider">Tap to edit</span>
+                      <span className="text-[10px] text-[#71717A] uppercase tracking-wider">Edit</span>
                       {rules.length > 1 && (
                         <button
                           type="button"
@@ -633,7 +649,7 @@ export default function YearboundApp() {
                             removeRule(rule.id);
                           }}
                           className="text-[#52525B] hover:text-[#EF4444] p-1 transition-colors"
-                          title="Remove rule"
+                          title="Remove resolution"
                         >
                           <Trash2 size={12} />
                         </button>
@@ -643,14 +659,20 @@ export default function YearboundApp() {
                 );
               })}
 
-              <button
-                type="button"
-                onClick={addRule}
-                className="w-full py-3 px-4 border border-dashed border-[#2E2E33] hover:border-[#52525B] hover:bg-[#0A0A0C] text-[#A1A1AA] hover:text-white rounded-2xl flex items-center justify-center gap-2 text-xs font-medium transition-all duration-150 active:scale-[0.99]"
-              >
-                <Plus size={14} />
-                <span>Add another rule</span>
-              </button>
+              {/* Centered Add Another Resolution Button */}
+              <div className="flex justify-center pt-2 pb-1">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    addRule();
+                  }}
+                  className="py-2.5 px-5 border border-dashed border-[#2E2E33] hover:border-[#52525B] hover:bg-[#0A0A0C] text-[#A1A1AA] hover:text-white rounded-full flex items-center justify-center gap-2 text-xs font-medium transition-all duration-200 active:scale-95 shadow-sm"
+                >
+                  <Plus size={13} />
+                  <span>Add another resolution</span>
+                </button>
+              </div>
             </div>
 
             <div className="p-6 border-t border-[#18181B] bg-[#000000]">
@@ -696,26 +718,16 @@ export default function YearboundApp() {
                 .map((rule, idx) => (
                   <div
                     key={rule.id}
-                    className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-4 transition-all duration-200"
+                    className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-3.5 transition-all duration-200"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-mono text-[#71717A] uppercase tracking-wider">
-                        Rule 0{idx + 1}
-                      </span>
-                      <span className="text-xs font-mono font-medium text-white bg-[#18181C] px-2 py-0.5 rounded-md border border-[#27272A]">
-                        {rule.penalty} SUI
+                      <span className="text-sm font-mono font-medium text-[#71717A] tracking-wider">
+                        0{idx + 1}
                       </span>
                     </div>
 
-                    <div className="flex flex-col gap-1">
-                      <div className="text-base font-semibold text-white tracking-[-0.01em]">
-                        {rule.title}
-                      </div>
-                      {rule.condition && (
-                        <p className="text-xs text-[#71717A] leading-relaxed mt-0.5">
-                          {rule.condition}
-                        </p>
-                      )}
+                    <div className="text-base font-semibold text-white tracking-[-0.01em]">
+                      {rule.title}
                     </div>
 
                     <div className="flex flex-col gap-2 pt-1 border-t border-[#18181C]">
