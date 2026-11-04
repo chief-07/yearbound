@@ -16,7 +16,6 @@ import {
   Shield,
   Settings,
   AlertCircle,
-  Clock,
 } from "lucide-react";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 
@@ -73,32 +72,20 @@ const QUICK_MEMO_PICKS = [
 export default function YearboundApp() {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [activeTab, setActiveTab] = useState<NavTab>("home");
+  const [expandedRuleId, setExpandedRuleId] = useState<string>("1");
 
-  // Live Clock & Date
-  const [currentTimeStr, setCurrentTimeStr] = useState<string>("");
+  // Live Date
   const [currentDateStr, setCurrentDateStr] = useState<string>("");
 
   useEffect(() => {
-    const updateTime = () => {
-      const now = new Date();
-      setCurrentDateStr(
-        new Intl.DateTimeFormat("en-US", {
-          weekday: "long",
-          month: "short",
-          day: "numeric",
-        }).format(now)
-      );
-      setCurrentTimeStr(
-        new Intl.DateTimeFormat("en-US", {
-          hour: "numeric",
-          minute: "2-digit",
-          hour12: true,
-        }).format(now)
-      );
-    };
-    updateTime();
-    const interval = setInterval(updateTime, 10000);
-    return () => clearInterval(interval);
+    const now = new Date();
+    setCurrentDateStr(
+      new Intl.DateTimeFormat("en-US", {
+        weekday: "long",
+        month: "short",
+        day: "numeric",
+      }).format(now)
+    );
   }, []);
 
   // Screen 1: Rules
@@ -147,8 +134,6 @@ export default function YearboundApp() {
   const [sendSubStep, setSendSubStep] = useState<SendSubStep>("amount");
   const [sendAmount, setSendAmount] = useState<string>("15");
   const [sendRecipient, setSendRecipient] = useState<string>("0x8f4c...cafe");
-  const [sendTimePreset, setSendTimePreset] = useState<"curfew" | "daytime">("curfew");
-  const [sendCustomTime, setSendCustomTime] = useState<string>("11:30 PM");
   const [sendMemo, setSendMemo] = useState<string>("");
   const [breachReason, setBreachReason] = useState<string>("");
 
@@ -166,10 +151,12 @@ export default function YearboundApp() {
 
   // Rule management
   const addRule = () => {
+    const newId = Date.now().toString();
     setRules((prev) => [
       ...prev,
-      { id: Date.now().toString(), title: "", condition: "", penalty: 10, breaches: 0 },
+      { id: newId, title: "", condition: "", penalty: 10, breaches: 0 },
     ]);
+    setExpandedRuleId(newId);
   };
 
   const updateRule = (id: string, field: keyof RuleItem, value: string | number) => {
@@ -239,8 +226,6 @@ export default function YearboundApp() {
     setSendSubStep("amount");
     setSendAmount("15");
     setSendRecipient("0x8f4c...cafe");
-    setSendTimePreset("curfew");
-    setSendCustomTime("11:30 PM");
     setSendMemo("");
     setBreachReason("");
     setIsSendOpen(true);
@@ -264,17 +249,16 @@ export default function YearboundApp() {
       lower.includes("takeout") ||
       lower.includes("delivery") ||
       lower.includes("burger") ||
-      lower.includes("eats");
+      lower.includes("eats") ||
+      lower.includes("late");
     const isEx = lower.includes("sarah") || lower.includes("ex");
-
-    const isCurfew = sendTimePreset === "curfew";
 
     let detectedBreach = false;
     let reason = "";
 
-    if (isFood && isCurfew) {
+    if (isFood) {
       detectedBreach = true;
-      reason = `Food delivery attempted at ${sendCustomTime} — within the prohibited 10 PM to 5 AM curfew window.`;
+      reason = "Late-night food delivery violates Rule 01 (curfew restriction between 10 PM and 5 AM).";
     } else if (isEx) {
       detectedBreach = true;
       reason = "Attempted transfer to forbidden recipient 0xSarah in violation of blacklist rule.";
@@ -314,7 +298,7 @@ export default function YearboundApp() {
           type: "accountability_event",
           commitment_id: "pact_primary",
           verdict: "broken",
-          user_explanation: `${sendMemo} (at ${sendCustomTime})`,
+          user_explanation: sendMemo,
           penalty_deposited_sui: penaltyAmt,
         }),
       });
@@ -366,84 +350,120 @@ export default function YearboundApp() {
       : `Linked · ${linkedAddress ? `${linkedAddress.slice(0, 6)}...${linkedAddress.slice(-4)}` : "Wallet"}`;
 
   return (
-    <main className="min-h-screen w-full bg-[#000000] text-[#FFFFFF] flex items-center justify-center p-0 md:p-6 select-none overflow-x-hidden font-sans">
+    <main className="fixed inset-0 w-full h-[100dvh] bg-[#000000] text-[#FFFFFF] flex items-start sm:items-center justify-center p-0 md:p-6 select-none overflow-hidden font-sans">
       {/* ====================================================================
           MOBILE SHELL (Centered vertical frame on desktop, solid black ground)
           ==================================================================== */}
-      <div className="relative w-full max-w-[420px] h-[100dvh] md:h-[860px] md:max-h-[92vh] bg-[#000000] md:border md:border-[#222226] md:rounded-[40px] flex flex-col justify-between overflow-hidden shadow-2xl transition-all duration-300">
+      <div className="relative w-full max-w-[420px] h-full md:h-[860px] md:max-h-[92vh] bg-[#000000] md:border md:border-[#222226] md:rounded-[40px] flex flex-col justify-between overflow-hidden shadow-2xl transition-all duration-300">
         
         {/* ==================================================================
-            SCREEN 1: RESOLUTION BUILDER
+            SCREEN 1: RESOLUTION BUILDER (Accordion - Single Expanded Rule)
             ================================================================== */}
         {step === 1 && (
           <div className="flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-200">
-            <div className="pt-10 sm:pt-12 px-7 pb-4">
+            <div className="pt-6 sm:pt-8 px-7 pb-3">
               <div className="text-[30px] sm:text-[34px] font-semibold tracking-[-0.02em] leading-tight text-white">
                 Write your resolutions
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-7 py-3 flex flex-col gap-5 pb-6">
-              {rules.map((rule, index) => (
-                <div
-                  key={rule.id}
-                  className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-4 relative focus-within:border-[#52525B] transition-all duration-200"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-mono text-[#71717A] uppercase tracking-wider">
-                      Rule 0{index + 1}
-                    </span>
-                    {rules.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeRule(rule.id)}
-                        className="text-[#71717A] hover:text-[#EF4444] p-1 transition-colors active:scale-95"
-                        title="Remove rule"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    )}
-                  </div>
+            <div className="flex-1 overflow-y-auto px-7 py-2 flex flex-col gap-3.5 pb-4 overscroll-contain">
+              {rules.map((rule, index) => {
+                const isExpanded = rule.id === expandedRuleId;
+                return isExpanded ? (
+                  /* EXPANDED RULE CARD */
+                  <div
+                    key={rule.id}
+                    className="bg-[#0A0A0C] border border-[#3F3F46] rounded-2xl p-4 flex flex-col gap-3 relative focus-within:border-white transition-all duration-200 shadow-sm"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-mono text-white uppercase tracking-wider font-semibold">
+                        Rule 0{index + 1} · Editing
+                      </span>
+                      {rules.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeRule(rule.id)}
+                          className="text-[#71717A] hover:text-[#EF4444] p-1 transition-colors active:scale-95"
+                          title="Remove rule"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
 
-                  <div className="flex flex-col gap-2">
-                    <label className="text-[12px] font-medium text-[#A1A1AA]">
-                      Title
-                    </label>
-                    <input
-                      type="text"
-                      value={rule.title}
-                      onChange={(e) => updateRule(rule.id, "title", e.target.value)}
-                      placeholder="e.g. No Late-Night Takeout"
-                      className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-4 py-3 text-sm text-white placeholder-[#52525B] outline-none focus:border-[#FFFFFF] transition-colors"
-                    />
-                  </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[11px] font-medium text-[#A1A1AA]">
+                        Title
+                      </label>
+                      <input
+                        type="text"
+                        value={rule.title}
+                        onChange={(e) => updateRule(rule.id, "title", e.target.value)}
+                        placeholder="e.g. No Late-Night Takeout"
+                        className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-[#52525B] outline-none focus:border-white transition-colors"
+                      />
+                    </div>
 
-                  <div className="flex flex-col gap-2">
-                    <label className="text-[12px] font-medium text-[#A1A1AA]">
-                      Condition
-                    </label>
-                    <textarea
-                      value={rule.condition}
-                      onChange={(e) => updateRule(rule.id, "condition", e.target.value)}
-                      placeholder="e.g. Any food delivery ordered between 10 PM and 5 AM"
-                      rows={2}
-                      className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-4 py-2.5 text-sm text-white placeholder-[#52525B] outline-none focus:border-[#FFFFFF] transition-colors resize-none leading-relaxed"
-                    />
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[11px] font-medium text-[#A1A1AA]">
+                        Condition
+                      </label>
+                      <textarea
+                        value={rule.condition}
+                        onChange={(e) => updateRule(rule.id, "condition", e.target.value)}
+                        placeholder="e.g. Any food delivery ordered between 10 PM and 5 AM"
+                        rows={2}
+                        className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-3.5 py-2 text-sm text-white placeholder-[#52525B] outline-none focus:border-white transition-colors resize-none leading-relaxed"
+                      />
+                    </div>
                   </div>
-                </div>
-              ))}
+                ) : (
+                  /* MINIMIZED RULE CARD */
+                  <div
+                    key={rule.id}
+                    onClick={() => setExpandedRuleId(rule.id)}
+                    className="bg-[#0A0A0C] border border-[#222226] hover:border-[#3F3F46] rounded-2xl px-4 py-3 flex items-center justify-between cursor-pointer transition-all duration-150 active:scale-[0.99]"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="text-[11px] font-mono text-[#71717A] uppercase shrink-0">
+                        Rule 0{index + 1}
+                      </span>
+                      <span className={`text-sm truncate ${rule.title ? "text-white font-medium" : "text-[#52525B]"}`}>
+                        {rule.title || "Untitled rule"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[10px] text-[#71717A] uppercase tracking-wider">Tap to edit</span>
+                      {rules.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeRule(rule.id);
+                          }}
+                          className="text-[#52525B] hover:text-[#EF4444] p-1 transition-colors"
+                          title="Remove rule"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
 
               <button
                 type="button"
                 onClick={addRule}
-                className="w-full py-3.5 px-4 border border-dashed border-[#2E2E33] hover:border-[#52525B] hover:bg-[#0A0A0C] text-[#A1A1AA] hover:text-white rounded-2xl flex items-center justify-center gap-2 text-sm font-medium transition-all duration-150 active:scale-[0.99]"
+                className="w-full py-3 px-4 border border-dashed border-[#2E2E33] hover:border-[#52525B] hover:bg-[#0A0A0C] text-[#A1A1AA] hover:text-white rounded-2xl flex items-center justify-center gap-2 text-xs font-medium transition-all duration-150 active:scale-[0.99]"
               >
-                <Plus size={16} />
+                <Plus size={14} />
                 <span>Add another rule</span>
               </button>
             </div>
 
-            <div className="p-7 border-t border-[#18181B] bg-[#000000]">
+            <div className="p-6 border-t border-[#18181B] bg-[#000000]">
               <button
                 type="button"
                 onClick={() => setStep(2)}
@@ -466,7 +486,7 @@ export default function YearboundApp() {
             ================================================================== */}
         {step === 2 && (
           <div className="flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-200">
-            <div className="pt-10 sm:pt-12 px-7 pb-4 flex flex-col gap-3">
+            <div className="pt-6 sm:pt-8 px-7 pb-3 flex flex-col gap-2.5">
               <button
                 type="button"
                 onClick={() => setStep(1)}
@@ -480,7 +500,7 @@ export default function YearboundApp() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-7 py-3 flex flex-col gap-5 pb-6">
+            <div className="flex-1 overflow-y-auto px-7 py-2 flex flex-col gap-3.5 pb-4 overscroll-contain">
               {rules
                 .filter((r) => r.title.trim().length > 0)
                 .map((rule, idx) => (
@@ -561,7 +581,7 @@ export default function YearboundApp() {
               </div>
             </div>
 
-            <div className="p-7 border-t border-[#18181B] bg-[#000000]">
+            <div className="p-6 border-t border-[#18181B] bg-[#000000]">
               <button
                 type="button"
                 onClick={() => setStep(3)}
@@ -579,7 +599,7 @@ export default function YearboundApp() {
             ================================================================== */}
         {step === 3 && (
           <div className="flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-200">
-            <div className="pt-10 sm:pt-12 px-7 pb-4 flex flex-col gap-3">
+            <div className="pt-6 sm:pt-8 px-7 pb-3 flex flex-col gap-2.5">
               <button
                 type="button"
                 onClick={() => setStep(2)}
@@ -593,7 +613,7 @@ export default function YearboundApp() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-7 py-3 flex flex-col gap-4 pb-6">
+            <div className="flex-1 overflow-y-auto px-7 py-2 flex flex-col gap-3.5 pb-4 overscroll-contain">
               {/* Option 1: Demo Account */}
               <div
                 onClick={() => setAccountType("demo")}
@@ -699,7 +719,7 @@ export default function YearboundApp() {
               </div>
             </div>
 
-            <div className="p-7 border-t border-[#18181B] bg-[#000000]">
+            <div className="p-6 border-t border-[#18181B] bg-[#000000]">
               <button
                 type="button"
                 onClick={handleLockVault}
@@ -731,14 +751,12 @@ export default function YearboundApp() {
             
             {/* TAB: HOME */}
             {activeTab === "home" && (
-              <div className="flex-1 overflow-y-auto px-7 pt-10 pb-28 flex flex-col gap-5">
-                {/* 1. TOP LEFT: CURRENT DATE & LIVE TIME */}
+              <div className="flex-1 overflow-y-auto px-7 pt-6 sm:pt-8 pb-28 flex flex-col gap-4 overscroll-contain">
+                {/* 1. TOP LEFT: CURRENT DATE */}
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-wider text-[#71717A]">
-                    <span>{currentDateStr || "Wednesday, Nov 4"}</span>
-                    <span>•</span>
-                    <span className="text-[#A1A1AA]">{currentTimeStr || "11:30 PM"}</span>
-                  </div>
+                  <span className="text-[11px] font-mono uppercase tracking-wider text-[#71717A]">
+                    {currentDateStr || "Wednesday, Nov 4"}
+                  </span>
                   <span className="text-[11px] font-mono text-[#A1A1AA] bg-[#0A0A0C] border border-[#222226] px-2.5 py-1 rounded-full">
                     {activeWalletDisplay}
                   </span>
@@ -945,8 +963,8 @@ export default function YearboundApp() {
 
             {/* TAB: GOALS */}
             {activeTab === "goals" && (
-              <div className="flex-1 overflow-y-auto px-7 pt-12 pb-28 flex flex-col gap-5 animate-in fade-in duration-200">
-                <div className="text-[30px] font-semibold text-white tracking-tight">
+              <div className="flex-1 overflow-y-auto px-7 pt-6 sm:pt-8 pb-28 flex flex-col gap-4 animate-in fade-in duration-200 overscroll-contain">
+                <div className="text-[30px] sm:text-[34px] font-semibold tracking-[-0.02em] leading-tight text-white">
                   Committed Goals
                 </div>
                 <div className="flex flex-col gap-3">
@@ -979,8 +997,8 @@ export default function YearboundApp() {
 
             {/* TAB: VAULT */}
             {activeTab === "vault" && (
-              <div className="flex-1 overflow-y-auto px-7 pt-12 pb-28 flex flex-col gap-5 animate-in fade-in duration-200">
-                <div className="text-[30px] font-semibold text-white tracking-tight">
+              <div className="flex-1 overflow-y-auto px-7 pt-6 sm:pt-8 pb-28 flex flex-col gap-4 animate-in fade-in duration-200 overscroll-contain">
+                <div className="text-[30px] sm:text-[34px] font-semibold tracking-[-0.02em] leading-tight text-white">
                   Escrow Vault
                 </div>
                 <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-4">
@@ -1013,8 +1031,8 @@ export default function YearboundApp() {
 
             {/* TAB: SETTINGS */}
             {activeTab === "settings" && (
-              <div className="flex-1 overflow-y-auto px-7 pt-12 pb-28 flex flex-col gap-5 animate-in fade-in duration-200">
-                <div className="text-[30px] font-semibold text-white tracking-tight">
+              <div className="flex-1 overflow-y-auto px-7 pt-6 sm:pt-8 pb-28 flex flex-col gap-4 animate-in fade-in duration-200 overscroll-contain">
+                <div className="text-[30px] sm:text-[34px] font-semibold tracking-[-0.02em] leading-tight text-white">
                   Settings & Proofs
                 </div>
 
@@ -1134,10 +1152,10 @@ export default function YearboundApp() {
         {isSendOpen && (
           <div className="flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-200">
             
-            {/* SUB-STEP 1: AMOUNT, RECIPIENT & TRANSACTION TIME */}
+            {/* SUB-STEP 1: AMOUNT & RECIPIENT */}
             {sendSubStep === "amount" && (
               <>
-                <div className="pt-10 sm:pt-12 px-7 pb-4 flex flex-col gap-3">
+                <div className="pt-6 sm:pt-8 px-7 pb-3 flex flex-col gap-2.5">
                   <button
                     type="button"
                     onClick={closeSendFlow}
@@ -1151,7 +1169,7 @@ export default function YearboundApp() {
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto px-7 py-3 flex flex-col gap-6 pb-6">
+                <div className="flex-1 overflow-y-auto px-7 py-2 flex flex-col gap-5 pb-4 overscroll-contain">
                   {/* Big Centered Amount Display */}
                   <div className="flex flex-col items-center justify-center pt-2">
                     <div className="flex items-baseline justify-center gap-2">
@@ -1198,57 +1216,13 @@ export default function YearboundApp() {
                     />
                   </div>
 
-                  {/* Transaction Time & Date Simulation */}
-                  <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-4 flex flex-col gap-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-mono uppercase tracking-wider text-[#71717A] flex items-center gap-1.5">
-                        <Clock size={12} />
-                        Transaction Time
-                      </span>
-                      <span className="text-xs font-mono text-white">
-                        {sendCustomTime}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSendTimePreset("curfew");
-                          setSendCustomTime("11:30 PM");
-                        }}
-                        className={`py-2 px-2 text-center rounded-xl text-xs font-medium transition-all duration-150 active:scale-95 ${
-                          sendTimePreset === "curfew"
-                            ? "bg-white text-black font-semibold"
-                            : "bg-[#131316] text-[#A1A1AA] border border-[#27272A] hover:border-[#52525B]"
-                        }`}
-                      >
-                        11:30 PM (Curfew)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSendTimePreset("daytime");
-                          setSendCustomTime("2:15 PM");
-                        }}
-                        className={`py-2 px-2 text-center rounded-xl text-xs font-medium transition-all duration-150 active:scale-95 ${
-                          sendTimePreset === "daytime"
-                            ? "bg-white text-black font-semibold"
-                            : "bg-[#131316] text-[#A1A1AA] border border-[#27272A] hover:border-[#52525B]"
-                        }`}
-                      >
-                        2:15 PM (Daytime)
-                      </button>
-                    </div>
-                  </div>
-
                   {/* Tiny Disclaimer Text */}
-                  <div className="text-[11px] font-mono text-[#52525B] text-center tracking-tight pt-1">
+                  <div className="text-[11px] font-mono text-[#52525B] text-center tracking-tight pt-2">
                     Walrus Memory validated · Tatum Sui RPC resolved
                   </div>
                 </div>
 
-                <div className="p-7 border-t border-[#18181B] bg-[#000000]">
+                <div className="p-6 border-t border-[#18181B] bg-[#000000]">
                   <button
                     type="button"
                     onClick={() => setSendSubStep("memo")}
@@ -1269,7 +1243,7 @@ export default function YearboundApp() {
             {/* SUB-STEP 2: COMPULSORY TRUTHFUL MEMO */}
             {sendSubStep === "memo" && (
               <>
-                <div className="pt-10 sm:pt-12 px-7 pb-4 flex flex-col gap-3">
+                <div className="pt-6 sm:pt-8 px-7 pb-3 flex flex-col gap-2.5">
                   <button
                     type="button"
                     onClick={() => setSendSubStep("amount")}
@@ -1283,7 +1257,7 @@ export default function YearboundApp() {
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto px-7 py-3 flex flex-col gap-5 pb-6">
+                <div className="flex-1 overflow-y-auto px-7 py-2 flex flex-col gap-4 pb-4 overscroll-contain">
                   {/* Guilt Prompt & Compulsory Textarea */}
                   <div className="flex flex-col gap-2">
                     <p className="text-xs text-[#A1A1AA] leading-relaxed">
@@ -1293,7 +1267,7 @@ export default function YearboundApp() {
                       value={sendMemo}
                       onChange={(e) => setSendMemo(e.target.value)}
                       placeholder="e.g. Late-night food delivery..."
-                      rows={4}
+                      rows={3}
                       className="w-full bg-[#131316] border border-[#27272A] rounded-2xl p-4 text-sm text-white placeholder-[#52525B] outline-none focus:border-white transition-colors leading-relaxed resize-none"
                     />
                   </div>
@@ -1323,7 +1297,7 @@ export default function YearboundApp() {
                   </div>
                 </div>
 
-                <div className="p-7 border-t border-[#18181B] bg-[#000000]">
+                <div className="p-6 border-t border-[#18181B] bg-[#000000]">
                   <button
                     type="button"
                     onClick={handleReviewAndCheck}
@@ -1372,7 +1346,7 @@ export default function YearboundApp() {
                   Checking transaction against goals
                 </div>
                 <div className="text-xs font-mono text-[#71717A] mt-2">
-                  Evaluating {sendCustomTime} • Walrus Memory & Tatum RPC
+                  Cross-referencing Walrus Memory & Tatum RPC...
                 </div>
               </div>
             )}
@@ -1387,7 +1361,7 @@ export default function YearboundApp() {
                   Transfer Approved
                 </div>
                 <div className="text-xs font-mono text-[#71717A] mt-2">
-                  Adherence verified at {sendCustomTime} · 0 penalties applied
+                  Goal adherence verified · 0 penalties applied
                 </div>
               </div>
             )}
@@ -1395,7 +1369,7 @@ export default function YearboundApp() {
             {/* SUB-STEP 4: WALLY MEMORY INTERVENTION / ROAST */}
             {sendSubStep === "breach" && (
               <>
-                <div className="pt-10 sm:pt-12 px-7 pb-4 flex flex-col gap-3">
+                <div className="pt-6 sm:pt-8 px-7 pb-3 flex flex-col gap-2.5">
                   <button
                     type="button"
                     onClick={closeSendFlow}
@@ -1409,7 +1383,7 @@ export default function YearboundApp() {
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto px-7 py-3 flex flex-col gap-5 pb-6">
+                <div className="flex-1 overflow-y-auto px-7 py-2 flex flex-col gap-4 pb-4 overscroll-contain">
                   {/* Wally Memory Quote Card */}
                   <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-3.5">
                     <div className="flex items-center justify-between">
@@ -1424,7 +1398,7 @@ export default function YearboundApp() {
                     </p>
 
                     <p className="text-xs text-[#71717A] leading-relaxed">
-                      {breachReason || `Your transaction time is ${sendCustomTime} — within the curfew. You agreed to financial discipline.`}
+                      {breachReason || "This transaction violates your active commitment rule. You agreed to financial discipline."}
                     </p>
                   </div>
 
@@ -1452,7 +1426,7 @@ export default function YearboundApp() {
                 </div>
 
                 {/* Actions: Cancel vs Pay Fine */}
-                <div className="p-7 border-t border-[#18181B] bg-[#000000] flex flex-col gap-3">
+                <div className="p-6 border-t border-[#18181B] bg-[#000000] flex flex-col gap-2.5">
                   <button
                     type="button"
                     onClick={closeSendFlow}
@@ -1465,7 +1439,7 @@ export default function YearboundApp() {
                     type="button"
                     onClick={handlePayFineAndProceed}
                     disabled={isSubmitting}
-                    className="w-full py-2.5 text-center text-xs font-medium text-[#71717A] hover:text-white transition-colors"
+                    className="w-full py-2 text-center text-xs font-medium text-[#71717A] hover:text-white transition-colors"
                   >
                     {isSubmitting
                       ? "Recording penalty in Walrus..."
