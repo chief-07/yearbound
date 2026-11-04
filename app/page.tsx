@@ -189,12 +189,33 @@ export default function YearboundApp() {
 
   // Rule management
   const addRule = () => {
+    if (expandedRuleId) {
+      const current = rules.find((r) => r.id === expandedRuleId);
+      if (current && (!current.title.trim() || !current.condition.trim())) {
+        triggerSnackbar("Compulsory field missing", "Both title and condition are required");
+        return;
+      }
+    }
     const newId = Date.now().toString();
     setRules((prev) => [
       ...prev,
       { id: newId, title: "", condition: "", penalty: 10, breaches: 0 },
     ]);
     setExpandedRuleId(newId);
+  };
+
+  const handleCloseActiveRule = () => {
+    if (!expandedRuleId) return;
+    const current = rules.find((r) => r.id === expandedRuleId);
+    if (!current) {
+      setExpandedRuleId(null);
+      return;
+    }
+    if (!current.title.trim() || !current.condition.trim()) {
+      triggerSnackbar("Compulsory field missing", "Both title and condition are required");
+      return;
+    }
+    setExpandedRuleId(null);
   };
 
   const updateRule = (id: string, field: keyof RuleItem, value: string | number) => {
@@ -208,7 +229,9 @@ export default function YearboundApp() {
     setRules((prev) => prev.filter((r) => r.id !== id));
   };
 
-  const isStep1Valid = rules.some((r) => r.title.trim().length > 0);
+  const isStep1Valid =
+    rules.length > 0 &&
+    rules.every((r) => r.title.trim().length > 0 && r.condition.trim().length > 0);
 
   const triggerSnackbar = (title: string, subtitle?: string, blobId?: string) => {
     setSnackbarTitle(title);
@@ -558,18 +581,25 @@ export default function YearboundApp() {
             </div>
 
             <div
-              onClick={() => setExpandedRuleId(null)}
-              className="flex-1 overflow-y-auto px-7 py-2 flex flex-col justify-between pb-4 overscroll-contain"
+              onClick={handleCloseActiveRule}
+              className="flex-1 overflow-y-auto px-7 py-2 flex flex-col pb-4 overscroll-contain"
             >
               {/* STACK OF MINIMIZED RESOLUTIONS AT TOP */}
               <div className="flex flex-col gap-2.5 transition-all duration-300 ease-out">
                 {rules.map((rule, index) => {
-                  if (rule.id === expandedRuleId) return null; // rendered in the centered active editor below
+                  if (rule.id === expandedRuleId) return null; // rendered in the active editor below
                   return (
                     <div
                       key={rule.id}
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (expandedRuleId) {
+                          const current = rules.find((r) => r.id === expandedRuleId);
+                          if (current && (!current.title.trim() || !current.condition.trim())) {
+                            triggerSnackbar("Compulsory field missing", "Both title and condition are required");
+                            return;
+                          }
+                        }
                         setExpandedRuleId(rule.id);
                       }}
                       className="bg-[#0A0A0C] border border-[#222226] hover:border-[#3F3F46] rounded-2xl px-4 py-3.5 flex items-center justify-between cursor-pointer transition-all duration-300 ease-out active:scale-[0.99] animate-in fade-in slide-in-from-bottom-2"
@@ -603,90 +633,107 @@ export default function YearboundApp() {
                 })}
               </div>
 
-              {/* CENTER MIDDLE OF SCREEN: ACTIVE EDITOR + CENTERED ADD BUTTON */}
-              <div className="flex-1 flex flex-col justify-center items-center py-6 min-h-[200px] transition-all duration-300 ease-out">
-                {/* Active Expanded Resolution Card (Centered above the button) */}
-                {(() => {
-                  const expandedRule = rules.find((r) => r.id === expandedRuleId);
-                  if (!expandedRule) return null;
-                  const expandedIndex = rules.findIndex((r) => r.id === expandedRule.id);
-                  return (
-                    <div
-                      key={expandedRule.id}
-                      onClick={(e) => e.stopPropagation()}
-                      className="w-full bg-[#0A0A0C] border border-[#3F3F46] rounded-2xl p-4 flex flex-col gap-3 relative focus-within:border-white transition-all duration-300 ease-out shadow-xl mb-4 animate-in fade-in zoom-in-95"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-mono font-medium text-[#71717A] tracking-wider">
-                          0{expandedIndex + 1}
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setExpandedRuleId(null)}
-                            className="text-[10px] font-mono text-[#71717A] hover:text-white uppercase tracking-wider px-2 py-0.5 rounded hover:bg-[#18181C] transition-colors"
-                          >
-                            Done
-                          </button>
-                          {rules.length > 1 && (
+              {/* DYNAMIC PILL CONTAINER (Rests at center ~210px until stack reaches it, then goes downwards with 14px gap) */}
+              {(() => {
+                const minimizedCount = rules.filter((r) => r.id !== expandedRuleId).length;
+                const currentStackHeight = minimizedCount * 60;
+                // Target center resting position is ~210px from top. Once stack reaches/passes 210px, joins with 14px spacing
+                const pillMarginTop = Math.max(14, 210 - currentStackHeight);
+                const expandedRule = rules.find((r) => r.id === expandedRuleId);
+                const expandedIndex = expandedRule ? rules.findIndex((r) => r.id === expandedRule.id) : -1;
+
+                return (
+                  <div
+                    style={{ marginTop: `${pillMarginTop}px` }}
+                    className="flex flex-col items-center transition-all duration-300 ease-out w-full"
+                  >
+                    {/* Active Expanded Resolution Card */}
+                    {expandedRule && (
+                      <div
+                        key={expandedRule.id}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full bg-[#0A0A0C] border border-[#3F3F46] rounded-2xl p-4 flex flex-col gap-3 relative focus-within:border-white transition-all duration-300 ease-out shadow-xl mb-4 animate-in fade-in zoom-in-95"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-mono font-medium text-[#71717A] tracking-wider">
+                            0{expandedIndex + 1}
+                          </span>
+                          <div className="flex items-center gap-2">
                             <button
                               type="button"
-                              onClick={() => removeRule(expandedRule.id)}
-                              className="text-[#71717A] hover:text-[#EF4444] p-1 transition-colors active:scale-95"
-                              title="Remove resolution"
+                              onClick={handleCloseActiveRule}
+                              disabled={!expandedRule.title.trim() || !expandedRule.condition.trim()}
+                              className={`text-xs px-3.5 py-1 rounded-full transition-all duration-150 shadow-sm ${
+                                expandedRule.title.trim() && expandedRule.condition.trim()
+                                  ? "bg-white text-black font-bold hover:bg-[#E4E4E7] active:scale-95 cursor-pointer"
+                                  : "bg-[#222226] text-[#52525B] font-semibold cursor-not-allowed"
+                              }`}
                             >
-                              <Trash2 size={13} />
+                              Done
                             </button>
-                          )}
+                            {rules.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeRule(expandedRule.id)}
+                                className="text-[#71717A] hover:text-[#EF4444] p-1 transition-colors active:scale-95"
+                                title="Remove resolution"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-[11px] font-medium text-[#A1A1AA]">
+                            Title <span className="text-[#EF4444]">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={expandedRule.title}
+                            onChange={(e) => updateRule(expandedRule.id, "title", e.target.value)}
+                            placeholder="e.g. No Late-Night Takeout"
+                            className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-[#52525B] outline-none focus:border-white transition-colors"
+                            autoFocus
+                          />
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[11px] font-medium text-[#A1A1AA]">
+                              Condition <span className="text-[#EF4444]">*</span>
+                            </label>
+                            <span className="text-[10px] font-mono text-[#71717A]">Compulsory</span>
+                          </div>
+                          <textarea
+                            value={expandedRule.condition}
+                            onChange={(e) => updateRule(expandedRule.id, "condition", e.target.value)}
+                            placeholder="e.g. Any food delivery ordered between 10 PM and 5 AM"
+                            rows={2}
+                            className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-3.5 py-2 text-sm text-white placeholder-[#52525B] outline-none focus:border-white transition-colors resize-none leading-relaxed"
+                          />
                         </div>
                       </div>
+                    )}
 
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[11px] font-medium text-[#A1A1AA]">
-                          Title
-                        </label>
-                        <input
-                          type="text"
-                          value={expandedRule.title}
-                          onChange={(e) => updateRule(expandedRule.id, "title", e.target.value)}
-                          placeholder="e.g. No Late-Night Takeout"
-                          className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-[#52525B] outline-none focus:border-white transition-colors"
-                          autoFocus
-                        />
-                      </div>
-
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[11px] font-medium text-[#A1A1AA]">
-                          Condition
-                        </label>
-                        <textarea
-                          value={expandedRule.condition}
-                          onChange={(e) => updateRule(expandedRule.id, "condition", e.target.value)}
-                          placeholder="e.g. Any food delivery ordered between 10 PM and 5 AM"
-                          rows={2}
-                          className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-3.5 py-2 text-sm text-white placeholder-[#52525B] outline-none focus:border-white transition-colors resize-none leading-relaxed"
-                        />
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Centered Add Button */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    addRule();
-                  }}
-                  className="py-3 px-6 border border-dashed border-[#2E2E33] hover:border-[#52525B] hover:bg-[#0A0A0C] text-[#A1A1AA] hover:text-white rounded-full flex items-center justify-center gap-2 text-xs font-medium transition-all duration-200 active:scale-95 shadow-sm"
-                >
-                  <Plus size={14} />
-                  <span>Add another resolution</span>
-                </button>
-              </div>
+                    {/* Centered Add Button */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        addRule();
+                      }}
+                      className="py-3 px-6 border border-dashed border-[#2E2E33] hover:border-[#52525B] hover:bg-[#0A0A0C] text-[#A1A1AA] hover:text-white rounded-full flex items-center justify-center gap-2 text-xs font-medium transition-all duration-200 active:scale-95 shadow-sm"
+                    >
+                      <Plus size={14} />
+                      <span>Add another resolution</span>
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
 
-            <div className="p-6 border-t border-[#18181B] bg-[#000000]">
+            <div className="p-6 bg-[#000000]">
               <button
                 type="button"
                 onClick={() => setStep(2)}
@@ -794,7 +841,7 @@ export default function YearboundApp() {
               </div>
             </div>
 
-            <div className="p-6 border-t border-[#18181B] bg-[#000000]">
+            <div className="p-6 bg-[#000000]">
               <button
                 type="button"
                 onClick={() => setStep(3)}
@@ -932,7 +979,7 @@ export default function YearboundApp() {
               </div>
             </div>
 
-            <div className="p-6 border-t border-[#18181B] bg-[#000000]">
+            <div className="p-6 bg-[#000000]">
               <button
                 type="button"
                 onClick={handleLockVault}
