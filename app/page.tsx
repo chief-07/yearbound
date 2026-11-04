@@ -16,24 +16,24 @@ import {
   Shield,
   Settings,
   AlertCircle,
-  X,
+  Clock,
 } from "lucide-react";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 
 /* ==========================================================================
-   YEARBOUND PROTOCOL FLOW
+   YEARBOUND PROTOCOL
    - Screen 1: Resolution & Rules Builder (Title + Condition)
    - Screen 2: Penalty Stakes & Escrow Setup (Preset SUI stakes)
    - Screen 3: Account & Wallet Setup (Demo Account, Real Account, Link Wallet)
    - Screen 4: Active Homescreen Dashboard
    - Send Flow:
-     * Send 1: Recipient Address & Big Centered Amount + Disclaimer
+     * Send 1: Recipient, Big Centered Amount, and Transaction Time/Date
      * Send 2: Compulsory Truthful Memo (Guilt Intent & Quick Picks)
-     * Send 3: Checking Transaction Loading & Morph Screen (Walrus + Tatum check)
+     * Send 3: Temporal + Semantic Checking Screen (Walrus + Tatum check)
      * Send 4: Wally Memory Intervention / Roasting Screen (Cancel vs Pay Fine)
    - Strict monochrome black & white (zero glows, zero sparkles, zero pills)
    - Universal typography: Outfit Sans
-   - Consistent sizing, spacing & layout
+   - Consistent sizing, spacing & layout (28px insets, 32px headers, 16px cards)
    ========================================================================== */
 
 export interface RuleItem {
@@ -54,25 +54,52 @@ const DEMO_SUI_ADDRESS = "0x7a83d4f19b224c88e019f39002b8da4e91c0e39a";
 
 const QUICK_MEMO_PICKS = [
   {
-    label: "Late-night food delivery (11:30 PM)",
-    text: "Late-night takeout food delivery ordered at 11:30 PM",
-    breach: true,
+    label: "Late-night food delivery",
+    text: "Late-night takeout food delivery",
+    isFood: true,
   },
   {
-    label: "Morning gym session & protein shake",
-    text: "Gym monthly membership dues and post-workout protein",
-    breach: false,
+    label: "Morning gym & protein shake",
+    text: "Monthly gym membership and post-workout protein",
+    isFood: false,
   },
   {
     label: "Discretionary transfer to ex-partner",
     text: "Impulse transfer to forbidden recipient 0xSarah",
-    breach: true,
+    isEx: true,
   },
 ];
 
 export default function YearboundApp() {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [activeTab, setActiveTab] = useState<NavTab>("home");
+
+  // Live Clock & Date
+  const [currentTimeStr, setCurrentTimeStr] = useState<string>("");
+  const [currentDateStr, setCurrentDateStr] = useState<string>("");
+
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      setCurrentDateStr(
+        new Intl.DateTimeFormat("en-US", {
+          weekday: "long",
+          month: "short",
+          day: "numeric",
+        }).format(now)
+      );
+      setCurrentTimeStr(
+        new Intl.DateTimeFormat("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        }).format(now)
+      );
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Screen 1: Rules
   const [rules, setRules] = useState<RuleItem[]>([
@@ -120,9 +147,10 @@ export default function YearboundApp() {
   const [sendSubStep, setSendSubStep] = useState<SendSubStep>("amount");
   const [sendAmount, setSendAmount] = useState<string>("15");
   const [sendRecipient, setSendRecipient] = useState<string>("0x8f4c...cafe");
+  const [sendTimePreset, setSendTimePreset] = useState<"curfew" | "daytime">("curfew");
+  const [sendCustomTime, setSendCustomTime] = useState<string>("11:30 PM");
   const [sendMemo, setSendMemo] = useState<string>("");
-  const [isBreachAttempt, setIsBreachAttempt] = useState<boolean>(false);
-  const [isCheckingProgress, setIsCheckingProgress] = useState<boolean>(true);
+  const [breachReason, setBreachReason] = useState<string>("");
 
   // Generate real self-custodial Sui keypair when Real Account is selected
   useEffect(() => {
@@ -155,10 +183,8 @@ export default function YearboundApp() {
     setRules((prev) => prev.filter((r) => r.id !== id));
   };
 
-  // Step 1 Validation
   const isStep1Valid = rules.some((r) => r.title.trim().length > 0);
 
-  // Trigger snackbar helper
   const triggerSnackbar = (msg: string, blobId?: string) => {
     setSnackbarMessage(msg);
     if (blobId) setWalrusBlobId(blobId);
@@ -213,8 +239,10 @@ export default function YearboundApp() {
     setSendSubStep("amount");
     setSendAmount("15");
     setSendRecipient("0x8f4c...cafe");
+    setSendTimePreset("curfew");
+    setSendCustomTime("11:30 PM");
     setSendMemo("");
-    setIsBreachAttempt(false);
+    setBreachReason("");
     setIsSendOpen(true);
   };
 
@@ -229,27 +257,34 @@ export default function YearboundApp() {
     if (!sendMemo.trim()) return;
 
     setSendSubStep("checking");
-    setIsCheckingProgress(true);
 
-    // Semantic keyword evaluation against rules
     const lower = sendMemo.toLowerCase();
-    const isBreach =
+    const isFood =
       lower.includes("food") ||
       lower.includes("takeout") ||
       lower.includes("delivery") ||
-      lower.includes("night") ||
       lower.includes("burger") ||
-      lower.includes("sarah") ||
-      lower.includes("ex");
+      lower.includes("eats");
+    const isEx = lower.includes("sarah") || lower.includes("ex");
 
-    setIsBreachAttempt(isBreach);
+    const isCurfew = sendTimePreset === "curfew";
 
-    // Simulate agent Wally cross-referencing Walrus & Tatum RPC
+    let detectedBreach = false;
+    let reason = "";
+
+    if (isFood && isCurfew) {
+      detectedBreach = true;
+      reason = `Food delivery attempted at ${sendCustomTime} — within the prohibited 10 PM to 5 AM curfew window.`;
+    } else if (isEx) {
+      detectedBreach = true;
+      reason = "Attempted transfer to forbidden recipient 0xSarah in violation of blacklist rule.";
+    }
+
+    setBreachReason(reason);
+
+    // Agent Wally checks transaction against Walrus Memory & Tatum RPC
     setTimeout(() => {
-      setIsCheckingProgress(false);
-
-      if (!isBreach) {
-        // Morph to approved checkmark
+      if (!detectedBreach) {
         setSendSubStep("approved");
         setTimeout(() => {
           const numAmount = parseFloat(sendAmount) || 0;
@@ -258,10 +293,9 @@ export default function YearboundApp() {
           triggerSnackbar("Transfer confirmed · Streak maintained");
         }, 1800);
       } else {
-        // Transition to breach intervention screen
         setTimeout(() => {
           setSendSubStep("breach");
-        }, 600);
+        }, 400);
       }
     }, 1800);
   };
@@ -273,7 +307,6 @@ export default function YearboundApp() {
       const penaltyAmt = 10;
       const transferAmt = parseFloat(sendAmount) || 0;
 
-      // Persist accountability event to Walrus Memory
       const res = await fetch("/api/walrus", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -281,14 +314,13 @@ export default function YearboundApp() {
           type: "accountability_event",
           commitment_id: "pact_primary",
           verdict: "broken",
-          user_explanation: sendMemo,
+          user_explanation: `${sendMemo} (at ${sendCustomTime})`,
           penalty_deposited_sui: penaltyAmt,
         }),
       });
 
       const data = await res.json();
 
-      // Update state: increment breaches, update vault total, deduct balance
       setRules((prev) =>
         prev.map((r, i) => (i === 0 ? { ...r, breaches: (r.breaches || 0) + 1 } : r))
       );
@@ -323,13 +355,6 @@ export default function YearboundApp() {
     setTimeout(() => setCopiedAddress(false), 2000);
   };
 
-  // Formatted Date (Top Left)
-  const currentDateStr = new Intl.DateTimeFormat("en-US", {
-    weekday: "long",
-    month: "short",
-    day: "numeric",
-  }).format(new Date());
-
   const activeRulesList = rules.filter((r) => r.title.trim().length > 0);
   const totalBreaches = activeRulesList.reduce((sum, r) => sum + (r.breaches || 0), 0);
 
@@ -345,7 +370,7 @@ export default function YearboundApp() {
       {/* ====================================================================
           MOBILE SHELL (Centered vertical frame on desktop, solid black ground)
           ==================================================================== */}
-      <div className="relative w-full max-w-[420px] h-[100dvh] md:h-[860px] md:max-h-[92vh] bg-[#000000] md:border md:border-[#27272A] md:rounded-[40px] flex flex-col justify-between overflow-hidden shadow-2xl transition-all duration-300">
+      <div className="relative w-full max-w-[420px] h-[100dvh] md:h-[860px] md:max-h-[92vh] bg-[#000000] md:border md:border-[#222226] md:rounded-[40px] flex flex-col justify-between overflow-hidden shadow-2xl transition-all duration-300">
         
         {/* ==================================================================
             SCREEN 1: RESOLUTION BUILDER
@@ -707,11 +732,13 @@ export default function YearboundApp() {
             {/* TAB: HOME */}
             {activeTab === "home" && (
               <div className="flex-1 overflow-y-auto px-7 pt-10 pb-28 flex flex-col gap-5">
-                {/* 1. TOP LEFT: CURRENT DATE */}
+                {/* 1. TOP LEFT: CURRENT DATE & LIVE TIME */}
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-mono uppercase tracking-wider text-[#71717A]">
-                    {currentDateStr}
-                  </span>
+                  <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-wider text-[#71717A]">
+                    <span>{currentDateStr || "Wednesday, Nov 4"}</span>
+                    <span>•</span>
+                    <span className="text-[#A1A1AA]">{currentTimeStr || "11:30 PM"}</span>
+                  </div>
                   <span className="text-[11px] font-mono text-[#A1A1AA] bg-[#0A0A0C] border border-[#222226] px-2.5 py-1 rounded-full">
                     {activeWalletDisplay}
                   </span>
@@ -1055,7 +1082,6 @@ export default function YearboundApp() {
 
             {/* ================================================================
                 FLOATING NAVBAR PILL
-                - Pure black pill, backdrop blur, no harsh outline
                 ================================================================ */}
             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 bg-black/90 backdrop-blur-xl rounded-full px-7 py-3.5 flex items-center gap-8 shadow-2xl border-0">
               <button
@@ -1108,7 +1134,7 @@ export default function YearboundApp() {
         {isSendOpen && (
           <div className="flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-200">
             
-            {/* SUB-STEP 1: AMOUNT & RECIPIENT */}
+            {/* SUB-STEP 1: AMOUNT, RECIPIENT & TRANSACTION TIME */}
             {sendSubStep === "amount" && (
               <>
                 <div className="pt-10 sm:pt-12 px-7 pb-4 flex flex-col gap-3">
@@ -1125,28 +1151,28 @@ export default function YearboundApp() {
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto px-7 py-3 flex flex-col justify-between gap-6 pb-6">
+                <div className="flex-1 overflow-y-auto px-7 py-3 flex flex-col gap-6 pb-6">
                   {/* Big Centered Amount Display */}
-                  <div className="flex flex-col items-center justify-center pt-4">
+                  <div className="flex flex-col items-center justify-center pt-2">
                     <div className="flex items-baseline justify-center gap-2">
                       <input
                         type="number"
                         value={sendAmount}
                         onChange={(e) => setSendAmount(e.target.value)}
-                        className="bg-transparent text-[54px] font-semibold font-mono text-center text-white outline-none w-48 tracking-tight"
+                        className="bg-transparent text-[52px] font-semibold font-mono text-center text-white outline-none w-48 tracking-tight"
                         placeholder="0"
                       />
                       <span className="text-xl font-mono text-[#71717A]">SUI</span>
                     </div>
 
                     {/* Quick Amount Preset Chips */}
-                    <div className="flex items-center gap-2 mt-3">
+                    <div className="flex items-center gap-2 mt-2">
                       {AMOUNT_PRESETS.map((amt) => (
                         <button
                           key={amt}
                           type="button"
                           onClick={() => setSendAmount(amt.toString())}
-                          className={`py-1.5 px-3 rounded-full text-xs font-mono transition-all duration-150 active:scale-95 ${
+                          className={`py-1 px-3 rounded-full text-xs font-mono transition-all duration-150 active:scale-95 ${
                             sendAmount === amt.toString()
                               ? "bg-white text-black font-semibold"
                               : "bg-[#131316] text-[#A1A1AA] border border-[#27272A] hover:border-[#52525B]"
@@ -1168,12 +1194,56 @@ export default function YearboundApp() {
                       value={sendRecipient}
                       onChange={(e) => setSendRecipient(e.target.value)}
                       placeholder="Enter Sui address (0x...)"
-                      className="w-full bg-[#131316] border border-[#27272A] rounded-2xl px-5 py-3.5 text-xs font-mono text-white placeholder-[#52525B] outline-none focus:border-white transition-colors"
+                      className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-4 py-3 text-xs font-mono text-white placeholder-[#52525B] outline-none focus:border-white transition-colors"
                     />
                   </div>
 
+                  {/* Transaction Time & Date Simulation */}
+                  <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-4 flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-mono uppercase tracking-wider text-[#71717A] flex items-center gap-1.5">
+                        <Clock size={12} />
+                        Transaction Time
+                      </span>
+                      <span className="text-xs font-mono text-white">
+                        {sendCustomTime}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSendTimePreset("curfew");
+                          setSendCustomTime("11:30 PM");
+                        }}
+                        className={`py-2 px-2 text-center rounded-xl text-xs font-medium transition-all duration-150 active:scale-95 ${
+                          sendTimePreset === "curfew"
+                            ? "bg-white text-black font-semibold"
+                            : "bg-[#131316] text-[#A1A1AA] border border-[#27272A] hover:border-[#52525B]"
+                        }`}
+                      >
+                        11:30 PM (Curfew)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSendTimePreset("daytime");
+                          setSendCustomTime("2:15 PM");
+                        }}
+                        className={`py-2 px-2 text-center rounded-xl text-xs font-medium transition-all duration-150 active:scale-95 ${
+                          sendTimePreset === "daytime"
+                            ? "bg-white text-black font-semibold"
+                            : "bg-[#131316] text-[#A1A1AA] border border-[#27272A] hover:border-[#52525B]"
+                        }`}
+                      >
+                        2:15 PM (Daytime)
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Tiny Disclaimer Text */}
-                  <div className="text-[11px] font-mono text-[#52525B] text-center tracking-tight">
+                  <div className="text-[11px] font-mono text-[#52525B] text-center tracking-tight pt-1">
                     Walrus Memory validated · Tatum Sui RPC resolved
                   </div>
                 </div>
@@ -1222,7 +1292,7 @@ export default function YearboundApp() {
                     <textarea
                       value={sendMemo}
                       onChange={(e) => setSendMemo(e.target.value)}
-                      placeholder="e.g. Late-night food delivery at 11:30 PM..."
+                      placeholder="e.g. Late-night food delivery..."
                       rows={4}
                       className="w-full bg-[#131316] border border-[#27272A] rounded-2xl p-4 text-sm text-white placeholder-[#52525B] outline-none focus:border-white transition-colors leading-relaxed resize-none"
                     />
@@ -1239,7 +1309,7 @@ export default function YearboundApp() {
                           key={idx}
                           type="button"
                           onClick={() => setSendMemo(item.text)}
-                          className="bg-[#0A0A0C] border border-[#222226] hover:border-[#52525B] text-left p-3 rounded-xl transition-all duration-150 active:scale-[0.99] flex flex-col gap-0.5"
+                          className="bg-[#0A0A0C] border border-[#222226] hover:border-[#52525B] text-left p-3.5 rounded-xl transition-all duration-150 active:scale-[0.99] flex flex-col gap-0.5"
                         >
                           <span className="text-xs font-medium text-white">
                             {item.label}
@@ -1275,7 +1345,6 @@ export default function YearboundApp() {
             {sendSubStep === "checking" && (
               <div className="flex-1 flex flex-col items-center justify-center px-7 text-center animate-in fade-in duration-300">
                 <div className="relative w-16 h-16 flex items-center justify-center mb-6">
-                  {/* Clean SVG Spinner with Morph Effect */}
                   <svg className="w-16 h-16 animate-spin text-white" viewBox="0 0 64 64">
                     <circle
                       cx="32"
@@ -1303,7 +1372,7 @@ export default function YearboundApp() {
                   Checking transaction against goals
                 </div>
                 <div className="text-xs font-mono text-[#71717A] mt-2">
-                  Cross-referencing Walrus Memory & Tatum RPC...
+                  Evaluating {sendCustomTime} • Walrus Memory & Tatum RPC
                 </div>
               </div>
             )}
@@ -1318,7 +1387,7 @@ export default function YearboundApp() {
                   Transfer Approved
                 </div>
                 <div className="text-xs font-mono text-[#71717A] mt-2">
-                  Goal adherence verified · 0 penalties applied
+                  Adherence verified at {sendCustomTime} · 0 penalties applied
                 </div>
               </div>
             )}
@@ -1355,7 +1424,7 @@ export default function YearboundApp() {
                     </p>
 
                     <p className="text-xs text-[#71717A] leading-relaxed">
-                      It is currently past curfew. You made this commitment to build financial discipline.
+                      {breachReason || `Your transaction time is ${sendCustomTime} — within the curfew. You agreed to financial discipline.`}
                     </p>
                   </div>
 
