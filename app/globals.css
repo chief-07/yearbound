@@ -1,13 +1,8 @@
-/* ==========================================================================
-   YEARBOUND STYLES — SOLAR FLARE & OBSIDIAN GLASS
-   High-craft design system matching the reference aesthetic.
-   ========================================================================== */
+@import "tailwindcss";
 
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600;1,700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@theme {
+  --font-sans: 'Outfit', system-ui, -apple-system, sans-serif;
+}
 
 :root {
   --bg-void: #070403;
@@ -24,12 +19,24 @@
 }
 
 body {
-  background-color: var(--bg-void);
-  color: var(--text-primary);
-  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  background-color: #000000;
+  color: #FFFFFF;
+  font-family: 'Outfit', system-ui, -apple-system, sans-serif;
   overflow-x: hidden;
   margin: 0;
   padding: 0;
+}
+
+.font-sans-clean {
+  font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+}
+
+.font-display {
+  font-family: 'Space Grotesk', 'Outfit', sans-serif;
+}
+
+.font-syne {
+  font-family: 'Syne', sans-serif;
 }
 
 .font-serif {
@@ -38,6 +45,26 @@ body {
 
 .font-mono {
   font-family: 'JetBrains Mono', monospace;
+}
+
+@font-face {
+  font-family: 'Redaction 35';
+  src: url('/fonts/Redaction35-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Redaction 35';
+  src: url('/fonts/Redaction35-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+.font-redaction {
+  font-family: 'Redaction 35', Georgia, serif;
 }
 
 /* Solar Glass Cards */
@@ -131,6 +158,27 @@ body {
   50% {
     opacity: 1;
     transform: translateY(-6px);
+  }
+}
+
+@keyframes floatUpward {
+  0% {
+    transform: translateY(0) translateX(0) scale(0.7);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.75;
+  }
+  50% {
+    transform: translateY(-50vh) translateX(12px) scale(1);
+    opacity: 0.65;
+  }
+  85% {
+    opacity: 0.55;
+  }
+  100% {
+    transform: translateY(-105vh) translateX(-8px) scale(0.6);
+    opacity: 0;
   }
 }
 

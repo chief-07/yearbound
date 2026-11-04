@@ -5,34 +5,65 @@ import React, {
   useContext,
   useState,
   useMemo,
+  useCallback,
   type ReactNode,
 } from "react";
-import Image from "next/image";
+import {
+  RocketFlareShader,
+  type FlareState,
+} from "@/components/ui/rocket-flare-shader";
 
 /* ==========================================================================
    YEARBOUND REUSABLE VARIABLE BACKGROUND SYSTEM
-   Built around the authentic rocket plume master texture with programmable
-   atmospheric masks, dynamic state engine, and ambient rim-light injection.
+   Built on the GPU WebGL Rocket Flare engine matching the SpaceX Starship
+   re-entry plasma reference photo with complete visual parity.
+
+   Exposes:
+   - YearboundBackgroundProvider: Root context for app-wide reactivity
+   - useYearboundBackground: Hook for triggering bursts, state shifts, and variable tweaks
+   - YearboundBackground: The drop-in background wrapper for any screen or module
    ========================================================================== */
 
-export type BackgroundMode = "hero" | "dashboard" | "split" | "focus";
-export type BackgroundState = "calm" | "active" | "violation" | "celebrate";
+export type BackgroundState = FlareState;
 
 export interface BackgroundConfig {
-  mode: BackgroundMode;
   state: BackgroundState;
+  intensity: number;      // 0.2 to 2.5
+  speed: number;          // 0.2 to 3.0
+  spread: number;         // 0.5 to 1.8
+  coreHeat: number;       // 0.5 to 2.5
+  turbulence: number;     // 0.0 to 2.0
   showEmbers: boolean;
-  dimmerOpacity?: number; // 0.0 - 1.0 (for custom content overlay density)
+  mouseParallax: boolean;
+  dimmerOpacity: number;
 }
 
 interface BackgroundContextType {
   config: BackgroundConfig;
   setConfig: React.Dispatch<React.SetStateAction<BackgroundConfig>>;
-  setMode: (mode: BackgroundMode) => void;
   setState: (state: BackgroundState) => void;
+  setIntensity: (intensity: number) => void;
+  setSpeed: (speed: number) => void;
+  setSpread: (spread: number) => void;
+  setCoreHeat: (coreHeat: number) => void;
+  setTurbulence: (turbulence: number) => void;
+  setShowEmbers: (show: boolean) => void;
   triggerViolationBurst: (durationMs?: number) => void;
   triggerCelebrationBurst: (durationMs?: number) => void;
+  resetToDefaults: () => void;
 }
+
+const DEFAULT_CONFIG: BackgroundConfig = {
+  state: "void",
+  intensity: 1.15,
+  speed: 1.0,
+  spread: 1.0,
+  coreHeat: 1.25,
+  turbulence: 1.0,
+  showEmbers: true,
+  mouseParallax: true,
+  dimmerOpacity: 0.0,
+};
 
 const BackgroundContext = createContext<BackgroundContextType | null>(null);
 
@@ -47,189 +78,139 @@ export function useYearboundBackground() {
 }
 
 export interface YearboundBackgroundProps {
-  mode?: BackgroundMode;
   state?: BackgroundState;
+  intensity?: number;
+  speed?: number;
+  spread?: number;
+  coreHeat?: number;
+  turbulence?: number;
   showEmbers?: boolean;
   dimmerOpacity?: number;
+  mouseParallax?: boolean;
   className?: string;
   children?: ReactNode;
 }
 
 /**
- * Core Reusable Background Layer
+ * Reusable Yearbound Background Container
  */
 export function YearboundBackground({
-  mode = "hero",
-  state = "active",
-  showEmbers = true,
+  state,
+  intensity,
+  speed,
+  spread,
+  coreHeat,
+  turbulence,
+  showEmbers,
   dimmerOpacity,
+  mouseParallax,
   className = "",
   children,
 }: YearboundBackgroundProps) {
-  // State-specific visual filters and lighting variables
-  const stateStyles = useMemo(() => {
-    switch (state) {
+  // Try to read from context, fallback to props or defaults if outside provider
+  const ctx = useContext(BackgroundContext);
+
+  const activeState = state ?? ctx?.config.state ?? DEFAULT_CONFIG.state;
+  const activeIntensity = intensity ?? ctx?.config.intensity ?? DEFAULT_CONFIG.intensity;
+  const activeSpeed = speed ?? ctx?.config.speed ?? DEFAULT_CONFIG.speed;
+  const activeSpread = spread ?? ctx?.config.spread ?? DEFAULT_CONFIG.spread;
+  const activeCoreHeat = coreHeat ?? ctx?.config.coreHeat ?? DEFAULT_CONFIG.coreHeat;
+  const activeTurbulence = turbulence ?? ctx?.config.turbulence ?? DEFAULT_CONFIG.turbulence;
+  const activeShowEmbers = showEmbers ?? ctx?.config.showEmbers ?? DEFAULT_CONFIG.showEmbers;
+  const activeParallax = mouseParallax ?? ctx?.config.mouseParallax ?? DEFAULT_CONFIG.mouseParallax;
+  const activeDimmer = dimmerOpacity ?? ctx?.config.dimmerOpacity ?? DEFAULT_CONFIG.dimmerOpacity;
+
+  // Dynamic CSS variables injected into DOM for child components to inherit ambient colors
+  const ambientTheme = useMemo(() => {
+    switch (activeState) {
       case "violation":
         return {
-          filter: "brightness(1.15) contrast(1.25) saturate(1.4) hue-rotate(-22deg)",
-          rimColor: "rgba(255, 45, 10, 0.45)",
-          ambientGlow: "rgba(220, 30, 0, 0.4)",
-          pulseSpeed: "1.8s",
+          primary: "#E02A00",
+          glow: "rgba(224, 42, 0, 0.45)",
+          rim: "rgba(255, 60, 20, 0.6)",
         };
-      case "celebrate":
+      case "celebration":
         return {
-          filter: "brightness(1.25) contrast(1.1) saturate(1.2) hue-rotate(28deg)",
-          rimColor: "rgba(255, 200, 60, 0.5)",
-          ambientGlow: "rgba(255, 180, 40, 0.45)",
-          pulseSpeed: "4s",
+          primary: "#FFB82E",
+          glow: "rgba(255, 184, 46, 0.45)",
+          rim: "rgba(255, 215, 80, 0.6)",
         };
-      case "calm":
+      case "void":
         return {
-          filter: "brightness(0.75) contrast(1.05) saturate(0.9)",
-          rimColor: "rgba(255, 110, 30, 0.15)",
-          ambientGlow: "rgba(200, 60, 0, 0.18)",
-          pulseSpeed: "9s",
+          primary: "#FF6600",
+          glow: "rgba(180, 50, 0, 0.15)",
+          rim: "rgba(255, 100, 30, 0.2)",
         };
-      case "active":
+      case "magma":
       default:
         return {
-          filter: "brightness(1.0) contrast(1.15) saturate(1.1)",
-          rimColor: "rgba(255, 120, 30, 0.3)",
-          ambientGlow: "rgba(255, 90, 0, 0.28)",
-          pulseSpeed: "6s",
+          primary: "#FF7700",
+          glow: "rgba(255, 119, 0, 0.35)",
+          rim: "rgba(255, 140, 40, 0.45)",
         };
     }
-  }, [state]);
-
-  // Mode-specific positioning and mask calibrations
-  const modeStyles = useMemo(() => {
-    switch (mode) {
-      case "dashboard":
-        return {
-          imagePosition: "center 75%",
-          imageScale: "scale(1.02) translateY(12%)",
-          topVoidHeight: "h-64",
-          topVoidOpacity: "from-[#070403] via-[#070403]/90 to-transparent",
-          coreBlur: "blur-[40px]",
-        };
-      case "split":
-        return {
-          imagePosition: "center 65%",
-          imageScale: "scale(1.05)",
-          topVoidHeight: "h-48",
-          topVoidOpacity: "from-[#070403] via-[#070403]/80 to-transparent",
-          coreBlur: "blur-[30px]",
-        };
-      case "focus":
-        return {
-          imagePosition: "center 85%",
-          imageScale: "scale(1.2) translateY(-5%)",
-          topVoidHeight: "h-36",
-          topVoidOpacity: "from-[#070403] via-[#070403]/60 to-transparent",
-          coreBlur: "blur-[20px]",
-        };
-      case "hero":
-      default:
-        return {
-          imagePosition: "center 60%",
-          imageScale: "scale(1.0)",
-          topVoidHeight: "h-52",
-          topVoidOpacity: "from-[#070403] via-[#070403]/75 to-transparent",
-          coreBlur: "blur-[24px]",
-        };
-    }
-  }, [mode]);
+  }, [activeState]);
 
   return (
     <div
       className={`relative w-full min-h-screen bg-[#070403] text-[#F5F2EB] overflow-x-hidden ${className}`}
       style={
         {
-          "--flare-rim": stateStyles.rimColor,
-          "--flare-ambient": stateStyles.ambientGlow,
+          "--flare-primary": ambientTheme.primary,
+          "--flare-glow": ambientTheme.glow,
+          "--flare-rim": ambientTheme.rim,
         } as React.CSSProperties
       }
     >
       {/* ======================================================================
-          BACKGROUND LAYER 1: Master Photographic Rocket Plume Texture
+          BACKGROUND ENGINE: High-Fidelity WebGL Rocket Plume & God Rays
           ====================================================================== */}
       <div className="fixed inset-0 pointer-events-none select-none z-0 overflow-hidden">
-        {/* The Authentic Rocket Plume Image Asset */}
-        <div
-          className="absolute inset-0 transition-all duration-1000 ease-out animate-flare-breathe"
-          style={{
-            filter: stateStyles.filter,
-            transform: modeStyles.imageScale,
-            animationDuration: stateStyles.pulseSpeed,
-          }}
-        >
-          <Image
-            src="/assets/flare/master-flare.jpg"
-            alt="Rocket Plume Background"
-            fill
-            priority
-            sizes="100vw"
-            className="object-cover object-bottom"
-            quality={95}
-          />
-        </div>
+        {/* Base Obsidian Void */}
+        <div className="absolute inset-0 bg-[#070403]" />
 
-        {/* ====================================================================
-            BACKGROUND LAYER 2: Non-Destructive Atmospheric Gradient Masks
-            Ensures text and UI content remain 100% crisp, sharp, and readable.
-            ==================================================================== */}
-
-        {/* Top Void Mask (Drowns the top in deep obsidian for navigation & headers) */}
-        <div
-          className={`absolute top-0 inset-x-0 ${modeStyles.topVoidHeight} bg-gradient-to-b ${modeStyles.topVoidOpacity} pointer-events-none`}
+        {/* 1. WebGL Rocket Flare Canvas (Pure Plasma Flare) */}
+        <RocketFlareShader
+          state={activeState}
+          intensity={activeIntensity}
+          speed={activeSpeed}
+          spread={activeSpread}
+          coreHeat={activeCoreHeat}
+          turbulence={activeTurbulence}
+          mouseParallax={activeParallax}
         />
 
-        {/* Bottom Horizon Occlusion Fade */}
-        <div className="absolute bottom-0 inset-x-0 h-32 bg-gradient-to-t from-[#070403] via-[#070403]/80 to-transparent pointer-events-none" />
-
-        {/* Left & Right Peripheral Vignette */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_45%,rgba(7,4,3,0.85)_95%)] pointer-events-none" />
-
-        {/* Optional Custom Dimmer Overlay */}
-        {dimmerOpacity !== undefined && (
-          <div
-            className="absolute inset-0 bg-[#070403] pointer-events-none transition-opacity duration-500"
-            style={{ opacity: dimmerOpacity }}
-          />
-        )}
-
-        {/* ====================================================================
-            BACKGROUND LAYER 3: Interactive Volumetric Glow Core
-            Adds physical depth and reactive lighting behind cards.
-            ==================================================================== */}
+        {/* 2. Soft Ambient Horizon Glow (adds cinematic atmosphere across ultrawide monitors) */}
         <div
-          className={`absolute bottom-[-10%] left-1/2 -translate-x-1/2 w-[600px] md:w-[900px] h-[350px] rounded-full pointer-events-none transition-all duration-1000 ${modeStyles.coreBlur}`}
+          className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[1200px] h-[550px] rounded-full pointer-events-none transition-all duration-700"
           style={{
-            background: `radial-gradient(ellipse at center, rgba(255, 180, 50, 0.45) 0%, ${stateStyles.ambientGlow} 45%, transparent 75%)`,
+            background: `radial-gradient(ellipse at bottom center, ${ambientTheme.glow} 0%, rgba(200, 50, 0, 0.15) 50%, transparent 80%)`,
+            filter: "blur(80px)",
+            opacity: activeIntensity * 0.75,
           }}
         />
 
-        {/* ====================================================================
-            BACKGROUND LAYER 4: Floating Magma Embers (Micro-Physics)
-            ==================================================================== */}
-        {showEmbers && (
+        {/* 3. Floating Magma Embers (Micro-particles rising through the plume) */}
+        {activeShowEmbers && (
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            {[...Array(14)].map((_, i) => {
-              const leftPercent = 32 + ((i * 19) % 36); // Concentrated along beam columns
-              const sizePx = 2 + (i % 3);
-              const durationSec = 5 + (i % 4);
-              const delaySec = -(i * 0.8);
+            {[...Array(20)].map((_, i) => {
+              const leftPercent = 32 + ((i * 19) % 36);
+              const sizePx = 1.5 + (i % 3);
+              const durationSec = 3.5 + (i % 4) * 0.8;
+              const delaySec = -(i * 0.5);
 
               return (
                 <div
                   key={i}
-                  className="absolute rounded-full bg-[#FFE59E] shadow-[0_0_8px_#FF7700] animate-ember-pulse"
+                  className="absolute rounded-full animate-ember-pulse"
                   style={{
                     left: `${leftPercent}%`,
-                    bottom: `${8 + (i * 6)}%`,
+                    bottom: `${12 + (i * 4.2)}%`,
                     width: `${sizePx}px`,
                     height: `${sizePx}px`,
-                    opacity: 0.25 + ((i % 4) * 0.15),
+                    backgroundColor: ambientTheme.primary,
+                    boxShadow: `0 0 8px ${ambientTheme.rim}`,
+                    opacity: 0.35 + ((i % 4) * 0.15),
                     animationDuration: `${durationSec}s`,
                     animationDelay: `${delaySec}s`,
                   }}
@@ -238,13 +219,23 @@ export function YearboundBackground({
             })}
           </div>
         )}
+
+        {/* 4. Top Void Vignette (guarantees crystal-clear legibility for future top navigation) */}
+        <div className="absolute top-0 inset-x-0 h-40 bg-gradient-to-b from-[#070403] via-[#070403]/80 to-transparent pointer-events-none" />
+
+        {/* 5. Custom Dimmer Overlay (for modal / dialog focus states) */}
+        {activeDimmer > 0 && (
+          <div
+            className="absolute inset-0 bg-[#070403] pointer-events-none transition-opacity duration-500"
+            style={{ opacity: activeDimmer }}
+          />
+        )}
       </div>
 
       {/* ======================================================================
-          FOREGROUND CONTENT CONTAINER
-          Positioned above the background layers with full interactivity.
+          CHILDREN / FOREGROUND CONTENT
           ====================================================================== */}
-      <div className="relative z-10 w-full min-h-screen">{children}</div>
+      {children && <div className="relative z-10 w-full min-h-screen">{children}</div>}
     </div>
   );
 }
@@ -257,53 +248,123 @@ export function YearboundBackgroundProvider({
 }: {
   children: ReactNode;
 }) {
-  const [config, setConfig] = useState<BackgroundConfig>({
-    mode: "hero",
-    state: "active",
-    showEmbers: true,
-  });
+  const [config, setConfig] = useState<BackgroundConfig>(DEFAULT_CONFIG);
 
-  const setMode = (mode: BackgroundMode) => {
-    setConfig((prev) => ({ ...prev, mode }));
-  };
-
-  const setState = (state: BackgroundState) => {
+  const setState = useCallback((state: BackgroundState) => {
     setConfig((prev) => ({ ...prev, state }));
-  };
+  }, []);
 
-  const triggerViolationBurst = (durationMs = 2800) => {
-    setConfig((prev) => ({ ...prev, state: "violation" }));
-    setTimeout(() => {
-      setConfig((prev) => ({ ...prev, state: "active" }));
-    }, durationMs);
-  };
+  const setIntensity = useCallback((intensity: number) => {
+    setConfig((prev) => ({ ...prev, intensity }));
+  }, []);
 
-  const triggerCelebrationBurst = (durationMs = 3500) => {
-    setConfig((prev) => ({ ...prev, state: "celebrate" }));
+  const setSpeed = useCallback((speed: number) => {
+    setConfig((prev) => ({ ...prev, speed }));
+  }, []);
+
+  const setSpread = useCallback((spread: number) => {
+    setConfig((prev) => ({ ...prev, spread }));
+  }, []);
+
+  const setCoreHeat = useCallback((coreHeat: number) => {
+    setConfig((prev) => ({ ...prev, coreHeat }));
+  }, []);
+
+  const setTurbulence = useCallback((turbulence: number) => {
+    setConfig((prev) => ({ ...prev, turbulence }));
+  }, []);
+
+  const setShowHull = useCallback((showHull: boolean) => {
+    setConfig((prev) => ({ ...prev, showHull }));
+  }, []);
+
+  const setFlipY = useCallback((flipY: boolean) => {
+    setConfig((prev) => ({ ...prev, flipY }));
+  }, []);
+
+  const setShowEmbers = useCallback((showEmbers: boolean) => {
+    setConfig((prev) => ({ ...prev, showEmbers }));
+  }, []);
+
+  const triggerViolationBurst = useCallback((durationMs = 2800) => {
+    setConfig((prev) => ({
+      ...prev,
+      state: "violation",
+      intensity: 1.45,
+      turbulence: 1.5,
+      speed: 1.6,
+    }));
     setTimeout(() => {
-      setConfig((prev) => ({ ...prev, state: "active" }));
+      setConfig((prev) => ({
+        ...prev,
+        state: "magma",
+        intensity: 1.15,
+        turbulence: 1.0,
+        speed: 1.0,
+      }));
     }, durationMs);
-  };
+  }, []);
+
+  const triggerCelebrationBurst = useCallback((durationMs = 3200) => {
+    setConfig((prev) => ({
+      ...prev,
+      state: "celebration",
+      intensity: 1.5,
+      coreHeat: 1.6,
+      speed: 1.3,
+    }));
+    setTimeout(() => {
+      setConfig((prev) => ({
+        ...prev,
+        state: "magma",
+        intensity: 1.15,
+        coreHeat: 1.25,
+        speed: 1.0,
+      }));
+    }, durationMs);
+  }, []);
+
+  const resetToDefaults = useCallback(() => {
+    setConfig(DEFAULT_CONFIG);
+  }, []);
+
+  const contextValue = useMemo(
+    () => ({
+      config,
+      setConfig,
+      setState,
+      setIntensity,
+      setSpeed,
+      setSpread,
+      setCoreHeat,
+      setTurbulence,
+      setShowHull,
+      setFlipY,
+      setShowEmbers,
+      triggerViolationBurst,
+      triggerCelebrationBurst,
+      resetToDefaults,
+    }),
+    [
+      config,
+      setState,
+      setIntensity,
+      setSpeed,
+      setSpread,
+      setCoreHeat,
+      setTurbulence,
+      setShowHull,
+      setFlipY,
+      setShowEmbers,
+      triggerViolationBurst,
+      triggerCelebrationBurst,
+      resetToDefaults,
+    ]
+  );
 
   return (
-    <BackgroundContext.Provider
-      value={{
-        config,
-        setConfig,
-        setMode,
-        setState,
-        triggerViolationBurst,
-        triggerCelebrationBurst,
-      }}
-    >
-      <YearboundBackground
-        mode={config.mode}
-        state={config.state}
-        showEmbers={config.showEmbers}
-        dimmerOpacity={config.dimmerOpacity}
-      >
-        {children}
-      </YearboundBackground>
+    <BackgroundContext.Provider value={contextValue}>
+      {children}
     </BackgroundContext.Provider>
   );
 }

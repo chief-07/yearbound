@@ -1,265 +1,479 @@
 "use client";
 
 import React, { useState } from "react";
-import Link from "next/link";
-import {
-  Shield,
-  Brain,
-  Lock,
-  Trophy,
-  ArrowRight,
-  Play,
-  Sparkles,
-} from "lucide-react";
-import { SolarCompass } from "@/components/ui/solar-compass";
-import {
-  YearboundBackground,
-  useYearboundBackground,
-  YearboundBackgroundProvider,
-  type BackgroundState,
-} from "@/components/ui/yearbound-background";
-import { MobileWalletView } from "@/components/ui/mobile-wallet-view";
+import { Plus, Trash2, ArrowRight, ArrowLeft, Check, Lock, Copy } from "lucide-react";
 
-function YearboundShowcaseContent() {
-  const { config, triggerViolationBurst, triggerCelebrationBurst, setState } =
-    useYearboundBackground();
+/* ==========================================================================
+   YEARBOUND PROTOCOL FLOW
+   - Screen 1: Resolution & Rules Builder (Title + Condition)
+   - Screen 2: Penalty Stakes & Escrow Setup (Spacious, Uncluttered, Pure B&W)
+   - Screen 3: Vault Active Confirmation (Walrus Proof)
+   - Clean, well-spaced layout with zero visual slop
+   - Universal typography: Outfit Sans
+   - Walrus Snackbar feedback upon commit
+   ========================================================================== */
 
-  const [activeNav, setActiveNav] = useState("Home");
-
-  return (
-    <div className="relative min-h-screen flex flex-col justify-between">
-      {/* ======================================================================
-          TOP NAVIGATION BAR (Matching Reference Image)
-          ====================================================================== */}
-      <header className="w-full max-w-7xl mx-auto px-6 py-6 flex items-center justify-between z-20">
-        {/* Brand Logo */}
-        <div className="flex items-center gap-2.5 cursor-pointer">
-          <SolarCompass size={28} glow={true} />
-          <span className="font-serif text-2xl font-bold tracking-tight bg-gradient-to-r from-[#FFF2DE] to-[#FFAA44] bg-clip-text text-transparent">
-            Yearbound
-          </span>
-        </div>
-
-        {/* Center Nav Links */}
-        <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-[#A39E99]">
-          {["About", "How It Works", "Features", "FAQ"].map((item) => (
-            <button
-              key={item}
-              onClick={() => setActiveNav(item)}
-              className={`transition-colors hover:text-white ${
-                activeNav === item ? "text-[#FF8800] font-semibold" : ""
-              }`}
-            >
-              {item}
-            </button>
-          ))}
-        </nav>
-
-        {/* Right Action Pill */}
-        <div className="flex items-center gap-3">
-          {/* Quick Demo Flare State Toggles */}
-          <div className="hidden lg:flex items-center gap-1.5 bg-black/40 border border-white/10 rounded-full px-2.5 py-1 text-[11px] font-mono text-neutral-400">
-            <span>Flare State:</span>
-            <button
-              onClick={() => setState("active")}
-              className={`px-2 py-0.5 rounded-full transition-all ${
-                config.state === "active"
-                  ? "bg-[#FF6600] text-white font-semibold"
-                  : "hover:text-white"
-              }`}
-            >
-              Magma
-            </button>
-            <button
-              onClick={() => triggerViolationBurst(3000)}
-              className={`px-2 py-0.5 rounded-full transition-all ${
-                config.state === "violation"
-                  ? "bg-[#D82A00] text-white font-semibold"
-                  : "hover:text-[#FF6644]"
-              }`}
-            >
-              Penalty Surge
-            </button>
-            <button
-              onClick={() => triggerCelebrationBurst(3500)}
-              className={`px-2 py-0.5 rounded-full transition-all ${
-                config.state === "celebrate"
-                  ? "bg-[#FFAA00] text-black font-semibold"
-                  : "hover:text-[#FFD066]"
-              }`}
-            >
-              Christmas
-            </button>
-          </div>
-
-          <button
-            onClick={() => triggerCelebrationBurst(3000)}
-            className="btn-flare-primary rounded-full px-5 py-2 text-xs sm:text-sm font-semibold tracking-wide flex items-center gap-1.5 shadow-lg"
-          >
-            <span>Get Started</span>
-            <ArrowRight size={14} />
-          </button>
-        </div>
-      </header>
-
-      {/* ======================================================================
-          MAIN HERO VIEWPORT (Desktop Showcase Left + Mobile App Right)
-          ====================================================================== */}
-      <main className="w-full max-w-7xl mx-auto px-6 py-4 flex-1 flex flex-col justify-center z-10">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
-          {/* LEFT COLUMN: Editorial Hero Showcase */}
-          <div className="lg:col-span-7 space-y-8 pr-0 lg:pr-6">
-            <div className="space-y-4">
-              <h1 className="font-serif text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-[#F5F2EB] leading-[1.08]">
-                Make a Pact <br />
-                with Your{" "}
-                <span className="italic font-normal bg-gradient-to-r from-[#FF9433] via-[#FFAF52] to-[#FF7011] bg-clip-text text-transparent drop-shadow-[0_0_20px_rgba(255,110,20,0.45)]">
-                  Future Self.
-                </span>
-              </h1>
-
-              <p className="text-base sm:text-lg text-[#9E968F] font-normal max-w-lg leading-relaxed pt-1">
-                Set your goals. Stay accountable. <br />
-                Let Yearbound keep you on track — all year long.
-              </p>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex flex-wrap items-center gap-4 pt-1">
-              <button
-                onClick={() => triggerViolationBurst(2500)}
-                className="btn-flare-primary rounded-full px-7 py-3.5 text-sm font-semibold tracking-wide flex items-center gap-2 shadow-xl"
-              >
-                <span>Start Your Year</span>
-                <ArrowRight size={16} />
-              </button>
-
-              <button
-                onClick={() => triggerCelebrationBurst(3000)}
-                className="btn-flare-secondary rounded-full px-6 py-3.5 text-sm font-semibold tracking-wide flex items-center gap-2"
-              >
-                <Play size={14} className="fill-current text-[#FFAA55]" />
-                <span>Learn More</span>
-              </button>
-            </div>
-
-            {/* 4 Feature Value Pillars (Matching Reference Image Bottom) */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-6 border-t border-white/10">
-              {/* Pillar 1 */}
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2 text-[#FF8822]">
-                  <Shield size={16} />
-                  <span className="text-xs font-bold text-[#E8DFD3]">
-                    Set Commitments
-                  </span>
-                </div>
-                <p className="text-[11px] text-[#8C857E] leading-relaxed">
-                  Define your goals for the year.
-                </p>
-              </div>
-
-              {/* Pillar 2 */}
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2 text-[#FF9933]">
-                  <Brain size={16} />
-                  <span className="text-xs font-bold text-[#E8DFD3]">
-                    Get Checked
-                  </span>
-                </div>
-                <p className="text-[11px] text-[#8C857E] leading-relaxed">
-                  We&apos;ll review transactions against your rules.
-                </p>
-              </div>
-
-              {/* Pillar 3 */}
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2 text-[#FF6611]">
-                  <Lock size={16} />
-                  <span className="text-xs font-bold text-[#E8DFD3]">
-                    Face Consequences
-                  </span>
-                </div>
-                <p className="text-[11px] text-[#8C857E] leading-relaxed">
-                  Break a rule? A penalty is applied.
-                </p>
-              </div>
-
-              {/* Pillar 4 */}
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2 text-[#FFAA22]">
-                  <Trophy size={16} />
-                  <span className="text-xs font-bold text-[#E8DFD3]">
-                    Unlock Rewards
-                  </span>
-                </div>
-                <p className="text-[11px] text-[#8C857E] leading-relaxed">
-                  Stay consistent and get your funds back.
-                </p>
-              </div>
-            </div>
-
-            {/* Bottom Slogan Banner (From Reference Mockup) */}
-            <div className="pt-2">
-              <div className="solar-card rounded-2xl p-4 border border-[#FF6600]/20 flex items-center justify-between">
-                <div>
-                  <h3 className="font-serif text-lg text-[#F5F2EB]">
-                    A year of discipline.{" "}
-                    <span className="italic text-[#FF8D33]">
-                      A lifetime of progress.
-                    </span>
-                  </h3>
-                  <p className="text-xs text-[#9E968F] mt-0.5">
-                    Decentralized memory on Walrus Mainnet. Sui time-locked escrow.
-                  </p>
-                </div>
-                <div className="hidden sm:block">
-                  <SolarCompass size={32} glow={false} />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* RIGHT COLUMN: Mobile App Interface (Exact Reference Parity) */}
-          <div className="lg:col-span-5 flex justify-center lg:justify-end">
-            <MobileWalletView onTriggerSurge={() => triggerViolationBurst(2800)} />
-          </div>
-        </div>
-      </main>
-
-      {/* ======================================================================
-          FOOTER INFRASTRUCTURE STATUS
-          ====================================================================== */}
-      <footer className="w-full max-w-7xl mx-auto px-6 py-6 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between text-xs text-[#8C857E] font-mono z-20 gap-3">
-        <div className="flex items-center gap-2">
-          <SolarCompass size={14} glow={false} />
-          <span>Yearbound Protocol © 2026</span>
-          <span className="text-neutral-600">•</span>
-          <span>Total Recall Edition</span>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5 text-emerald-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span>Walrus Memory Mainnet</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-[#FFAA44]">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#FFAA44]" />
-            <span>Tatum Sui RPC Gateway</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-[#FF6622]">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#FF6622]" />
-            <span>x402 Protocol</span>
-          </div>
-        </div>
-      </footer>
-    </div>
-  );
+export interface RuleItem {
+  id: string;
+  title: string;
+  condition: string;
+  penalty: number;
 }
 
-export default function HomePage() {
+const PENALTY_PRESETS = [5, 10, 25, 50];
+
+export default function YearboundApp() {
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+
+  // Screen 1: Rules
+  const [rules, setRules] = useState<RuleItem[]>([
+    { id: "1", title: "", condition: "", penalty: 10 },
+  ]);
+
+  // Screen 2: Escrow Settings
+  const [escrowDeposit] = useState<number>(10);
+  const [unlockDate] = useState<string>("Dec 25, 2026");
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  // Walrus feedback & proof
+  const [walrusBlobId, setWalrusBlobId] = useState<string>("");
+  const [showSnackbar, setShowSnackbar] = useState<boolean>(false);
+  const [copiedBlob, setCopiedBlob] = useState<boolean>(false);
+
+  // Rule management
+  const addRule = () => {
+    setRules((prev) => [
+      ...prev,
+      { id: Date.now().toString(), title: "", condition: "", penalty: 10 },
+    ]);
+  };
+
+  const updateRule = (id: string, field: keyof RuleItem, value: string | number) => {
+    setRules((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, [field]: value } : r))
+    );
+  };
+
+  const removeRule = (id: string) => {
+    if (rules.length <= 1) return;
+    setRules((prev) => prev.filter((r) => r.id !== id));
+  };
+
+  // Step 1 Validation: At least one rule with a non-empty title
+  const isStep1Valid = rules.some((r) => r.title.trim().length > 0);
+
+  // Step 2 Submission to Walrus
+  const handleLockVault = async () => {
+    setIsSubmitting(true);
+    try {
+      const activeRules = rules.filter((r) => r.title.trim().length > 0);
+      const res = await fetch("/api/walrus", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rules: activeRules,
+          initialDepositSui: escrowDeposit,
+          unlockDate: "2026-12-25",
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success && data.primaryBlobId) {
+        setWalrusBlobId(data.primaryBlobId);
+        setShowSnackbar(true);
+        setStep(3);
+
+        // Auto-dismiss snackbar after 6 seconds
+        setTimeout(() => {
+          setShowSnackbar(false);
+        }, 6000);
+      } else {
+        alert(data.error || "Failed to commit pact to Walrus.");
+      }
+    } catch {
+      alert("Network error connecting to Walrus memory.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const copyBlobId = () => {
+    if (!walrusBlobId) return;
+    navigator.clipboard.writeText(walrusBlobId);
+    setCopiedBlob(true);
+    setTimeout(() => setCopiedBlob(false), 2000);
+  };
+
   return (
-    <YearboundBackgroundProvider>
-      <YearboundShowcaseContent />
-    </YearboundBackgroundProvider>
+    <main className="min-h-screen w-full bg-[#000000] text-[#FFFFFF] flex items-center justify-center p-0 md:p-6 select-none overflow-x-hidden font-sans">
+      {/* ====================================================================
+          MOBILE SHELL (Centered vertical frame on desktop, black sides)
+          ==================================================================== */}
+      <div className="relative w-full max-w-[420px] h-[100dvh] md:h-[860px] md:max-h-[92vh] bg-[#000000] md:border md:border-[#27272A] md:rounded-[40px] flex flex-col justify-between overflow-hidden shadow-2xl">
+        
+        {/* ==================================================================
+            SCREEN 1: RESOLUTION BUILDER
+            ================================================================== */}
+        {step === 1 && (
+          <>
+            {/* Header: Clean, generous spacing */}
+            <div className="pt-12 sm:pt-14 px-7 pb-4">
+              <div className="text-[30px] sm:text-[34px] font-semibold tracking-[-0.02em] leading-tight text-white">
+                Write your resolutions
+              </div>
+            </div>
+
+            {/* Scrollable Rules List */}
+            <div className="flex-1 overflow-y-auto px-7 py-3 flex flex-col gap-5 pb-6">
+              {rules.map((rule, index) => (
+                <div
+                  key={rule.id}
+                  className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-4 relative focus-within:border-[#52525B] transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-mono text-[#71717A] uppercase tracking-wider">
+                      Rule 0{index + 1}
+                    </span>
+                    {rules.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeRule(rule.id)}
+                        className="text-[#71717A] hover:text-[#EF4444] p-1 transition-colors"
+                        title="Remove rule"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <label className="text-[12px] font-medium text-[#A1A1AA]">
+                      Title
+                    </label>
+                    <input
+                      type="text"
+                      value={rule.title}
+                      onChange={(e) => updateRule(rule.id, "title", e.target.value)}
+                      placeholder="e.g. No Late-Night Takeout"
+                      className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-4 py-3 text-sm text-white placeholder-[#52525B] outline-none focus:border-[#FFFFFF] transition-colors"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <label className="text-[12px] font-medium text-[#A1A1AA]">
+                      Condition
+                    </label>
+                    <textarea
+                      value={rule.condition}
+                      onChange={(e) => updateRule(rule.id, "condition", e.target.value)}
+                      placeholder="e.g. Any food delivery ordered between 10 PM and 5 AM"
+                      rows={2}
+                      className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-4 py-2.5 text-sm text-white placeholder-[#52525B] outline-none focus:border-[#FFFFFF] transition-colors resize-none leading-relaxed"
+                    />
+                  </div>
+                </div>
+              ))}
+
+              <button
+                type="button"
+                onClick={addRule}
+                className="w-full py-3.5 px-4 border border-dashed border-[#2E2E33] hover:border-[#52525B] hover:bg-[#0A0A0C] text-[#A1A1AA] hover:text-white rounded-2xl flex items-center justify-center gap-2 text-sm font-medium transition-colors"
+              >
+                <Plus size={16} />
+                <span>Add another rule</span>
+              </button>
+            </div>
+
+            {/* Bottom CTA */}
+            <div className="p-7 border-t border-[#18181B] bg-[#000000]">
+              <button
+                type="button"
+                onClick={() => setStep(2)}
+                disabled={!isStep1Valid}
+                className={`w-full py-4 px-6 rounded-full font-semibold text-sm transition-all flex items-center justify-center gap-2 ${
+                  isStep1Valid
+                    ? "bg-[#FFFFFF] text-[#000000] hover:bg-[#E4E4E7] active:scale-[0.98]"
+                    : "bg-[#222226] text-[#52525B] cursor-not-allowed"
+                }`}
+              >
+                <span>Next</span>
+                <ArrowRight size={16} />
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ==================================================================
+            SCREEN 2: PENALTY STAKES & ESCROW SETUP
+            - Clean, well-spaced, uncluttered layout
+            - Rule titles with clean SUI preset buttons
+            - Quiet single-surface escrow lock card
+            ================================================================== */}
+        {step === 2 && (
+          <>
+            {/* Header: Back navigation & Title with generous whitespace */}
+            <div className="pt-10 sm:pt-12 px-7 pb-4 flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={() => setStep(1)}
+                className="self-start text-[#71717A] hover:text-white flex items-center gap-1.5 text-xs font-medium transition-colors"
+              >
+                <ArrowLeft size={14} />
+                <span>Back</span>
+              </button>
+              <div className="text-[30px] sm:text-[34px] font-semibold tracking-[-0.02em] leading-tight text-white">
+                Set your penalties
+              </div>
+            </div>
+
+            {/* Content Area: Well-Spaced, Calmer Visual Flow */}
+            <div className="flex-1 overflow-y-auto px-7 py-3 flex flex-col gap-5 pb-6">
+              {/* Rules Cards */}
+              {rules
+                .filter((r) => r.title.trim().length > 0)
+                .map((rule, idx) => (
+                  <div
+                    key={rule.id}
+                    className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-4"
+                  >
+                    {/* Top Row: Rule Index & Active Selected Stake */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-mono text-[#71717A] uppercase tracking-wider">
+                        Rule 0{idx + 1}
+                      </span>
+                      <span className="text-xs font-mono font-medium text-white bg-[#18181C] px-2 py-0.5 rounded-md border border-[#27272A]">
+                        {rule.penalty} SUI
+                      </span>
+                    </div>
+
+                    {/* Rule Title & Condition */}
+                    <div className="flex flex-col gap-1">
+                      <div className="text-base font-semibold text-white tracking-[-0.01em]">
+                        {rule.title}
+                      </div>
+                      {rule.condition && (
+                        <p className="text-xs text-[#71717A] leading-relaxed mt-0.5">
+                          {rule.condition}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Penalty preset selection */}
+                    <div className="flex flex-col gap-2 pt-1 border-t border-[#18181C]">
+                      <div className="text-[11px] font-medium text-[#71717A] uppercase tracking-wider">
+                        Stake per breach
+                      </div>
+                      <div className="grid grid-cols-4 gap-2">
+                        {PENALTY_PRESETS.map((amt) => {
+                          const isSelected = rule.penalty === amt;
+                          return (
+                            <button
+                              key={amt}
+                              type="button"
+                              onClick={() => updateRule(rule.id, "penalty", amt)}
+                              className={`py-2.5 text-center rounded-xl text-xs font-medium transition-all ${
+                                isSelected
+                                  ? "bg-[#FFFFFF] text-[#000000] font-semibold shadow-sm"
+                                  : "bg-[#131316] text-[#A1A1AA] border border-[#27272A] hover:border-[#52525B] hover:text-white"
+                              }`}
+                            >
+                              {amt} SUI
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+              {/* Escrow Parameters: Quiet, Uncluttered, Single Surface */}
+              <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-3.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-mono text-[#71717A] uppercase tracking-wider">
+                    Escrow Vault Lock
+                  </span>
+                  <Lock size={12} className="text-[#71717A]" />
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-xs text-[#A1A1AA]">Locked Until</span>
+                  <span className="text-xs text-white font-medium">{unlockDate}</span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-[#A1A1AA]">Initial Escrow Deposit</span>
+                  <span className="text-xs text-white font-mono font-medium">{escrowDeposit} SUI</span>
+                </div>
+
+                <div className="flex items-center justify-between border-t border-[#18181C] pt-2.5">
+                  <span className="text-xs text-[#71717A]">Memory Proof</span>
+                  <span className="text-xs text-[#A1A1AA]">Walrus Network</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom CTA */}
+            <div className="p-7 border-t border-[#18181B] bg-[#000000]">
+              <button
+                type="button"
+                onClick={handleLockVault}
+                disabled={isSubmitting}
+                className={`w-full py-4 px-6 rounded-full font-semibold text-sm transition-all flex items-center justify-center gap-2 ${
+                  isSubmitting
+                    ? "bg-[#222226] text-[#71717A] cursor-wait"
+                    : "bg-[#FFFFFF] text-[#000000] hover:bg-[#E4E4E7] active:scale-[0.98]"
+                }`}
+              >
+                {isSubmitting ? (
+                  <span>Saving to Walrus...</span>
+                ) : (
+                  <>
+                    <span>Lock Vault & Commit</span>
+                    <ArrowRight size={16} />
+                  </>
+                )}
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ==================================================================
+            SCREEN 3: VAULT ACTIVE / CONFIRMED PACT
+            ================================================================== */}
+        {step === 3 && (
+          <>
+            <div className="pt-12 sm:pt-14 px-7 pb-4">
+              <div className="text-[30px] sm:text-[34px] font-semibold tracking-[-0.02em] leading-tight text-white">
+                Vault locked
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-7 py-3 flex flex-col gap-5 pb-6">
+              {/* Status Summary Card */}
+              <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-mono text-[#71717A] uppercase tracking-wider">
+                    Pact Status
+                  </span>
+                  <span className="text-xs font-medium text-white flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
+                    Active
+                  </span>
+                </div>
+
+                <div className="flex flex-col gap-1 border-t border-[#18181C] pt-3">
+                  <span className="text-xs text-[#71717A]">Time-Locked Until</span>
+                  <span className="text-lg font-medium text-white">{unlockDate}</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 border-t border-[#18181C] pt-3">
+                  <div className="flex flex-col">
+                    <span className="text-xs text-[#71717A]">Escrow Stake</span>
+                    <span className="text-sm font-mono text-white mt-0.5">{escrowDeposit} SUI</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-xs text-[#71717A]">Rules Bound</span>
+                    <span className="text-sm font-mono text-white mt-0.5">
+                      {rules.filter((r) => r.title.trim().length > 0).length} Rules
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Walrus Memory Proof Card */}
+              <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-mono text-[#71717A] uppercase tracking-wider">
+                    Walrus Memory Proof
+                  </span>
+                  <Check size={13} className="text-white" />
+                </div>
+                <div className="bg-[#131316] border border-[#27272A] rounded-xl p-3 flex items-center justify-between gap-2">
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-[10px] text-[#71717A] uppercase tracking-wider">Blob ID</span>
+                    <span className="text-xs font-mono text-white truncate">
+                      {walrusBlobId || "blob_simulated_proof"}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={copyBlobId}
+                    className="text-[#A1A1AA] hover:text-white p-1.5 transition-colors"
+                    title="Copy Blob ID"
+                  >
+                    {copiedBlob ? <Check size={14} className="text-white" /> : <Copy size={14} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Committed Rules List */}
+              <div className="flex flex-col gap-2.5 pt-1">
+                <span className="text-[11px] font-mono text-[#71717A] uppercase tracking-wider">
+                  Enforced Rules
+                </span>
+                {rules
+                  .filter((r) => r.title.trim().length > 0)
+                  .map((rule, idx) => (
+                    <div
+                      key={rule.id}
+                      className="bg-[#0A0A0C] border border-[#222226] rounded-xl p-4 flex items-center justify-between"
+                    >
+                      <div className="flex flex-col min-w-0 pr-3">
+                        <span className="text-[11px] text-[#71717A]">Rule 0{idx + 1}</span>
+                        <span className="text-sm font-medium text-white truncate mt-0.5">{rule.title}</span>
+                      </div>
+                      <span className="text-xs font-mono font-medium text-[#FFFFFF] shrink-0 bg-[#18181C] px-2 py-0.5 rounded border border-[#27272A]">
+                        {rule.penalty} SUI
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+
+            {/* Bottom Actions */}
+            <div className="p-7 border-t border-[#18181B] bg-[#000000]">
+              <button
+                type="button"
+                onClick={() => {
+                  setStep(1);
+                  setRules([{ id: "1", title: "", condition: "", penalty: 10 }]);
+                }}
+                className="w-full py-4 px-6 rounded-full font-medium text-xs text-[#A1A1AA] hover:text-white bg-[#131316] border border-[#27272A] hover:border-[#52525B] transition-all"
+              >
+                Create another resolution
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ==================================================================
+            WALRUS FEEDBACK SNACKBAR
+            - Non-sloppy, quiet monochrome feedback
+            - Minimal checkmark, blob reference
+            ================================================================== */}
+        {showSnackbar && (
+          <div className="absolute bottom-6 left-5 right-5 z-50 bg-[#141417] border border-[#3F3F46] rounded-2xl p-4 shadow-2xl flex items-center justify-between gap-3 animate-in fade-in slide-in-from-bottom-3 duration-200">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-5 h-5 rounded-full bg-white text-black flex items-center justify-center shrink-0">
+                <Check size={12} strokeWidth={3} />
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="text-xs font-semibold text-white">Saved to Walrus</span>
+                <span className="text-[11px] font-mono text-[#A1A1AA] truncate">
+                  Blob #{walrusBlobId ? `${walrusBlobId.slice(0, 12)}...` : "d4a97f2e..."}
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowSnackbar(false)}
+              className="text-[#71717A] hover:text-white text-xs px-2 py-1 transition-colors"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+      </div>
+    </main>
   );
 }
