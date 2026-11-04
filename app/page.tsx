@@ -97,6 +97,13 @@ export default function YearboundApp() {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [activeTab, setActiveTab] = useState<NavTab>("home");
   const [expandedRuleId, setExpandedRuleId] = useState<string | null>("1");
+  const [scrollContainerHeight, setScrollContainerHeight] = useState<number>(680);
+
+  const scrollContainerRef = React.useCallback((node: HTMLDivElement | null) => {
+    if (node !== null) {
+      setScrollContainerHeight(node.clientHeight);
+    }
+  }, []);
 
   // Live Date
   const [currentDateStr, setCurrentDateStr] = useState<string>("");
@@ -581,6 +588,7 @@ export default function YearboundApp() {
             </div>
 
             <div
+              ref={scrollContainerRef}
               onClick={handleCloseActiveRule}
               className="flex-1 overflow-y-auto px-7 py-2 flex flex-col pb-4 overscroll-contain"
             >
@@ -633,12 +641,13 @@ export default function YearboundApp() {
                 })}
               </div>
 
-              {/* DYNAMIC PILL CONTAINER (Rests at center ~210px until stack reaches it, then goes downwards with 14px gap) */}
+              {/* DYNAMIC PILL CONTAINER (Rests at true center middle of screen until stack reaches it, then goes downwards) */}
               {(() => {
                 const minimizedCount = rules.filter((r) => r.id !== expandedRuleId).length;
                 const currentStackHeight = minimizedCount * 60;
-                // Target center resting position is ~210px from top. Once stack reaches/passes 210px, joins with 14px spacing
-                const pillMarginTop = Math.max(14, 210 - currentStackHeight);
+                // Target center is dynamically calculated to place the pill in the center middle of the screen
+                const targetCenter = Math.max(280, Math.floor(scrollContainerHeight * 0.44));
+                const pillMarginTop = Math.max(14, targetCenter - currentStackHeight);
                 const expandedRule = rules.find((r) => r.id === expandedRuleId);
                 const expandedIndex = expandedRule ? rules.findIndex((r) => r.id === expandedRule.id) : -1;
 
@@ -663,10 +672,10 @@ export default function YearboundApp() {
                               type="button"
                               onClick={handleCloseActiveRule}
                               disabled={!expandedRule.title.trim() || !expandedRule.condition.trim()}
-                              className={`text-xs px-3.5 py-1 rounded-full transition-all duration-150 shadow-sm ${
+                              className={`text-xs font-bold tracking-wider transition-colors duration-150 ${
                                 expandedRule.title.trim() && expandedRule.condition.trim()
-                                  ? "bg-white text-black font-bold hover:bg-[#E4E4E7] active:scale-95 cursor-pointer"
-                                  : "bg-[#222226] text-[#52525B] font-semibold cursor-not-allowed"
+                                  ? "text-white hover:text-[#E4E4E7] cursor-pointer"
+                                  : "text-[#52525B] cursor-not-allowed"
                               }`}
                             >
                               Done
@@ -686,7 +695,7 @@ export default function YearboundApp() {
 
                         <div className="flex flex-col gap-1.5">
                           <label className="text-[11px] font-medium text-[#A1A1AA]">
-                            Title <span className="text-[#EF4444]">*</span>
+                            Title
                           </label>
                           <input
                             type="text"
@@ -699,12 +708,9 @@ export default function YearboundApp() {
                         </div>
 
                         <div className="flex flex-col gap-1.5">
-                          <div className="flex items-center justify-between">
-                            <label className="text-[11px] font-medium text-[#A1A1AA]">
-                              Condition <span className="text-[#EF4444]">*</span>
-                            </label>
-                            <span className="text-[10px] font-mono text-[#71717A]">Compulsory</span>
-                          </div>
+                          <label className="text-[11px] font-medium text-[#A1A1AA]">
+                            Condition
+                          </label>
                           <textarea
                             value={expandedRule.condition}
                             onChange={(e) => updateRule(expandedRule.id, "condition", e.target.value)}
