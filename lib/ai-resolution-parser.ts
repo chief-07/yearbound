@@ -65,6 +65,7 @@ export async function analyzeResolutionWithGemini(
       output: Output.object({
         schema: ResolutionAnalysisSchema,
       }),
+      abortSignal: AbortSignal.timeout(8000),
       system:
         "You are the analytical engine for Yearbound, an accountable consumer finance platform. " +
         "Users set New Year's resolutions with financial penalties deposited into a time-locked Sui vault. " +

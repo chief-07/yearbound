@@ -49,26 +49,37 @@ export function getOrCreateRealKeypair(): { keypair: Ed25519Keypair; isNew: bool
     return { keypair: kp, isNew: true };
   }
 
-  const existingHex = localStorage.getItem(REAL_WALLET_STORAGE_KEY);
-  if (existingHex) {
+  const existingSecret = localStorage.getItem(REAL_WALLET_STORAGE_KEY);
+  if (existingSecret) {
     try {
-      const bytes = fromHex(existingHex);
-      const kp = Ed25519Keypair.fromSecretKey(bytes);
-      return { keypair: kp, isNew: false };
+      // 1. Direct suiprivkey bech32 string
+      if (existingSecret.startsWith("suiprivkey")) {
+        const kp = Ed25519Keypair.fromSecretKey(existingSecret);
+        return { keypair: kp, isNew: false };
+      }
+
+      // 2. Raw hex or legacy ASCII buffer
+      const raw = fromHex(existingSecret.startsWith("0x") ? existingSecret.slice(2) : existingSecret);
+      if (raw.length === 32) {
+        const kp = Ed25519Keypair.fromSecretKey(raw);
+        return { keypair: kp, isNew: false };
+      }
+      
+      const decodedStr = new TextDecoder().decode(raw);
+      if (decodedStr.startsWith("suiprivkey")) {
+        const kp = Ed25519Keypair.fromSecretKey(decodedStr);
+        return { keypair: kp, isNew: false };
+      }
     } catch (err) {
       console.warn("[Wallet] Failed to restore real keypair from storage, generating new one:", err);
     }
   }
 
   const newKp = new Ed25519Keypair();
-  const secretBytes = newKp.getSecretKey();
-  // SecretKey can be a bech32 string or raw bytes depending on SDK version
-  const secretHex = typeof secretBytes === "string" 
-    ? Buffer.from(secretBytes).toString("hex")
-    : toHex(secretBytes);
+  const secretKeyStr = newKp.getSecretKey();
 
   try {
-    localStorage.setItem(REAL_WALLET_STORAGE_KEY, secretHex);
+    localStorage.setItem(REAL_WALLET_STORAGE_KEY, secretKeyStr);
   } catch (err) {
     console.warn("[Wallet] Could not persist real keypair to localStorage:", err);
   }

@@ -162,6 +162,7 @@ export default function YearboundApp() {
   const [escrowDeposit, setEscrowDeposit] = useState<number>(10);
   const [unlockDate] = useState<string>("Dec 25, 2026");
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [sealingStage, setSealingStage] = useState<string>("");
 
   // Screen 3: Account / Wallet Selection
   const [accountType, setAccountType] = useState<AccountType>("demo");
@@ -322,6 +323,17 @@ export default function YearboundApp() {
   // Step 3 Submission to Walrus
   const handleLockVault = async () => {
     setIsSubmitting(true);
+    setSealingStage("Parsing oaths with Gemini 3.5 Flash...");
+    const t1 = setTimeout(() => {
+      setSealingStage("Encrypting & chunking memories for Walrus...");
+    }, 2200);
+    const t2 = setTimeout(() => {
+      setSealingStage("Sealing resolution contracts to Walrus Mainnet (parallel)...");
+    }, 5000);
+    const t3 = setTimeout(() => {
+      setSealingStage("Anchoring Genesis Pact manifest to Sui...");
+    }, 18000);
+
     try {
       const activeRules = rules.filter((r) => r.title.trim().length > 0);
       const activeAccountAddress =
@@ -433,7 +445,11 @@ export default function YearboundApp() {
     } catch {
       alert("Network error connecting to Walrus memory.");
     } finally {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
       setIsSubmitting(false);
+      setSealingStage("");
     }
   };
 
@@ -1255,9 +1271,9 @@ export default function YearboundApp() {
                 }`}
               >
                 {isSubmitting ? (
-                  <span className="flex items-center gap-2">
-                    <span className="w-3.5 h-3.5 border-2 border-[#71717A] border-t-white rounded-full animate-spin inline-block" />
-                    <span>Sealing to Walrus Mainnet...</span>
+                  <span className="flex items-center justify-center gap-2 max-w-full px-2">
+                    <span className="w-3.5 h-3.5 border-2 border-[#71717A] border-t-white rounded-full animate-spin inline-block shrink-0" />
+                    <span className="truncate text-xs text-[#E4E4E7] font-mono tracking-tight">{sealingStage || "Sealing to Walrus Mainnet..."}</span>
                   </span>
                 ) : (
                   <>

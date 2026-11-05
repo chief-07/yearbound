@@ -1,3 +1,10 @@
+import dns from "node:dns";
+
+// Windows IPv4 lookup precedence to avoid ENOTFOUND on Railway/Walrus relayer
+if (typeof dns?.setDefaultResultOrder === "function") {
+  dns.setDefaultResultOrder("ipv4first");
+}
+
 import { NextResponse } from "next/server";
 import {
   walrusService,
@@ -61,52 +68,43 @@ export async function POST(req: Request) {
       }))
     );
 
-    // Step B: Persist each behavioral contract into Walrus Memory
-    const committedBlobs: {
-      ruleId: string;
-      blobId: string;
-      jobId: string;
-      title: string;
-      category: string;
-      penaltySui: number;
-      keywords: string[];
-      behavioralRule: string;
-      wallyRoastAngle: string;
-    }[] = [];
+    // Step B: Persist each behavioral contract into Walrus Memory concurrently in parallel
+    console.log(`[Walrus API] Committing ${analyzedRules.length} resolution blobs in parallel to Walrus Mainnet...`);
+    const committedBlobs = await Promise.all(
+      analyzedRules.map(async (analyzed) => {
+        const payload: CommitmentRulePayload = {
+          type: "commitment_rule",
+          commitment_id: pactId,
+          rule_id: analyzed.ruleId,
+          title: analyzed.originalTitle,
+          description: analyzed.originalCondition,
+          category: analyzed.category,
+          penalty_amount_sui: analyzed.penaltySui,
+          cadence: analyzed.cadence,
+          exceptions: analyzed.exceptions,
+          keywords: analyzed.keywords,
+          behavioral_rule: analyzed.behavioral_rule,
+          wally_roast_angle: analyzed.wally_roast_angle,
+          verbatim_oath: analyzed.verbatimOath,
+          wallet_address: walletAddress,
+          created_at: new Date().toISOString(),
+          status: "active",
+        };
 
-    for (const analyzed of analyzedRules) {
-      const payload: CommitmentRulePayload = {
-        type: "commitment_rule",
-        commitment_id: pactId,
-        rule_id: analyzed.ruleId,
-        title: analyzed.originalTitle,
-        description: analyzed.originalCondition,
-        category: analyzed.category,
-        penalty_amount_sui: analyzed.penaltySui,
-        cadence: analyzed.cadence,
-        exceptions: analyzed.exceptions,
-        keywords: analyzed.keywords,
-        behavioral_rule: analyzed.behavioral_rule,
-        wally_roast_angle: analyzed.wally_roast_angle,
-        verbatim_oath: analyzed.verbatimOath,
-        wallet_address: walletAddress,
-        created_at: new Date().toISOString(),
-        status: "active",
-      };
-
-      const rememberResult = await walrusService.remember(payload);
-      committedBlobs.push({
-        ruleId: analyzed.ruleId,
-        blobId: rememberResult.blobId,
-        jobId: rememberResult.jobId,
-        title: analyzed.originalTitle,
-        category: analyzed.category,
-        penaltySui: analyzed.penaltySui,
-        keywords: analyzed.keywords,
-        behavioralRule: analyzed.behavioral_rule,
-        wallyRoastAngle: analyzed.wally_roast_angle,
-      });
-    }
+        const rememberResult = await walrusService.remember(payload);
+        return {
+          ruleId: analyzed.ruleId,
+          blobId: rememberResult.blobId,
+          jobId: rememberResult.jobId,
+          title: analyzed.originalTitle,
+          category: analyzed.category,
+          penaltySui: analyzed.penaltySui,
+          keywords: analyzed.keywords,
+          behavioralRule: analyzed.behavioral_rule,
+          wallyRoastAngle: analyzed.wally_roast_angle,
+        };
+      })
+    );
 
     // Step C: Persist Master Genesis Pact manifest referencing all individual resolution blobs
     const genesisManifest: GenesisPactPayload = {
