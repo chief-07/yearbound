@@ -21,6 +21,7 @@ import {
   ChevronDown,
   ChevronUp,
   FileText,
+  Wallet,
 } from "lucide-react";
 import {
   DEMO_SUI_ADDRESS,
@@ -28,6 +29,9 @@ import {
   getOrCreateRealKeypair,
   getRealWalletInfo,
   exportRealPrivateKeyHex,
+  detectInstalledSuiWallet,
+  connectExtensionWallet,
+  type InstalledSuiWallet,
 } from "@/lib/wallet";
 
 /* ==========================================================================
@@ -168,6 +172,8 @@ export default function YearboundApp() {
   const [exportedKey, setExportedKey] = useState<string>("");
   const [isCheckingLiveBalance, setIsCheckingLiveBalance] = useState<boolean>(false);
   const [liveOnChainBalanceSui, setLiveOnChainBalanceSui] = useState<number | null>(null);
+  const [detectedExtension, setDetectedExtension] = useState<InstalledSuiWallet | null>(null);
+  const [isConnectingExtension, setIsConnectingExtension] = useState<boolean>(false);
 
   // Balances (Demo Sandbox pre-funded with 150 SUI)
   const [availableBalance, setAvailableBalance] = useState<number>(150);
@@ -205,7 +211,7 @@ export default function YearboundApp() {
   const [sendMemo, setSendMemo] = useState<string>("");
   const [breachReason, setBreachReason] = useState<string>("");
 
-  // Initialize real persistent self-custodial Sui keypair
+  // Initialize real persistent self-custodial Sui keypair and detect extensions
   useEffect(() => {
     if (typeof window !== "undefined") {
       try {
@@ -214,8 +220,27 @@ export default function YearboundApp() {
       } catch (e) {
         console.error("Failed to load real keypair:", e);
       }
+      const ext = detectInstalledSuiWallet();
+      setDetectedExtension(ext);
     }
   }, []);
+
+  // Connect to detected Sui wallet extension
+  const handleConnectExtension = async () => {
+    setIsConnectingExtension(true);
+    try {
+      const res = await connectExtensionWallet();
+      setLinkedAddress(res.address);
+      setAccountType("linked");
+      triggerSnackbar("Wallet Connected", `${res.walletName}: ${res.address.slice(0, 10)}...`);
+      refreshLiveBalance(res.address);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to connect wallet";
+      triggerSnackbar("Connection Failed", msg);
+    } finally {
+      setIsConnectingExtension(false);
+    }
+  };
 
   // Fetch live on-chain balance via Sui gRPC/RPC
   const refreshLiveBalance = async (targetAddress?: string) => {
@@ -1136,32 +1161,83 @@ export default function YearboundApp() {
                 )}
               </div>
 
-              {/* Option 3: Centered clickable text only */}
+              {/* Option 3: Link Wallet (Extension or Manual Paste) */}
               <div className="pt-2 flex flex-col items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowLinkInput(!showLinkInput);
-                    if (!showLinkInput) setAccountType("linked");
-                  }}
-                  className="text-xs font-medium text-[#71717A] hover:text-white transition-colors py-1.5 flex items-center gap-1.5 active:scale-95"
-                >
-                  <Plus size={13} />
-                  <span>Link existing wallet</span>
-                </button>
+                {detectedExtension ? (
+                  <button
+                    type="button"
+                    onClick={handleConnectExtension}
+                    disabled={isConnectingExtension}
+                    className="w-full py-3.5 px-4 rounded-2xl bg-[#0A0A0C] border border-[#27272A] hover:border-white text-xs font-medium text-white transition-all flex items-center justify-center gap-2 active:scale-[0.99]"
+                  >
+                    <Wallet size={14} className="text-[#A1A1AA]" />
+                    <span>
+                      {isConnectingExtension
+                        ? `Connecting ${detectedExtension.name}...`
+                        : `Connect ${detectedExtension.name} Extension`}
+                    </span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowLinkInput(!showLinkInput);
+                      if (!showLinkInput) setAccountType("linked");
+                    }}
+                    className="text-xs font-medium text-[#71717A] hover:text-white transition-colors py-1.5 flex items-center gap-1.5 active:scale-95"
+                  >
+                    <Plus size={13} />
+                    <span>Link an existing Sui address manually</span>
+                  </button>
+                )}
+
+                {detectedExtension && !showLinkInput && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowLinkInput(true);
+                      setAccountType("linked");
+                    }}
+                    className="text-[11px] text-[#71717A] hover:text-white transition-colors"
+                  >
+                    or enter address manually
+                  </button>
+                )}
 
                 {showLinkInput && (
-                  <div className="w-full mt-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                  <div className="w-full mt-1 animate-in fade-in slide-in-from-top-1 duration-200 flex flex-col gap-1.5">
                     <input
                       type="text"
                       value={linkedAddress}
                       onChange={(e) => {
-                        setLinkedAddress(e.target.value);
+                        const val = e.target.value.trim();
+                        setLinkedAddress(val);
                         setAccountType("linked");
+                        if (val.startsWith("0x") && val.length > 20) {
+                          refreshLiveBalance(val);
+                        }
                       }}
                       placeholder="Enter Sui address (0x...)"
                       className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-4 py-3 text-xs font-mono text-white placeholder-[#52525B] outline-none focus:border-white transition-colors"
                     />
+                    {linkedAddress && (
+                      <div className="flex items-center justify-between text-[10px] font-mono text-[#71717A] px-1">
+                        <span>
+                          {isCheckingLiveBalance
+                            ? "Querying RPC..."
+                            : `${liveOnChainBalanceSui !== null ? liveOnChainBalanceSui.toFixed(2) : "0.00"} SUI on Mainnet`}
+                        </span>
+                        <a
+                          href={`https://suiscan.xyz/mainnet/account/${linkedAddress}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="hover:text-white transition-colors flex items-center gap-1"
+                        >
+                          <span>SuiScan</span>
+                          <ExternalLink size={10} />
+                        </a>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

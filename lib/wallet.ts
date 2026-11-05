@@ -93,6 +93,72 @@ export function getRealWalletInfo(): WalletInfo {
 }
 
 // -----------------------------------------------------------------------------
+// SUI BROWSER WALLET EXTENSION INTEGRATION
+// Auto-detects installed Sui Wallet Standard extensions (Sui Wallet, Nightly, Slingshot)
+// -----------------------------------------------------------------------------
+export interface InstalledSuiWallet {
+  name: string;
+  provider: any;
+}
+
+export function detectInstalledSuiWallet(): InstalledSuiWallet | null {
+  if (typeof window === "undefined") return null;
+
+  const win = window as any;
+
+  if (win.suiWallet) {
+    return { name: "Sui Wallet", provider: win.suiWallet };
+  }
+  if (win.slingshot) {
+    return { name: "Slingshot", provider: win.slingshot };
+  }
+  if (win.nightly?.sui) {
+    return { name: "Nightly", provider: win.nightly.sui };
+  }
+  if (win.suiet) {
+    return { name: "Suiet", provider: win.suiet };
+  }
+
+  return null;
+}
+
+export async function connectExtensionWallet(): Promise<{ address: string; walletName: string }> {
+  const detected = detectInstalledSuiWallet();
+  if (!detected) {
+    throw new Error("No compatible Sui wallet extension detected in this browser.");
+  }
+
+  const { provider, name } = detected;
+
+  try {
+    if (typeof provider.requestPermissions === "function") {
+      await provider.requestPermissions();
+    }
+  } catch (err) {
+    console.warn("[Wallet] Permission request bypassed or rejected:", err);
+  }
+
+  let accounts: any[] = [];
+  if (typeof provider.getAccounts === "function") {
+    accounts = await provider.getAccounts();
+  }
+
+  if (!accounts || accounts.length === 0) {
+    throw new Error("No accounts found in wallet extension or connection was declined.");
+  }
+
+  const rawAddress = typeof accounts[0] === "string" ? accounts[0] : accounts[0]?.address;
+  if (!rawAddress) {
+    throw new Error("Could not extract account address from wallet extension.");
+  }
+
+  return {
+    address: rawAddress,
+    walletName: name,
+  };
+}
+
+// -----------------------------------------------------------------------------
 // CRYPTOGRAPHIC SIGNING ABSTRACTION
 // Allows signing personal messages or x402 authorization payloads.
 // -----------------------------------------------------------------------------
@@ -100,20 +166,41 @@ export async function signPayloadWithWallet(
   mode: WalletMode,
   message: Uint8Array
 ): Promise<{ signature: string; publicKey: string; address: string }> {
-  let kp: Ed25519Keypair;
-
   if (mode === "demo") {
-    kp = getDemoKeypair();
-  } else if (mode === "real") {
-    kp = getOrCreateRealKeypair().keypair;
-  } else {
-    throw new Error("Linked external wallet signing requires wallet extension adapter.");
+    const kp = getDemoKeypair();
+    const signed = await kp.signPersonalMessage(message);
+    return {
+      signature: signed.signature,
+      publicKey: kp.getPublicKey().toBase64(),
+      address: kp.toSuiAddress(),
+    };
   }
 
-  const signed = await kp.signPersonalMessage(message);
-  return {
-    signature: signed.signature,
-    publicKey: kp.getPublicKey().toBase64(),
-    address: kp.toSuiAddress(),
-  };
+  if (mode === "real") {
+    const kp = getOrCreateRealKeypair().keypair;
+    const signed = await kp.signPersonalMessage(message);
+    return {
+      signature: signed.signature,
+      publicKey: kp.getPublicKey().toBase64(),
+      address: kp.toSuiAddress(),
+    };
+  }
+
+  // Linked external extension mode
+  const detected = detectInstalledSuiWallet();
+  if (detected?.provider && typeof detected.provider.signPersonalMessage === "function") {
+    try {
+      const signed = await detected.provider.signPersonalMessage({ message });
+      return {
+        signature: signed.signature || "ext_signed",
+        publicKey: signed.publicKey || "ext_pk",
+        address: signed.address || "",
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "User rejected signature in extension";
+      throw new Error(`Extension signature failed: ${msg}`);
+    }
+  }
+
+  throw new Error("Signing with an external address requires a connected Sui wallet extension.");
 }
