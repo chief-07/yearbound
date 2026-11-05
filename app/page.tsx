@@ -25,6 +25,7 @@ import {
   Gift,
   Sparkles,
   TrendingUp,
+  Activity,
 } from "lucide-react";
 import {
   DEMO_SUI_ADDRESS,
@@ -80,6 +81,9 @@ export interface InfractionRecord {
   penaltySui: number;
   blobId: string;
   dayOfYear?: number;
+  verdict?: "honored" | "broken";
+  recipient?: string;
+  txHash?: string;
 }
 
 export interface WalrusMemoryBlob {
@@ -624,6 +628,84 @@ export default function YearboundApp() {
     setSendSubStep("amount");
   };
 
+  // Handle Approved Transaction Recording to Walrus Memory
+  const recordApprovedTransaction = async () => {
+    const numAmount = parseFloat(sendAmount) || 0;
+    setAvailableBalance((prev) => Math.max(0, prev - numAmount));
+
+    const txHash = `0x_sui_ptb_${Date.now().toString(16)}`;
+    let txBlobId = `blob_tx_${Date.now().toString(36)}`;
+
+    try {
+      const res = await fetch("/api/walrus", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(4000),
+        body: JSON.stringify({
+          type: "accountability_event",
+          commitment_id: "pact_primary",
+          verdict: "honored",
+          user_explanation: sendMemo || "Resolution-compliant transfer",
+          penalty_deposited_sui: 0,
+          vault_tx_hash: txHash,
+        }),
+      });
+
+      const data = await res.json();
+      if (data?.blobId) {
+        txBlobId = data.blobId;
+      }
+    } catch (walrusErr) {
+      console.warn("[Walrus] Approved tx memory notice:", walrusErr);
+    }
+
+    const timestampStr = new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(new Date());
+
+    const approvedRecord: InfractionRecord = {
+      id: `tx_${Date.now()}`,
+      ruleTitle: "Resolutions Honored",
+      ruleCondition: "Transaction compliant with commitments",
+      amount: sendAmount,
+      memo: sendMemo || "Compliant transfer",
+      timestamp: timestampStr,
+      penaltySui: 0,
+      blobId: txBlobId,
+      dayOfYear: currentDayOfYear,
+      verdict: "honored",
+      recipient: sendRecipient,
+      txHash,
+    };
+    setInfractions((prev) => [approvedRecord, ...prev]);
+
+    const approvedBlob: WalrusMemoryBlob = {
+      blobId: txBlobId,
+      type: "accountability_event",
+      title: `Honored Transfer: ${sendAmount} SUI`,
+      timestamp: timestampStr,
+      payload: {
+        protocol: "Yearbound v1",
+        storage: "Walrus Memory (MemWal)",
+        type: "accountability_event",
+        verdict: "honored",
+        userMemo: sendMemo,
+        transferAmountSui: numAmount,
+        recipient: sendRecipient,
+        penaltyDepositedSui: 0,
+        vaultTxHash: txHash,
+        timestamp: new Date().toISOString(),
+      },
+    };
+    setWalrusBlobs((prev) => [approvedBlob, ...prev]);
+
+    closeSendFlow();
+    triggerSnackbar("Transfer confirmed", `Inscribed to Walrus #${txBlobId.slice(0, 10)}...`, txBlobId);
+  };
+
   // Handle Memo Submission & Trigger Checking Screen via Tatum & Walrus
   const handleReviewAndCheck = async () => {
     if (!sendMemo.trim()) return;
@@ -672,31 +754,23 @@ export default function YearboundApp() {
         } else {
           setSendSubStep("approved");
           setTimeout(() => {
-            const numAmount = parseFloat(sendAmount) || 0;
-            setAvailableBalance((prev) => Math.max(0, prev - numAmount));
-            closeSendFlow();
-            triggerSnackbar("Transfer confirmed", "Resolutions maintained · 0 penalties");
-          }, 1800);
+            recordApprovedTransaction();
+          }, 1400);
         }
       } else {
         // Fallback to approved if network check returns unexpected shape
         setSendSubStep("approved");
         setTimeout(() => {
-          const numAmount = parseFloat(sendAmount) || 0;
-          setAvailableBalance((prev) => Math.max(0, prev - numAmount));
-          closeSendFlow();
-          triggerSnackbar("Transfer confirmed", "Resolutions maintained · 0 penalties");
-        }, 1800);
+          recordApprovedTransaction();
+        }, 1400);
       }
     } catch (err) {
       console.warn("[Send Check] Verification notice, proceeding gracefully:", err);
       clearTimeout(stageTimer1);
       setSendSubStep("approved");
       setTimeout(() => {
-        const numAmount = parseFloat(sendAmount) || 0;
-        setAvailableBalance((prev) => Math.max(0, prev - numAmount));
-        closeSendFlow();
-      }, 1500);
+        recordApprovedTransaction();
+      }, 1400);
     }
   };
 
@@ -769,6 +843,9 @@ export default function YearboundApp() {
         penaltySui: penaltyAmt,
         blobId: fineBlobId,
         dayOfYear: currentDayOfYear,
+        verdict: "broken",
+        recipient: sendRecipient,
+        txHash,
       };
       setInfractions((prev) => [newInfraction, ...prev]);
 
@@ -1780,56 +1857,74 @@ export default function YearboundApp() {
                   </div>
                 </div>
 
-                {/* 3B. MONTHLY INFLOW TARGET TRACKER (CONCEPT B: TATUM AUDITED) */}
-                <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-3 transition-all duration-200">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <TrendingUp size={14} className="text-[#A1A1AA]" />
-                      <span className="text-[11px] font-mono uppercase tracking-wider text-[#71717A]">
-                        Monthly Inflow Target · {inflowProgress.month}
-                      </span>
+                {/* 3B. RECENT ACTIVITY · WALRUS MEMORY LEDGER */}
+                {infractions.length > 0 && (
+                  <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-3 transition-all duration-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Activity size={14} className="text-[#A1A1AA]" />
+                        <span className="text-[11px] font-mono uppercase tracking-wider text-[#71717A]">
+                          Recent Activity · Walrus Ledger
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsMemoryInspectorOpen(true)}
+                        className="text-[11px] font-mono text-[#A1A1AA] hover:text-white flex items-center gap-1 transition-colors"
+                      >
+                        <span>Memory Proofs ({infractions.length})</span>
+                        <ExternalLink size={10} />
+                      </button>
                     </div>
-                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
-                      inflowProgress.isDeficit
-                        ? "text-[#EF4444] bg-[#EF4444]/10 border-[#EF4444]/20"
-                        : "text-[#10B981] bg-[#10B981]/10 border-[#10B981]/20"
-                    }`}>
-                      {inflowProgress.isDeficit ? "Deficit Audit Flag" : "Tatum RPC Monitored"}
-                    </span>
-                  </div>
 
-                  <div className="flex items-baseline justify-between">
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-xl font-mono font-semibold text-white">
-                        {inflowProgress.current}.00
-                      </span>
-                      <span className="text-xs font-mono text-[#71717A]">
-                        / {inflowProgress.target}.00 SUI
-                      </span>
+                    <div className="flex flex-col gap-2 pt-1">
+                      {infractions.slice(0, 3).map((item) => {
+                        const isHonored = item.verdict === "honored";
+                        return (
+                          <div
+                            key={item.id}
+                            className="bg-[#131316] border border-[#222226] rounded-xl p-3 flex items-center justify-between gap-3"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span
+                                className={`text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border shrink-0 ${
+                                  isHonored
+                                    ? "text-[#10B981] bg-[#10B981]/10 border-[#10B981]/25"
+                                    : "text-[#EF4444] bg-[#EF4444]/10 border-[#EF4444]/25"
+                                }`}
+                              >
+                                {isHonored ? "Honored" : "Breach"}
+                              </span>
+                              <div className="flex flex-col min-w-0">
+                                <span className="text-xs font-medium text-white truncate">
+                                  {item.memo || (isHonored ? "Transfer" : "Breach Fine")}
+                                </span>
+                                <span className="text-[10px] text-[#71717A] truncate">
+                                  {item.timestamp}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex flex-col items-end shrink-0">
+                              <span className="text-xs font-mono font-semibold text-white">
+                                {isHonored ? `-${item.amount} SUI` : `+${item.penaltySui} SUI`}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setExpandedJsonBlobId(item.blobId);
+                                  setIsMemoryInspectorOpen(true);
+                                }}
+                                className="text-[10px] font-mono text-[#71717A] hover:text-white transition-colors"
+                              >
+                                #{item.blobId.slice(0, 8)}...
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                    <span className="text-xs font-mono text-[#A1A1AA]">
-                      {Math.min(100, Math.round((inflowProgress.current / inflowProgress.target) * 100))}%
-                    </span>
                   </div>
-
-                  {/* Progress Bar */}
-                  <div className="w-full h-1.5 bg-[#18181C] rounded-full overflow-hidden">
-                    <div
-                      className={`h-full transition-all duration-500 rounded-full ${
-                        inflowProgress.isDeficit ? "bg-[#EF4444]" : "bg-white"
-                      }`}
-                      style={{
-                        width: `${Math.min(100, (inflowProgress.current / inflowProgress.target) * 100)}%`,
-                      }}
-                    />
-                  </div>
-
-                  <span className="text-[10px] font-mono text-[#71717A]">
-                    {inflowProgress.isDeficit
-                      ? "Tatum RPC detected 600 SUI deficit. 15 SUI penalty routed to Christmas Vault."
-                      : "Inbound transfers tracked automatically via Tatum Sui RPC."}
-                  </span>
-                </div>
+                )}
 
                 {/* 4. RESOLUTIONS (IN WALRUS MEMORY) */}
                 <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-4">
@@ -2204,54 +2299,75 @@ export default function YearboundApp() {
                   </div>
                 </div>
 
-                {/* Infractions & Penalty Deposits Record */}
+                {/* Walrus Memory Ledger: Inscribed Events */}
                 <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-3.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-mono text-[#71717A] uppercase tracking-wider">
-                      Penalty Deposits · Resolved from Walrus
+                      Walrus Memory Ledger · Live Activity
                     </span>
                     <span className="text-xs font-mono text-white">
-                      {infractions.length} Events
+                      {infractions.length} Inscribed Events
                     </span>
                   </div>
 
                   {infractions.length === 0 ? (
                     <div className="py-4 text-center text-xs text-[#71717A] border-t border-[#18181C] mt-1">
-                      Zero breach penalties recorded. All resolutions currently honored.
+                      Zero transactions recorded yet. Send SUI to create live Walrus proofs.
                     </div>
                   ) : (
                     <div className="flex flex-col gap-2.5 border-t border-[#18181C] pt-3">
-                      {infractions.map((infr) => (
-                        <div
-                          key={infr.id}
-                          className="bg-[#131316] border border-[#222226] rounded-xl p-3 flex flex-col gap-1.5"
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-semibold text-white">
-                              +{infr.penaltySui} SUI Fine
+                      {infractions.map((infr) => {
+                        const isHonored = infr.verdict === "honored";
+                        return (
+                          <div
+                            key={infr.id}
+                            className="bg-[#131316] border border-[#222226] rounded-xl p-3 flex flex-col gap-1.5"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`text-[10px] font-mono font-medium px-2 py-0.5 rounded border ${
+                                    isHonored
+                                      ? "text-[#10B981] bg-[#10B981]/10 border-[#10B981]/25"
+                                      : "text-[#EF4444] bg-[#EF4444]/10 border-[#EF4444]/25"
+                                  }`}
+                                >
+                                  {isHonored ? "Honored" : "Breach Fine"}
+                                </span>
+                                <span className="text-xs font-semibold text-white">
+                                  {isHonored ? `-${infr.amount} SUI` : `+${infr.penaltySui} SUI Locked`}
+                                </span>
+                              </div>
+                              <span className="text-[10px] font-mono text-[#71717A]">
+                                {infr.timestamp}
+                              </span>
+                            </div>
+                            <span className="text-xs text-[#D4D4D8]">
+                              "{infr.memo}"
                             </span>
-                            <span className="text-[10px] font-mono text-[#71717A]">
-                              {infr.timestamp}
-                            </span>
+                            <div className="flex items-center justify-between mt-1 pt-1.5 border-t border-[#1E1E22]">
+                              <span className="text-[10px] text-[#71717A] truncate">
+                                {isHonored
+                                  ? infr.recipient
+                                    ? `To: ${infr.recipient.slice(0, 8)}...`
+                                    : "Compliant transfer"
+                                  : `Breach: ${infr.ruleTitle}`}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setExpandedJsonBlobId(infr.blobId);
+                                  setIsMemoryInspectorOpen(true);
+                                }}
+                                className="text-[10px] font-mono text-[#A1A1AA] hover:text-white flex items-center gap-1 transition-colors"
+                              >
+                                <span>Blob #{infr.blobId.slice(0, 8)}...</span>
+                                <ExternalLink size={10} />
+                              </button>
+                            </div>
                           </div>
-                          <span className="text-xs text-[#D4D4D8]">
-                            "{infr.memo}"
-                          </span>
-                          <div className="flex items-center justify-between mt-1 pt-1.5 border-t border-[#1E1E22]">
-                            <span className="text-[10px] text-[#71717A] truncate">
-                              Breach: {infr.ruleTitle}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => setIsMemoryInspectorOpen(true)}
-                              className="text-[10px] font-mono text-[#A1A1AA] hover:text-white flex items-center gap-1 transition-colors"
-                            >
-                              <span>Blob #{infr.blobId.slice(0, 8)}...</span>
-                              <ExternalLink size={10} />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
