@@ -22,6 +22,9 @@ import {
   ChevronUp,
   FileText,
   Wallet,
+  Gift,
+  Sparkles,
+  TrendingUp,
 } from "lucide-react";
 import {
   DEMO_SUI_ADDRESS,
@@ -34,6 +37,8 @@ import {
   type InstalledSuiWallet,
 } from "@/lib/wallet";
 import { executeX402VaultDeposit } from "@/lib/vault-x402";
+import { DisciplineGrid } from "@/components/discipline-grid";
+import { TimeTravelScrubber, type TimeMilestone } from "@/components/time-travel-scrubber";
 
 /* ==========================================================================
    YEARBOUND PROTOCOL
@@ -74,6 +79,7 @@ export interface InfractionRecord {
   timestamp: string;
   penaltySui: number;
   blobId: string;
+  dayOfYear?: number;
 }
 
 export interface WalrusMemoryBlob {
@@ -202,6 +208,23 @@ export default function YearboundApp() {
   const [expandedJsonBlobId, setExpandedJsonBlobId] = useState<string | null>(null);
   const [selectedMemoryRuleId, setSelectedMemoryRuleId] = useState<string | null>(null);
   const [latestFineBlobId, setLatestFineBlobId] = useState<string>("");
+
+  // Time-Travel Scrubber state (Demo account only)
+  const [activeMilestone, setActiveMilestone] = useState<TimeMilestone>("jan1");
+  const [currentDayOfYear, setCurrentDayOfYear] = useState<number>(1);
+  const [isVaultUnlocked, setIsVaultUnlocked] = useState<boolean>(false);
+  const [isVaultClaimed, setIsVaultClaimed] = useState<boolean>(false);
+  const [inflowProgress, setInflowProgress] = useState<{
+    current: number;
+    target: number;
+    month: string;
+    isDeficit?: boolean;
+  }>({
+    current: 0,
+    target: 1000,
+    month: "January",
+    isDeficit: false,
+  });
 
   // Add Resolution Drawer form state
   const [newRuleTitle, setNewRuleTitle] = useState<string>("");
@@ -733,6 +756,7 @@ export default function YearboundApp() {
         timestamp: timestampStr,
         penaltySui: penaltyAmt,
         blobId: fineBlobId,
+        dayOfYear: currentDayOfYear,
       };
       setInfractions((prev) => [newInfraction, ...prev]);
 
@@ -804,8 +828,187 @@ export default function YearboundApp() {
       } catch {}
     }
     setCopiedAddress(true);
-    triggerSnackbar("Copied address to clipboard", `${addr.slice(0, 10)}...${addr.slice(-6)}`);
-    setTimeout(() => setCopiedAddress(false), 2000);
+    triggerSnackbar(
+      "Address Copied · Tatum Inflow Tracking Active",
+      "Monthly Target: 1,000 SUI (Audited by Tatum Sui RPC)"
+    );
+    setTimeout(() => setCopiedAddress(false), 2500);
+  };
+
+  // Handler for Demo-Only 12-Month Time Travel Scrubber
+  const handleMilestoneChange = (milestone: TimeMilestone) => {
+    setActiveMilestone(milestone);
+
+    if (milestone === "jan1") {
+      setCurrentDateStr("Thursday, Jan 1, 2026");
+      setCurrentDayOfYear(1);
+      setEscrowDeposit(10);
+      setIsVaultUnlocked(false);
+      setIsVaultClaimed(false);
+      setInfractions([]);
+      setInflowProgress({
+        current: 0,
+        target: 1000,
+        month: "January",
+        isDeficit: false,
+      });
+      triggerSnackbar("Time Travel: Jan 1 (Genesis)", "Fresh New Year oaths sealed · 0 breaches");
+    } else if (milestone === "feb14") {
+      setCurrentDateStr("Saturday, Feb 14, 2026");
+      setCurrentDayOfYear(45);
+      setEscrowDeposit(20);
+      setIsVaultUnlocked(false);
+      setIsVaultClaimed(false);
+      setInflowProgress({
+        current: 850,
+        target: 1000,
+        month: "February",
+        isDeficit: false,
+      });
+      const febInfr: InfractionRecord = {
+        id: "infr_feb14",
+        ruleTitle: "No Late-Night Takeout",
+        ruleCondition: "No food delivery between 10 PM and 5 AM",
+        amount: "32",
+        memo: "Valentine's midnight DoorDash takeout (11:30 PM)",
+        timestamp: "Feb 14, 11:30 PM",
+        penaltySui: 10,
+        blobId: "blob_infr_feb14_01",
+        dayOfYear: 45,
+      };
+      setInfractions([febInfr]);
+      triggerSnackbar("Time Travel: Feb 14 (1st Breach)", "Late-night food breach · 10 SUI locked via x402");
+    } else if (milestone === "jul20") {
+      setCurrentDateStr("Monday, Jul 20, 2026");
+      setCurrentDayOfYear(201);
+      setEscrowDeposit(55);
+      setIsVaultUnlocked(false);
+      setIsVaultClaimed(false);
+      setInflowProgress({
+        current: 400,
+        target: 1000,
+        month: "June (Deficit)",
+        isDeficit: true,
+      });
+      const julInfrs: InfractionRecord[] = [
+        {
+          id: "infr_jul20",
+          ruleTitle: "No Late-Night Takeout",
+          ruleCondition: "No food delivery between 10 PM and 5 AM",
+          amount: "28",
+          memo: "Late-night Shake Shack burgers (12:15 AM)",
+          timestamp: "Jul 20, 12:15 AM",
+          penaltySui: 15,
+          blobId: "blob_infr_jul20_04",
+          dayOfYear: 201,
+        },
+        {
+          id: "infr_jun30",
+          ruleTitle: "Monthly Inflow Target Deficit",
+          ruleCondition: "Must earn ≥ 1,000 SUI/month from freelancing",
+          amount: "0",
+          memo: "June Inflow Target Deficit (Audited via Tatum RPC: 400/1000 SUI)",
+          timestamp: "Jun 30, 11:59 PM",
+          penaltySui: 15,
+          blobId: "blob_infr_jun30_03",
+          dayOfYear: 181,
+        },
+        {
+          id: "infr_jun08",
+          ruleTitle: "Impulse Spending Cap",
+          ruleCondition: "No single non-essential purchase over 50 SUI",
+          amount: "65",
+          memo: "Summer Steam sale bundle impulse buy",
+          timestamp: "Jun 8, 3:20 PM",
+          penaltySui: 15,
+          blobId: "blob_infr_jun08_02",
+          dayOfYear: 159,
+        },
+        {
+          id: "infr_feb14",
+          ruleTitle: "No Late-Night Takeout",
+          ruleCondition: "No food delivery between 10 PM and 5 AM",
+          amount: "32",
+          memo: "Valentine's midnight DoorDash takeout (11:30 PM)",
+          timestamp: "Feb 14, 11:30 PM",
+          penaltySui: 10,
+          blobId: "blob_infr_feb14_01",
+          dayOfYear: 45,
+        },
+      ];
+      setInfractions(julInfrs);
+      triggerSnackbar("Time Travel: Jul 20 (Pattern Recall)", "Compound roast · Tatum audited 600 SUI income deficit");
+    } else if (milestone === "dec25") {
+      setCurrentDateStr("Friday, Dec 25, 2026");
+      setCurrentDayOfYear(359);
+      setEscrowDeposit(55);
+      setIsVaultUnlocked(true);
+      setInflowProgress({
+        current: 1250,
+        target: 1000,
+        month: "December",
+        isDeficit: false,
+      });
+      const decInfrs: InfractionRecord[] = [
+        {
+          id: "infr_jul20",
+          ruleTitle: "No Late-Night Takeout",
+          ruleCondition: "No food delivery between 10 PM and 5 AM",
+          amount: "28",
+          memo: "Late-night Shake Shack burgers (12:15 AM)",
+          timestamp: "Jul 20, 12:15 AM",
+          penaltySui: 15,
+          blobId: "blob_infr_jul20_04",
+          dayOfYear: 201,
+        },
+        {
+          id: "infr_jun30",
+          ruleTitle: "Monthly Inflow Target Deficit",
+          ruleCondition: "Must earn ≥ 1,000 SUI/month from freelancing",
+          amount: "0",
+          memo: "June Inflow Target Deficit (Audited via Tatum RPC: 400/1000 SUI)",
+          timestamp: "Jun 30, 11:59 PM",
+          penaltySui: 15,
+          blobId: "blob_infr_jun30_03",
+          dayOfYear: 181,
+        },
+        {
+          id: "infr_jun08",
+          ruleTitle: "Impulse Spending Cap",
+          ruleCondition: "No single non-essential purchase over 50 SUI",
+          amount: "65",
+          memo: "Summer Steam sale bundle impulse buy",
+          timestamp: "Jun 8, 3:20 PM",
+          penaltySui: 15,
+          blobId: "blob_infr_jun08_02",
+          dayOfYear: 159,
+        },
+        {
+          id: "infr_feb14",
+          ruleTitle: "No Late-Night Takeout",
+          ruleCondition: "No food delivery between 10 PM and 5 AM",
+          amount: "32",
+          memo: "Valentine's midnight DoorDash takeout (11:30 PM)",
+          timestamp: "Feb 14, 11:30 PM",
+          penaltySui: 10,
+          blobId: "blob_infr_feb14_01",
+          dayOfYear: 45,
+        },
+      ];
+      setInfractions(decInfrs);
+      triggerSnackbar("🎅 Time Travel: Dec 25 (Christmas Unlock)", "Move smart contract unlocked! Claim savings.");
+    }
+  };
+
+  const handleClaimChristmasVault = () => {
+    if (isVaultClaimed) return;
+    const claimedAmt = escrowDeposit;
+    setAvailableBalance((prev) => prev + claimedAmt);
+    setIsVaultClaimed(true);
+    triggerSnackbar(
+      "🎅 Christmas Vault Unlocked & Claimed!",
+      `+${claimedAmt}.00 SUI released from Sui Move contract into wallet.`
+    );
   };
 
   const activeRulesList = rules.filter((r) => r.title.trim().length > 0);
@@ -1444,7 +1647,14 @@ export default function YearboundApp() {
             ================================================================== */}
         {step === 4 && !isSendOpen && (
           <div className="relative flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-300">
-            
+            {/* DEMO ACCOUNT ONLY: 12-MONTH CHRONOLOGICAL TIME-TRAVEL SCRUBBER */}
+            {accountType === "demo" && (
+              <TimeTravelScrubber
+                activeMilestone={activeMilestone}
+                onChangeMilestone={handleMilestoneChange}
+              />
+            )}
+
             {/* TAB: HOME */}
             {activeTab === "home" && (
               <div className="flex-1 overflow-y-auto px-7 pt-6 sm:pt-8 pb-28 flex flex-col gap-4 overscroll-contain">
@@ -1458,6 +1668,43 @@ export default function YearboundApp() {
                   </span>
                 </div>
 
+                {/* CHRISTMAS UNLOCK BANNER (When Time-Lock Reaches Dec 25) */}
+                {isVaultUnlocked && (
+                  <div className="bg-gradient-to-r from-[#18150A] to-[#12110E] border border-[#E5A93C]/40 rounded-2xl p-5 flex flex-col gap-3 shadow-lg shadow-[#E5A93C]/5 animate-in zoom-in-95 duration-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Gift size={16} className="text-[#E5A93C]" />
+                        <span className="text-xs font-semibold text-white uppercase tracking-wider">
+                          Christmas Vault Unlocked
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-mono text-[#E5A93C] bg-[#E5A93C]/10 px-2 py-0.5 rounded border border-[#E5A93C]/20">
+                        {isVaultClaimed ? "Funds Claimed" : "Time-Lock Expired"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#D4D4D8] leading-relaxed">
+                      {isVaultClaimed
+                        ? `You claimed ${escrowDeposit}.00 SUI back to your wallet. Full year discipline cycle completed.`
+                        : `Sui network clock reached December 25. You saved ${escrowDeposit}.00 SUI from your impulsive self.`}
+                    </p>
+                    {!isVaultClaimed ? (
+                      <button
+                        type="button"
+                        onClick={handleClaimChristmasVault}
+                        className="w-full py-3 px-4 rounded-xl bg-[#E5A93C] hover:bg-[#F5B84D] text-black font-semibold text-xs transition-all duration-150 flex items-center justify-center gap-2 active:scale-[0.98] shadow-md"
+                      >
+                        <Gift size={14} />
+                        <span>Claim Christmas Savings ({escrowDeposit}.00 SUI)</span>
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-2 text-xs font-mono text-[#10B981] bg-[#10B981]/10 p-2.5 rounded-xl border border-[#10B981]/20">
+                        <Check size={14} />
+                        <span>55.00 SUI released from Sui Move contract into available balance</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* 2. WALLY MEMORY SHOWCASE BOX */}
                 <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-2.5 relative transition-all duration-200 hover:border-[#3F3F46]">
                   <div className="flex items-center justify-between">
@@ -1469,7 +1716,15 @@ export default function YearboundApp() {
                     </span>
                   </div>
                   <p className="text-sm text-[#E4E4E7] leading-relaxed font-normal">
-                    {totalBreaches > 0
+                    {isVaultUnlocked && !isVaultClaimed
+                      ? "🎅 Merry Christmas! The Sui network clock has passed the vault unlock timestamp (1798156800000 ms). Your accumulated savings of 55.00 SUI are now ready to be claimed!"
+                      : isVaultClaimed
+                      ? "🎉 Christmas gift claimed! You successfully locked 55.00 SUI away from your impulsive past self and reclaimed it for the holidays."
+                      : activeMilestone === "jul20"
+                      ? "Walrus memory synthesis: This is your 3rd late-night food breach on a weekend. Plus Tatum RPC confirms your June income was in a 600 SUI deficit. 55 SUI total is now locked away in Move storage."
+                      : activeMilestone === "feb14"
+                      ? "Day 45: First slip-up logged. You swore in Walrus Memory: 'No food delivery after 10 PM'. 10 SUI was locked into the Move vault via x402."
+                      : totalBreaches > 0
                       ? `Infraction logged into Walrus memory. You have paid 10 SUI penalty into the vault. Current balance: ${availableBalance.toFixed(2)} SUI.`
                       : activeRulesList.length > 0
                       ? `I have committed your resolutions to Walrus memory. 0 infractions recorded. Remember your pact: "${activeRulesList[0].title}". 10 SUI penalty standing by if you slip up.`
@@ -1511,6 +1766,57 @@ export default function YearboundApp() {
                       <span>{copiedAddress ? "Copied" : "Receive"}</span>
                     </button>
                   </div>
+                </div>
+
+                {/* 3B. MONTHLY INFLOW TARGET TRACKER (CONCEPT B: TATUM AUDITED) */}
+                <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-3 transition-all duration-200">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <TrendingUp size={14} className="text-[#A1A1AA]" />
+                      <span className="text-[11px] font-mono uppercase tracking-wider text-[#71717A]">
+                        Monthly Inflow Target · {inflowProgress.month}
+                      </span>
+                    </div>
+                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                      inflowProgress.isDeficit
+                        ? "text-[#EF4444] bg-[#EF4444]/10 border-[#EF4444]/20"
+                        : "text-[#10B981] bg-[#10B981]/10 border-[#10B981]/20"
+                    }`}>
+                      {inflowProgress.isDeficit ? "Deficit Audit Flag" : "Tatum RPC Monitored"}
+                    </span>
+                  </div>
+
+                  <div className="flex items-baseline justify-between">
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-xl font-mono font-semibold text-white">
+                        {inflowProgress.current}.00
+                      </span>
+                      <span className="text-xs font-mono text-[#71717A]">
+                        / {inflowProgress.target}.00 SUI
+                      </span>
+                    </div>
+                    <span className="text-xs font-mono text-[#A1A1AA]">
+                      {Math.min(100, Math.round((inflowProgress.current / inflowProgress.target) * 100))}%
+                    </span>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div className="w-full h-1.5 bg-[#18181C] rounded-full overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-500 rounded-full ${
+                        inflowProgress.isDeficit ? "bg-[#EF4444]" : "bg-white"
+                      }`}
+                      style={{
+                        width: `${Math.min(100, (inflowProgress.current / inflowProgress.target) * 100)}%`,
+                      }}
+                    />
+                  </div>
+
+                  <span className="text-[10px] font-mono text-[#71717A]">
+                    {inflowProgress.isDeficit
+                      ? "Tatum RPC detected 600 SUI deficit. 15 SUI penalty routed to Christmas Vault."
+                      : "Inbound transfers tracked automatically via Tatum Sui RPC."}
+                  </span>
                 </div>
 
                 {/* 4. RESOLUTIONS (IN WALRUS MEMORY) */}
@@ -1790,6 +2096,56 @@ export default function YearboundApp() {
                   x402 Vault
                 </div>
 
+                {/* CHRISTMAS UNLOCK ACTION IN VAULT */}
+                {isVaultUnlocked && (
+                  <div className="bg-gradient-to-r from-[#18150A] to-[#12110E] border border-[#E5A93C]/40 rounded-2xl p-5 flex flex-col gap-3 shadow-lg shadow-[#E5A93C]/5 animate-in zoom-in-95 duration-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Gift size={16} className="text-[#E5A93C]" />
+                        <span className="text-xs font-semibold text-white uppercase tracking-wider">
+                          Christmas Release Active
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-mono text-[#E5A93C] bg-[#E5A93C]/10 px-2 py-0.5 rounded border border-[#E5A93C]/20">
+                        {isVaultClaimed ? "Funds Claimed" : "Unlocked"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#D4D4D8]">
+                      Smart contract time-lock satisfied. All {escrowDeposit}.00 SUI unlocked.
+                    </p>
+                    {!isVaultClaimed ? (
+                      <button
+                        type="button"
+                        onClick={handleClaimChristmasVault}
+                        className="w-full py-3 px-4 rounded-xl bg-[#E5A93C] hover:bg-[#F5B84D] text-black font-semibold text-xs transition-all duration-150 flex items-center justify-center gap-2 active:scale-[0.98] shadow-md"
+                      >
+                        <Gift size={14} />
+                        <span>Claim Christmas Savings ({escrowDeposit}.00 SUI)</span>
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-2 text-xs font-mono text-[#10B981] bg-[#10B981]/10 p-2.5 rounded-xl border border-[#10B981]/20">
+                        <Check size={14} />
+                        <span>Funds Claimed into Available Balance</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 365-DAY DISCIPLINE GRID HEATMAP */}
+                <DisciplineGrid
+                  currentDayOfYear={currentDayOfYear}
+                  infractions={infractions.map((i) => ({
+                    dayOfYear: i.dayOfYear || 45,
+                    dateStr: i.timestamp,
+                    memo: i.memo,
+                    penaltySui: i.penaltySui,
+                    ruleTitle: i.ruleTitle,
+                    blobId: i.blobId,
+                  }))}
+                  totalEscrowSui={escrowDeposit}
+                  isUnlocked={isVaultUnlocked}
+                />
+
                 {/* Primary Vault Balance Card */}
                 <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-4">
                   <div className="flex items-center justify-between">
@@ -1797,8 +2153,17 @@ export default function YearboundApp() {
                       Lock Status
                     </span>
                     <span className="text-xs font-mono text-white flex items-center gap-1.5">
-                      <Lock size={12} />
-                      Locked
+                      {isVaultUnlocked ? (
+                        <>
+                          <Check size={12} className="text-[#10B981]" />
+                          <span className="text-[#10B981]">Unlocked</span>
+                        </>
+                      ) : (
+                        <>
+                          <Lock size={12} />
+                          <span>Locked</span>
+                        </>
+                      )}
                     </span>
                   </div>
                   <div className="flex flex-col gap-1 border-t border-[#18181C] pt-3">
