@@ -11,6 +11,8 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   allowedDevOrigins: [
+    '10.99.21.175',
+    '10.99.21.175:3000',
     '10.176.217.175',
     '10.109.171.175',
     '10.33.118.175',
