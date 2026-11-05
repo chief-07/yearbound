@@ -11,6 +11,8 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   allowedDevOrigins: [
+    'became-privacy-roman-meter.trycloudflare.com',
+    'tab-kai-wins-times.trycloudflare.com',
     '10.99.21.175',
     '10.99.21.175:3000',
     '10.176.217.175',
