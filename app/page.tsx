@@ -828,9 +828,12 @@ export default function YearboundApp() {
                     </div>
                   </div>
                 ))}
+            </div>
 
+            {/* Fixed Bottom Section: Vault Lock & Continue */}
+            <div className="p-6 bg-[#000000] flex flex-col gap-3.5">
               {/* x402 Vault Parameters */}
-              <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-3.5">
+              <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-4 flex flex-col gap-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-mono text-[#71717A] uppercase tracking-wider">
                     x402 Vault Lock
@@ -838,7 +841,7 @@ export default function YearboundApp() {
                   <Lock size={12} className="text-[#71717A]" />
                 </div>
 
-                <div className="flex items-center justify-between pt-1">
+                <div className="flex items-center justify-between pt-0.5">
                   <span className="text-xs text-[#A1A1AA]">Locked Until</span>
                   <span className="text-xs text-white font-medium">{unlockDate}</span>
                 </div>
@@ -848,14 +851,12 @@ export default function YearboundApp() {
                   <span className="text-xs text-white font-mono font-medium">{escrowDeposit} SUI</span>
                 </div>
 
-                <div className="flex items-center justify-between border-t border-[#18181C] pt-2.5">
+                <div className="flex items-center justify-between border-t border-[#18181C] pt-2">
                   <span className="text-xs text-[#71717A]">Memory Proof</span>
                   <span className="text-xs text-[#A1A1AA]">Walrus Network</span>
                 </div>
               </div>
-            </div>
 
-            <div className="p-6 bg-[#000000]">
               <button
                 type="button"
                 onClick={() => setStep(3)}
@@ -1600,10 +1601,15 @@ export default function YearboundApp() {
                   <div className="flex flex-col items-center justify-center pt-2">
                     <div className="flex items-baseline justify-center gap-2">
                       <input
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         value={sendAmount}
-                        onChange={(e) => setSendAmount(e.target.value)}
-                        className="bg-transparent text-[54px] font-semibold font-mono text-center text-white outline-none w-48 tracking-tight"
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/[^0-9.]/g, "");
+                          setSendAmount(val);
+                        }}
+                        style={{ width: `${Math.max(1, (sendAmount || "0").length)}ch` }}
+                        className="bg-transparent text-[54px] font-semibold font-mono text-center text-white outline-none tracking-tight p-0"
                         placeholder="0"
                       />
                       <span className="text-xl font-mono text-[#71717A]">SUI</span>
@@ -1703,13 +1709,10 @@ export default function YearboundApp() {
                         key={idx}
                         type="button"
                         onClick={() => setSendMemo(item.text)}
-                        className="bg-[#0A0A0C] border border-[#222226] hover:border-[#52525B] text-left p-3.5 rounded-xl transition-all duration-150 active:scale-[0.99] flex flex-col gap-0.5"
+                        className="bg-[#0A0A0C] border border-[#222226] hover:border-[#52525B] text-left px-4 py-3 rounded-xl transition-all duration-150 active:scale-[0.99] flex items-center justify-between"
                       >
                         <span className="text-xs font-medium text-white">
                           {item.label}
-                        </span>
-                        <span className="text-[11px] text-[#71717A] truncate">
-                          {item.text}
                         </span>
                       </button>
                     ))}
