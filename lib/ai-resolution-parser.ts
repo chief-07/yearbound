@@ -21,6 +21,10 @@ export const ResolutionAnalysisSchema = z.object({
     .describe(
       "Crisp, unambiguous conditional statement describing the exact infraction criteria."
     ),
+  why_it_matters: z
+    .string()
+    .default("")
+    .describe("The user's underlying personal motivation or why they care about keeping this resolution."),
   wally_roast_angle: z
     .string()
     .describe(
@@ -41,6 +45,7 @@ export interface ParsedResolutionContract extends ResolutionAnalysis {
   ruleId: string;
   originalTitle: string;
   originalCondition: string;
+  whyItMatters?: string;
   penaltySui: number;
   verbatimOath: string;
 }
@@ -53,9 +58,10 @@ export async function analyzeResolutionWithGemini(
   ruleId: string,
   title: string,
   condition: string,
-  penaltySui: number
+  penaltySui: number,
+  whyItMatters?: string
 ): Promise<ParsedResolutionContract> {
-  const oathText = `${title}${condition ? ` — Condition: ${condition}` : ""}`;
+  const oathText = `${title}${condition ? ` — Condition: ${condition}` : ""}${whyItMatters ? ` (Why: ${whyItMatters})` : ""}`;
 
   try {
     const model = google("gemini-3.5-flash");
@@ -70,11 +76,13 @@ export async function analyzeResolutionWithGemini(
         "You are the analytical engine for Yearbound, an accountable consumer finance platform. " +
         "Users set New Year's resolutions with financial penalties deposited into a time-locked Sui vault. " +
         "Your task is to parse raw natural language resolutions into precise, testable behavioral contracts. " +
-        "Extract merchant/memo keywords that would trigger an infraction, craft a sharp, discerning roast angle " +
-        "for Wally (our sophisticated walrus concierge), and identify any exceptions.",
+        "Capture the user's personal motivation ('why it matters') so Wally can quote it back during temptation. " +
+        "Extract merchant/memo concepts that would trigger an infraction, craft a sharp, discerning roast angle " +
+        "for Wally (our sophisticated walrus concierge), and identify any sensible exceptions.",
       prompt: `Analyze this New Year's resolution commitment:
 Title: "${title}"
 Condition/Trigger: "${condition || "None specified"}"
+Personal Reason / Why It Matters: "${whyItMatters || "Personal financial growth & discipline"}"
 Staked Penalty: ${penaltySui} SUI
 
 Generate a structured behavioral contract for this commitment.`,
@@ -84,11 +92,13 @@ Generate a structured behavioral contract for this commitment.`,
       ruleId,
       originalTitle: title,
       originalCondition: condition,
+      whyItMatters: output.why_it_matters || whyItMatters || "",
       penaltySui,
       verbatimOath: oathText,
       category: output.category,
       keywords: output.keywords,
       behavioral_rule: output.behavioral_rule,
+      why_it_matters: output.why_it_matters || whyItMatters || "",
       wally_roast_angle: output.wally_roast_angle,
       cadence: output.cadence,
       exceptions: output.exceptions,
@@ -123,12 +133,14 @@ Generate a structured behavioral contract for this commitment.`,
       ruleId,
       originalTitle: title,
       originalCondition: condition,
+      whyItMatters: whyItMatters || "",
       penaltySui,
       verbatimOath: oathText,
       category: fallbackCategory,
       keywords: Array.from(new Set(extractedWords)).slice(0, 5),
       behavioral_rule: `Commitment: ${title}. Breach condition: ${condition || "Any deviation from stated oath"}.`,
-      wally_roast_angle: `Remind the user of their exact oath: "${oathText}", and how breaking it immediately sends ${penaltySui} SUI to the Christmas vault.`,
+      why_it_matters: whyItMatters || "",
+      wally_roast_angle: `Remind the user of their exact oath: "${oathText}", their motivation "${whyItMatters || "discipline"}", and how breaking it immediately sends ${penaltySui} SUI to the Christmas vault.`,
       cadence: "event_based",
       exceptions: [],
     };
@@ -139,10 +151,10 @@ Generate a structured behavioral contract for this commitment.`,
  * Batch parses multiple resolutions in parallel.
  */
 export async function analyzeMultipleResolutions(
-  rules: { id: string; title: string; condition: string; penalty: number }[]
+  rules: { id: string; title: string; condition: string; penalty: number; whyItMatters?: string }[]
 ): Promise<ParsedResolutionContract[]> {
   const promises = rules.map((r) =>
-    analyzeResolutionWithGemini(r.id, r.title, r.condition, r.penalty)
+    analyzeResolutionWithGemini(r.id, r.title, r.condition, r.penalty, r.whyItMatters)
   );
   return Promise.all(promises);
 }

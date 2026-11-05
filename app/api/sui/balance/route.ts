@@ -31,9 +31,10 @@ export async function GET(req: Request) {
       coinType: "0x2::sui::SUI",
     });
 
+    const balanceObj = balanceData?.balance as any;
     const mist =
-      balanceData?.balance?.totalBalance ||
-      balanceData?.balance?.balance ||
+      balanceObj?.totalBalance ||
+      balanceObj?.balance ||
       "0";
     const balanceSui = Number(mist) / 1_000_000_000;
 

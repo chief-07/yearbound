@@ -47,12 +47,17 @@ export const yearboundAgentTools = {
       const payload: CommitmentRulePayload = {
         type: "commitment_rule",
         commitment_id: commitmentId,
+        rule_id: commitmentId,
         title,
         description,
         category,
         penalty_amount_sui,
         cadence,
         exceptions,
+        keywords: [title.toLowerCase(), category],
+        behavioral_rule: `Commitment: ${title}. Condition: ${description}`,
+        wally_roast_angle: `Remind user of their oath '${title}' and penalty of ${penalty_amount_sui} SUI.`,
+        verbatim_oath: `${title}: ${description}`,
         created_at: new Date().toISOString(),
         status: "active",
       };

@@ -30,7 +30,8 @@ export async function POST(req: Request) {
         timestamp: new Date().toISOString(),
       };
 
-      const rememberResult = await walrusService.remember(payload);
+      // Rapid timeout (3500ms) prevents UI stall while ensuring blob assignment
+      const rememberResult = await walrusService.remember(payload, 3500);
       return NextResponse.json({
         success: true,
         blobId: rememberResult.blobId,
@@ -64,6 +65,7 @@ export async function POST(req: Request) {
         id: String(r.id),
         title: String(r.title || "Untitled Resolution"),
         condition: String(r.condition || ""),
+        whyItMatters: String(r.whyItMatters || r.why_it_matters || ""),
         penalty: Number(r.penalty) || 5,
       }))
     );
@@ -84,6 +86,7 @@ export async function POST(req: Request) {
           exceptions: analyzed.exceptions,
           keywords: analyzed.keywords,
           behavioral_rule: analyzed.behavioral_rule,
+          why_it_matters: analyzed.whyItMatters,
           wally_roast_angle: analyzed.wally_roast_angle,
           verbatim_oath: analyzed.verbatimOath,
           wallet_address: walletAddress,

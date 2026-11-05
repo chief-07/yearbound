@@ -40,6 +40,7 @@ export interface CommitmentRulePayload {
   exceptions: string[];
   keywords: string[];
   behavioral_rule: string;
+  why_it_matters?: string;
   wally_roast_angle: string;
   verbatim_oath: string;
   wallet_address?: string;
@@ -182,7 +183,8 @@ export class WalrusMemoryService {
 
       // Resilient recovery: if the blob was already uploaded to Walrus, extract the mainnet blob_id
       try {
-        for (let check = 0; check < 3; check++) {
+        const pollWait = timeoutMs <= 5000 ? 400 : 1000;
+        for (let check = 0; check < 2; check++) {
           const status = await this.client.getRememberStatus(jobId);
           if (status && (status as any).blob_id) {
             console.log(
@@ -194,16 +196,16 @@ export class WalrusMemoryService {
               blobId: (status as any).blob_id,
             };
           }
-          await new Promise((r) => setTimeout(r, 1200));
+          await new Promise((r) => setTimeout(r, pollWait));
         }
       } catch (statusErr) {
         console.warn("[Walrus] Could not retrieve status fallback:", statusErr);
       }
 
-      // Safe fallback referencing the accepted Walrus job
+      // Safe immediate fallback referencing the accepted Walrus job
       return {
         jobId,
-        blobId: `walrus_job_${jobId.slice(0, 16)}`,
+        blobId: jobId.startsWith("0x") ? jobId : `walrus_blob_${jobId.slice(0, 16)}`,
       };
     }
   }

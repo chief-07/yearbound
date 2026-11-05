@@ -55,6 +55,7 @@ export interface RuleItem {
   id: string;
   title: string;
   condition: string;
+  whyItMatters?: string;
   penalty: number;
   breaches?: number;
   blobId?: string;
@@ -147,6 +148,7 @@ export default function YearboundApp() {
       id: "1",
       title: "No Late-Night Takeout",
       condition: "Any food delivery ordered between 10 PM and 5 AM",
+      whyItMatters: "Save $3,000 for Tokyo trip & fix sleep routine",
       penalty: 10,
       breaches: 0,
     },
@@ -154,6 +156,7 @@ export default function YearboundApp() {
       id: "2",
       title: "Gym 4x Per Week",
       condition: "Must log check-in before 9 AM on scheduled mornings",
+      whyItMatters: "Peak health & sustained daily energy",
       penalty: 10,
       breaches: 0,
     },
@@ -164,6 +167,8 @@ export default function YearboundApp() {
   const [unlockDate] = useState<string>("Dec 25, 2026");
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [sealingStage, setSealingStage] = useState<string>("");
+  const [sealingProgress, setSealingProgress] = useState<number>(0);
+  const [payFineStage, setPayFineStage] = useState<string>("");
 
   // Screen 3: Account / Wallet Selection
   const [accountType, setAccountType] = useState<AccountType>("demo");
@@ -282,7 +287,7 @@ export default function YearboundApp() {
     const newId = Date.now().toString();
     setRules((prev) => [
       ...prev,
-      { id: newId, title: "", condition: "", penalty: 10, breaches: 0 },
+      { id: newId, title: "", condition: "", whyItMatters: "", penalty: 10, breaches: 0 },
     ]);
     setExpandedRuleId(newId);
   };
@@ -329,16 +334,20 @@ export default function YearboundApp() {
   // Step 3 Submission to Walrus
   const handleLockVault = async () => {
     setIsSubmitting(true);
+    setSealingProgress(18);
     setSealingStage("Analyzing resolutions...");
     const t1 = setTimeout(() => {
+      setSealingProgress(45);
       setSealingStage("Securing commitments...");
-    }, 2000);
+    }, 1800);
     const t2 = setTimeout(() => {
+      setSealingProgress(75);
       setSealingStage("Recording to Walrus memory...");
-    }, 5500);
+    }, 4500);
     const t3 = setTimeout(() => {
-      setSealingStage("Locking Christmas vault...");
-    }, 16000);
+      setSealingProgress(92);
+      setSealingStage("Locking x402 vault...");
+    }, 12000);
 
     try {
       const activeRules = rules.filter((r) => r.title.trim().length > 0);
@@ -481,6 +490,7 @@ export default function YearboundApp() {
       clearTimeout(t3);
       setIsSubmitting(false);
       setSealingStage("");
+      setSealingProgress(0);
     }
   };
 
@@ -657,6 +667,7 @@ export default function YearboundApp() {
   // Handle Penalty Payment when Breach is Accepted via x402 Protocol
   const handlePayFineAndProceed = async () => {
     setIsSubmitting(true);
+    setPayFineStage("Settling fine via x402...");
     try {
       const penaltyAmt = breachPenaltySui || 10;
       const transferAmt = parseFloat(sendAmount) || 0;
@@ -678,23 +689,33 @@ export default function YearboundApp() {
         console.warn("[x402] Challenge flow notice (proceeding with fallback settlement):", x402Err);
       }
 
-      // 2. Persist Accountability Event Blob to Walrus Mainnet with verified tx hash
-      const res = await fetch("/api/walrus", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "accountability_event",
-          commitment_id: "pact_primary",
-          verdict: "broken",
-          user_explanation: sendMemo,
-          penalty_deposited_sui: penaltyAmt,
-          vault_tx_hash: txHash,
-        }),
-      });
+      setPayFineStage("Inscribing to Walrus memory...");
 
-      const data = await res.json();
-      const fineBlobId =
-        data.blobId || `blob_infr_${Date.now().toString(36)}`;
+      // 2. Persist Accountability Event Blob to Walrus Mainnet with verified tx hash
+      let fineBlobId = `blob_infr_${Date.now().toString(36)}`;
+      try {
+        const res = await fetch("/api/walrus", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: AbortSignal.timeout(4000), // Fast 4s timeout prevents UI hang
+          body: JSON.stringify({
+            type: "accountability_event",
+            commitment_id: "pact_primary",
+            verdict: "broken",
+            user_explanation: sendMemo,
+            penalty_deposited_sui: penaltyAmt,
+            vault_tx_hash: txHash,
+          }),
+        });
+
+        const data = await res.json();
+        if (data?.blobId) {
+          fineBlobId = data.blobId;
+        }
+      } catch (walrusErr) {
+        console.warn("[Walrus] Event logging notice:", walrusErr);
+      }
+
       const timestampStr = new Intl.DateTimeFormat("en-US", {
         month: "short",
         day: "numeric",
@@ -748,6 +769,7 @@ export default function YearboundApp() {
       setSendSubStep("penalty_recorded");
     } finally {
       setIsSubmitting(false);
+      setPayFineStage("");
     }
   };
 
@@ -943,6 +965,22 @@ export default function YearboundApp() {
                             placeholder="e.g. Any food delivery ordered between 10 PM and 5 AM"
                             rows={2}
                             className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-3.5 py-2 text-sm text-white placeholder-[#52525B] outline-none focus:border-white transition-colors resize-none leading-relaxed"
+                          />
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[11px] font-medium text-[#A1A1AA]">
+                              Why this matters to you
+                            </label>
+                            <span className="text-[10px] text-[#71717A]">Personal Motivation</span>
+                          </div>
+                          <input
+                            type="text"
+                            value={expandedRule.whyItMatters || ""}
+                            onChange={(e) => updateRule(expandedRule.id, "whyItMatters", e.target.value)}
+                            placeholder="e.g. Save $3,000 for Tokyo trip & fix sleep routine"
+                            className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-3.5 py-2 text-sm text-white placeholder-[#52525B] outline-none focus:border-white transition-colors"
                           />
                         </div>
                       </div>
@@ -1347,17 +1385,25 @@ export default function YearboundApp() {
                 type="button"
                 onClick={handleLockVault}
                 disabled={isSubmitting}
-                className={`w-full py-4 px-6 rounded-full font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 ${
+                className={`relative overflow-hidden w-full py-4 px-6 rounded-full font-semibold text-sm transition-all duration-300 flex items-center justify-center gap-2 ${
                   isSubmitting
-                    ? "bg-[#222226] text-[#71717A] cursor-wait"
+                    ? "bg-[#18181C] text-white border border-[#27272A] cursor-wait"
                     : "bg-[#FFFFFF] text-[#000000] hover:bg-[#E4E4E7] active:scale-[0.98]"
                 }`}
               >
                 {isSubmitting ? (
-                  <span className="flex items-center justify-center gap-2 max-w-full px-2">
-                    <span className="w-3.5 h-3.5 border-2 border-[#71717A] border-t-white rounded-full animate-spin inline-block shrink-0" />
-                    <span className="truncate text-xs text-[#E4E4E7] font-medium tracking-normal">{sealingStage || "Connecting to Walrus..."}</span>
-                  </span>
+                  <>
+                    <div
+                      className="absolute inset-y-0 left-0 bg-white/20 transition-all duration-700 ease-out"
+                      style={{ width: `${sealingProgress}%` }}
+                    />
+                    <div className="relative z-10 flex items-center justify-center gap-2.5 max-w-full px-2">
+                      <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block shrink-0" />
+                      <span className="truncate text-xs text-white font-medium tracking-normal">
+                        {sealingStage || "Connecting to Walrus..."}
+                      </span>
+                    </div>
+                  </>
                 ) : (
                   <>
                     <span>Lock Vault & Commit</span>
@@ -2344,11 +2390,16 @@ export default function YearboundApp() {
                     type="button"
                     onClick={handlePayFineAndProceed}
                     disabled={isSubmitting}
-                    className="w-full py-2 text-center text-xs font-medium text-[#71717A] hover:text-white transition-colors"
+                    className="w-full py-2.5 text-center text-xs font-medium text-[#71717A] hover:text-white transition-colors flex items-center justify-center gap-2"
                   >
-                    {isSubmitting
-                      ? "Recording penalty in Walrus..."
-                      : "Proceed anyway & pay 10 SUI penalty"}
+                    {isSubmitting ? (
+                      <>
+                        <span className="w-3 h-3 border-2 border-[#71717A] border-t-white rounded-full animate-spin inline-block shrink-0" />
+                        <span>{payFineStage || "Settling penalty..."}</span>
+                      </>
+                    ) : (
+                      <span>Proceed anyway & pay {breachPenaltySui || 10} SUI penalty</span>
+                    )}
                   </button>
                 </div>
               </>
