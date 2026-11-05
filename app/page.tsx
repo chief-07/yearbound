@@ -84,6 +84,7 @@ export interface InfractionRecord {
   verdict?: "honored" | "broken";
   recipient?: string;
   txHash?: string;
+  source?: "user" | "timeline";
 }
 
 export interface WalrusMemoryBlob {
@@ -679,6 +680,7 @@ export default function YearboundApp() {
       verdict: "honored",
       recipient: sendRecipient,
       txHash,
+      source: "user",
     };
     setInfractions((prev) => [approvedRecord, ...prev]);
 
@@ -853,6 +855,7 @@ export default function YearboundApp() {
         verdict: "broken",
         recipient: sendRecipient,
         txHash,
+        source: "user",
       };
       setInfractions((prev) => [newInfraction, ...prev]);
 
@@ -931,168 +934,211 @@ export default function YearboundApp() {
     setTimeout(() => setCopiedAddress(false), 2500);
   };
 
-  // Handler for Demo-Only 12-Month Time Travel Scrubber
+  // Persistent milestone cache & Walrus log tracking for idempotent time travel
+  const milestoneCacheRef = React.useRef<Map<TimeMilestone, InfractionRecord[]>>(new Map());
+  const loggedMilestonesToWalrusRef = React.useRef<Set<string>>(new Set());
+
+  // Helper to generate dynamic memo based on user's actual resolution
+  const getDynamicResolutionMemo = (rule: RuleItem, context: "first" | "repeat" | "summer") => {
+    const t = (rule.title || "").toLowerCase();
+    const c = (rule.condition || "").toLowerCase();
+    const combined = `${t} ${c}`;
+
+    if (combined.includes("bet") || combined.includes("gambl") || combined.includes("sport") || combined.includes("parlay") || combined.includes("wager")) {
+      if (context === "first") return "Super Bowl live parlay wager";
+      if (context === "repeat") return "Weekend derby live odds bet";
+      return "Championship futures bet";
+    }
+    if (combined.includes("food") || combined.includes("takeout") || combined.includes("delivery") || combined.includes("eat") || combined.includes("curfew")) {
+      if (context === "first") return "Valentine's midnight food delivery (11:30 PM)";
+      if (context === "repeat") return "Midnight pizza takeout order (12:20 AM)";
+      return "Late-night fast food order (1:15 AM)";
+    }
+    if (combined.includes("banned") || combined.includes("send") || combined.includes("transfer") || combined.includes("xxxx")) {
+      return `Transfer sent to forbidden recipient: ${rule.condition.slice(0, 24)}`;
+    }
+    if (combined.includes("shop") || combined.includes("spend") || combined.includes("buy") || combined.includes("gear")) {
+      if (context === "first") return "Unplanned impulse checkout";
+      return "Online retail impulse buy";
+    }
+    return `Impulsive slip-up breaching: ${rule.title}`;
+  };
+
+  // Handler for Demo-Only 12-Month Time Travel Scrubber (Strictly Idempotent)
   const handleMilestoneChange = (milestone: TimeMilestone) => {
     setActiveMilestone(milestone);
+
+    // 1. Preserve all user-initiated manual transactions
+    const userTransactions = infractions.filter((i) => i.source === "user");
+    const userPenaltySum = userTransactions.reduce((acc, i) => acc + (i.verdict === "honored" ? 0 : i.penaltySui), 0);
+
+    const primaryRule = activeRulesList[0] || rules[0] || {
+      id: "1",
+      title: "Personal Discipline",
+      condition: "Maintain New Year commitments",
+      penalty: 10,
+      whyItMatters: "Self growth",
+    };
+    const secondaryRule = activeRulesList[1] || rules[1] || primaryRule;
 
     if (milestone === "jan1") {
       setCurrentDateStr("Thursday, Jan 1, 2026");
       setCurrentDayOfYear(1);
-      setEscrowDeposit(10);
+      setEscrowDeposit(10 + userPenaltySum);
       setIsVaultUnlocked(false);
       setIsVaultClaimed(false);
-      setInfractions([]);
-      setInflowProgress({
-        current: 0,
-        target: 1000,
-        month: "January",
-        isDeficit: false,
-      });
-      triggerSnackbar("Time Travel: Jan 1 (Genesis)", "Fresh New Year oaths sealed · 0 breaches");
-    } else if (milestone === "feb14") {
+      setInfractions([...userTransactions]);
+      triggerSnackbar("Time Travel: Jan 1 (Genesis)", "Fresh New Year oaths sealed · 0 milestone breaches");
+      return;
+    }
+
+    if (milestone === "feb14") {
       setCurrentDateStr("Saturday, Feb 14, 2026");
       setCurrentDayOfYear(45);
-      setEscrowDeposit(20);
       setIsVaultUnlocked(false);
       setIsVaultClaimed(false);
-      setInflowProgress({
-        current: 850,
-        target: 1000,
-        month: "February",
-        isDeficit: false,
-      });
-      const febInfr: InfractionRecord = {
-        id: "infr_feb14",
-        ruleTitle: "No Late-Night Takeout",
-        ruleCondition: "No food delivery between 10 PM and 5 AM",
-        amount: "32",
-        memo: "Valentine's midnight DoorDash takeout (11:30 PM)",
-        timestamp: "Feb 14, 11:30 PM",
-        penaltySui: 10,
-        blobId: "blob_infr_feb14_01",
-        dayOfYear: 45,
-      };
-      setInfractions([febInfr]);
-      triggerSnackbar("Time Travel: Feb 14 (1st Breach)", "Late-night food breach · 10 SUI locked via x402");
-    } else if (milestone === "jul20") {
-      setCurrentDateStr("Monday, Jul 20, 2026");
-      setCurrentDayOfYear(201);
-      setEscrowDeposit(55);
-      setIsVaultUnlocked(false);
-      setIsVaultClaimed(false);
-      setInflowProgress({
-        current: 400,
-        target: 1000,
-        month: "June (Deficit)",
-        isDeficit: true,
-      });
-      const julInfrs: InfractionRecord[] = [
-        {
-          id: "infr_jul20",
-          ruleTitle: "No Late-Night Takeout",
-          ruleCondition: "No food delivery between 10 PM and 5 AM",
-          amount: "28",
-          memo: "Late-night Shake Shack burgers (12:15 AM)",
-          timestamp: "Jul 20, 12:15 AM",
-          penaltySui: 15,
-          blobId: "blob_infr_jul20_04",
-          dayOfYear: 201,
-        },
-        {
-          id: "infr_jun30",
-          ruleTitle: "Monthly Inflow Target Deficit",
-          ruleCondition: "Must earn ≥ 1,000 SUI/month from freelancing",
-          amount: "0",
-          memo: "June Inflow Target Deficit (Audited via Tatum RPC: 400/1000 SUI)",
-          timestamp: "Jun 30, 11:59 PM",
-          penaltySui: 15,
-          blobId: "blob_infr_jun30_03",
-          dayOfYear: 181,
-        },
-        {
-          id: "infr_jun08",
-          ruleTitle: "Impulse Spending Cap",
-          ruleCondition: "No single non-essential purchase over 50 SUI",
-          amount: "65",
-          memo: "Summer Steam sale bundle impulse buy",
-          timestamp: "Jun 8, 3:20 PM",
-          penaltySui: 15,
-          blobId: "blob_infr_jun08_02",
-          dayOfYear: 159,
-        },
-        {
-          id: "infr_feb14",
-          ruleTitle: "No Late-Night Takeout",
-          ruleCondition: "No food delivery between 10 PM and 5 AM",
-          amount: "32",
-          memo: "Valentine's midnight DoorDash takeout (11:30 PM)",
+
+      let febInfrs = milestoneCacheRef.current.get("feb14");
+      if (!febInfrs) {
+        const penalty = primaryRule.penalty || 10;
+        const memo = getDynamicResolutionMemo(primaryRule, "first");
+        const blobId = `blob_walrus_feb14_${Date.now().toString(36)}`;
+        const record: InfractionRecord = {
+          id: "milestone_feb14",
+          ruleTitle: primaryRule.title,
+          ruleCondition: primaryRule.condition,
+          amount: "25",
+          memo,
           timestamp: "Feb 14, 11:30 PM",
-          penaltySui: 10,
-          blobId: "blob_infr_feb14_01",
+          penaltySui: penalty,
+          blobId,
           dayOfYear: 45,
-        },
-      ];
-      setInfractions(julInfrs);
-      triggerSnackbar("Time Travel: Jul 20 (Pattern Recall)", "Compound roast · Tatum audited 600 SUI income deficit");
-    } else if (milestone === "dec25") {
-      setCurrentDateStr("Friday, Dec 25, 2026");
-      setCurrentDayOfYear(359);
-      setEscrowDeposit(55);
-      setIsVaultUnlocked(true);
-      setInflowProgress({
-        current: 1250,
-        target: 1000,
-        month: "December",
-        isDeficit: false,
-      });
-      const decInfrs: InfractionRecord[] = [
-        {
-          id: "infr_jul20",
-          ruleTitle: "No Late-Night Takeout",
-          ruleCondition: "No food delivery between 10 PM and 5 AM",
-          amount: "28",
-          memo: "Late-night Shake Shack burgers (12:15 AM)",
-          timestamp: "Jul 20, 12:15 AM",
-          penaltySui: 15,
-          blobId: "blob_infr_jul20_04",
-          dayOfYear: 201,
-        },
-        {
-          id: "infr_jun30",
-          ruleTitle: "Monthly Inflow Target Deficit",
-          ruleCondition: "Must earn ≥ 1,000 SUI/month from freelancing",
-          amount: "0",
-          memo: "June Inflow Target Deficit (Audited via Tatum RPC: 400/1000 SUI)",
-          timestamp: "Jun 30, 11:59 PM",
-          penaltySui: 15,
-          blobId: "blob_infr_jun30_03",
-          dayOfYear: 181,
-        },
-        {
-          id: "infr_jun08",
-          ruleTitle: "Impulse Spending Cap",
-          ruleCondition: "No single non-essential purchase over 50 SUI",
-          amount: "65",
-          memo: "Summer Steam sale bundle impulse buy",
-          timestamp: "Jun 8, 3:20 PM",
-          penaltySui: 15,
-          blobId: "blob_infr_jun08_02",
-          dayOfYear: 159,
-        },
-        {
-          id: "infr_feb14",
-          ruleTitle: "No Late-Night Takeout",
-          ruleCondition: "No food delivery between 10 PM and 5 AM",
-          amount: "32",
-          memo: "Valentine's midnight DoorDash takeout (11:30 PM)",
+          verdict: "broken",
+          source: "timeline",
+        };
+        febInfrs = [record];
+        milestoneCacheRef.current.set("feb14", febInfrs);
+
+        // Inscribe once to Walrus Mainnet
+        if (!loggedMilestonesToWalrusRef.current.has("feb14")) {
+          loggedMilestonesToWalrusRef.current.add("feb14");
+          fetch("/api/walrus", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            signal: AbortSignal.timeout(3500),
+            body: JSON.stringify({
+              type: "accountability_event",
+              commitment_id: "pact_primary",
+              verdict: "broken",
+              user_explanation: memo,
+              penalty_deposited_sui: penalty,
+              vault_tx_hash: "0x_sui_ptb_feb14",
+            }),
+          }).catch((e) => console.warn("[Walrus Demo] Feb 14 log notice:", e));
+        }
+      }
+
+      const totalFines = febInfrs.reduce((acc, i) => acc + i.penaltySui, 0);
+      setEscrowDeposit(10 + totalFines + userPenaltySum);
+      setInfractions([...userTransactions, ...febInfrs]);
+      triggerSnackbar(
+        "Time Travel: Feb 14 (1st Breach)",
+        `Breached '${primaryRule.title}' · ${primaryRule.penalty || 10} SUI fine locked via x402`
+      );
+      return;
+    }
+
+    if (milestone === "jul20" || milestone === "dec25") {
+      const isChristmas = milestone === "dec25";
+      setCurrentDateStr(isChristmas ? "Friday, Dec 25, 2026" : "Monday, Jul 20, 2026");
+      setCurrentDayOfYear(isChristmas ? 359 : 201);
+      setIsVaultUnlocked(isChristmas);
+
+      let summerInfrs = milestoneCacheRef.current.get("jul20");
+      if (!summerInfrs) {
+        const p1 = primaryRule.penalty || 10;
+        const p2 = secondaryRule.penalty || 15;
+        const febMemo = getDynamicResolutionMemo(primaryRule, "first");
+        const mayMemo = getDynamicResolutionMemo(secondaryRule, "repeat");
+        const julMemo = getDynamicResolutionMemo(primaryRule, "summer");
+
+        const record1: InfractionRecord = {
+          id: "milestone_feb14",
+          ruleTitle: primaryRule.title,
+          ruleCondition: primaryRule.condition,
+          amount: "25",
+          memo: febMemo,
           timestamp: "Feb 14, 11:30 PM",
-          penaltySui: 10,
-          blobId: "blob_infr_feb14_01",
+          penaltySui: p1,
+          blobId: `blob_walrus_feb14_${Date.now().toString(36)}`,
           dayOfYear: 45,
-        },
-      ];
-      setInfractions(decInfrs);
-      triggerSnackbar("🎅 Time Travel: Dec 25 (Christmas Unlock)", "Move smart contract unlocked! Claim savings.");
+          verdict: "broken",
+          source: "timeline",
+        };
+        const record2: InfractionRecord = {
+          id: "milestone_may15",
+          ruleTitle: secondaryRule.title,
+          ruleCondition: secondaryRule.condition,
+          amount: "40",
+          memo: mayMemo,
+          timestamp: "May 15, 9:45 PM",
+          penaltySui: p2,
+          blobId: `blob_walrus_may15_${Date.now().toString(36)}`,
+          dayOfYear: 135,
+          verdict: "broken",
+          source: "timeline",
+        };
+        const record3: InfractionRecord = {
+          id: "milestone_jul20",
+          ruleTitle: primaryRule.title,
+          ruleCondition: primaryRule.condition,
+          amount: "30",
+          memo: julMemo,
+          timestamp: "Jul 20, 12:15 AM",
+          penaltySui: p1,
+          blobId: `blob_walrus_jul20_${Date.now().toString(36)}`,
+          dayOfYear: 201,
+          verdict: "broken",
+          source: "timeline",
+        };
+        summerInfrs = [record3, record2, record1];
+        milestoneCacheRef.current.set("jul20", summerInfrs);
+        milestoneCacheRef.current.set("dec25", summerInfrs);
+
+        if (!loggedMilestonesToWalrusRef.current.has("jul20")) {
+          loggedMilestonesToWalrusRef.current.add("jul20");
+          fetch("/api/walrus", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            signal: AbortSignal.timeout(3500),
+            body: JSON.stringify({
+              type: "accountability_event",
+              commitment_id: "pact_primary",
+              verdict: "broken",
+              user_explanation: julMemo,
+              penalty_deposited_sui: p1,
+              vault_tx_hash: "0x_sui_ptb_jul20",
+            }),
+          }).catch((e) => console.warn("[Walrus Demo] Jul 20 log notice:", e));
+        }
+      }
+
+      const totalFines = summerInfrs.reduce((acc, i) => acc + i.penaltySui, 0);
+      setEscrowDeposit(10 + totalFines + userPenaltySum);
+      setInfractions([...userTransactions, ...summerInfrs]);
+
+      if (isChristmas) {
+        triggerSnackbar(
+          "🎅 Time Travel: Dec 25 (Christmas Unlock)",
+          `Move vault time-lock mature! Claim your ${10 + totalFines + userPenaltySum} SUI savings.`
+        );
+      } else {
+        triggerSnackbar(
+          "Time Travel: Jul 20 (Habit Pattern)",
+          `Walrus synthesis: 3 breaches across '${primaryRule.title}' · ${totalFines} SUI in vault`
+        );
+      }
+      return;
     }
   };
 
@@ -1813,17 +1859,17 @@ export default function YearboundApp() {
                   </div>
                   <p className="text-sm text-[#E4E4E7] leading-relaxed font-normal">
                     {isVaultUnlocked && !isVaultClaimed
-                      ? "🎅 Merry Christmas! The Sui network clock has passed the vault unlock timestamp (1798156800000 ms). Your accumulated savings of 55.00 SUI are now ready to be claimed!"
+                      ? `🎅 Merry Christmas! The Sui network clock has passed the vault unlock timestamp (1798156800000 ms). Your accumulated savings of ${escrowDeposit}.00 SUI are now ready to be claimed!`
                       : isVaultClaimed
-                      ? "🎉 Christmas gift claimed! You successfully locked 55.00 SUI away from your impulsive past self and reclaimed it for the holidays."
+                      ? `🎉 Christmas gift claimed! You successfully locked ${escrowDeposit}.00 SUI away from your impulsive past self and reclaimed it for the holidays.`
                       : activeMilestone === "jul20"
-                      ? "Walrus memory synthesis: This is your 3rd late-night food breach on a weekend. Plus Tatum RPC confirms your June income was in a 600 SUI deficit. 55 SUI total is now locked away in Move storage."
+                      ? `Walrus memory synthesis: Multiple slip-ups recorded on "${activeRulesList[0]?.title || "your resolution"}". ${activeRulesList[0]?.whyItMatters ? `You pledged: "${activeRulesList[0].whyItMatters}". ` : ""}${escrowDeposit}.00 SUI total is now locked away in Move storage.`
                       : activeMilestone === "feb14"
-                      ? "Day 45: First slip-up logged. You swore in Walrus Memory: 'No food delivery after 10 PM'. 10 SUI was locked into the Move vault via x402."
+                      ? `Day 45: First slip-up logged. You swore in Walrus Memory: "${activeRulesList[0]?.title || "your resolution"}". ${activeRulesList[0]?.penalty || 10} SUI was locked into the Move vault via x402.`
                       : totalBreaches > 0
-                      ? `Infraction logged into Walrus memory. You have paid 10 SUI penalty into the vault. Current balance: ${availableBalance.toFixed(2)} SUI.`
+                      ? `Infraction logged into Walrus memory. You have paid penalties into the vault. Current balance: ${availableBalance.toFixed(2)} SUI.`
                       : activeRulesList.length > 0
-                      ? `I have committed your resolutions to Walrus memory. 0 infractions recorded. Remember your pact: "${activeRulesList[0].title}". 10 SUI penalty standing by if you slip up.`
+                      ? `I have committed your resolutions to Walrus memory. 0 infractions recorded. Remember your pact: "${activeRulesList[0].title}". ${activeRulesList[0].penalty || 10} SUI penalty standing by if you slip up.`
                       : "Resolutions locked in Walrus memory. I am monitoring your transactions for adherence."}
                   </p>
                 </div>
@@ -2248,14 +2294,16 @@ export default function YearboundApp() {
                 {/* 365-DAY DISCIPLINE GRID HEATMAP */}
                 <DisciplineGrid
                   currentDayOfYear={currentDayOfYear}
-                  infractions={infractions.map((i) => ({
-                    dayOfYear: i.dayOfYear || 45,
-                    dateStr: i.timestamp,
-                    memo: i.memo,
-                    penaltySui: i.penaltySui,
-                    ruleTitle: i.ruleTitle,
-                    blobId: i.blobId,
-                  }))}
+                  infractions={infractions
+                    .filter((i) => i.verdict !== "honored")
+                    .map((i) => ({
+                      dayOfYear: i.dayOfYear || 45,
+                      dateStr: i.timestamp,
+                      memo: i.memo,
+                      penaltySui: i.penaltySui,
+                      ruleTitle: i.ruleTitle,
+                      blobId: i.blobId,
+                    }))}
                   totalEscrowSui={escrowDeposit}
                   isUnlocked={isVaultUnlocked}
                 />
