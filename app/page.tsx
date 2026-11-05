@@ -22,7 +22,13 @@ import {
   ChevronUp,
   FileText,
 } from "lucide-react";
-import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
+import {
+  DEMO_SUI_ADDRESS,
+  getDemoWalletInfo,
+  getOrCreateRealKeypair,
+  getRealWalletInfo,
+  exportRealPrivateKeyHex,
+} from "@/lib/wallet";
 
 /* ==========================================================================
    YEARBOUND PROTOCOL
@@ -85,7 +91,6 @@ type SendSubStep =
 
 const PENALTY_PRESETS = [5, 10, 25, 50];
 const AMOUNT_PRESETS = [5, 10, 15, 25];
-const DEMO_SUI_ADDRESS = "0x7a83d4f19b224c88e019f39002b8da4e91c0e39a";
 
 const QUICK_MEMO_PICKS = [
   {
@@ -159,9 +164,13 @@ export default function YearboundApp() {
   const [realAddress, setRealAddress] = useState<string>("");
   const [linkedAddress, setLinkedAddress] = useState<string>("");
   const [showLinkInput, setShowLinkInput] = useState<boolean>(false);
+  const [showExportPrivateKey, setShowExportPrivateKey] = useState<boolean>(false);
+  const [exportedKey, setExportedKey] = useState<string>("");
+  const [isCheckingLiveBalance, setIsCheckingLiveBalance] = useState<boolean>(false);
+  const [liveOnChainBalanceSui, setLiveOnChainBalanceSui] = useState<number | null>(null);
 
-  // Balances
-  const [availableBalance, setAvailableBalance] = useState<number>(40);
+  // Balances (Demo Sandbox pre-funded with 150 SUI)
+  const [availableBalance, setAvailableBalance] = useState<number>(150);
 
   // Walrus feedback & memory proofs
   const [walrusBlobId, setWalrusBlobId] = useState<string>("");
@@ -196,17 +205,38 @@ export default function YearboundApp() {
   const [sendMemo, setSendMemo] = useState<string>("");
   const [breachReason, setBreachReason] = useState<string>("");
 
-  // Generate real self-custodial Sui keypair when Real Account is selected
+  // Initialize real persistent self-custodial Sui keypair
   useEffect(() => {
-    if (accountType === "real" && !realAddress) {
+    if (typeof window !== "undefined") {
       try {
-        const kp = new Ed25519Keypair();
-        setRealAddress(kp.toSuiAddress());
+        const { keypair } = getOrCreateRealKeypair();
+        setRealAddress(keypair.toSuiAddress());
       } catch (e) {
-        console.error("Failed to generate keypair:", e);
+        console.error("Failed to load real keypair:", e);
       }
     }
-  }, [accountType, realAddress]);
+  }, []);
+
+  // Fetch live on-chain balance via Sui gRPC/RPC
+  const refreshLiveBalance = async (targetAddress?: string) => {
+    const addr = targetAddress || (accountType === "real" ? realAddress : linkedAddress);
+    if (!addr || !addr.startsWith("0x")) return;
+    setIsCheckingLiveBalance(true);
+    try {
+      const res = await fetch(`/api/sui/balance?address=${addr}&network=mainnet`);
+      const data = await res.json();
+      if (data.success && typeof data.balanceSui === "number") {
+        setLiveOnChainBalanceSui(data.balanceSui);
+        if (accountType === "real" || accountType === "linked") {
+          setAvailableBalance(data.balanceSui);
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to query live balance:", err);
+    } finally {
+      setIsCheckingLiveBalance(false);
+    }
+  };
 
   // Rule management
   const addRule = () => {
@@ -955,7 +985,10 @@ export default function YearboundApp() {
             <div className="flex-1 overflow-y-auto px-7 py-2 flex flex-col gap-3.5 pb-4 overscroll-contain">
               {/* Option 1: Demo Account */}
               <div
-                onClick={() => setAccountType("demo")}
+                onClick={() => {
+                  setAccountType("demo");
+                  setAvailableBalance(150);
+                }}
                 className={`bg-[#0A0A0C] rounded-2xl p-5 flex flex-col gap-3 cursor-pointer transition-all duration-200 active:scale-[0.99] border ${
                   accountType === "demo"
                     ? "border-white shadow-sm"
@@ -963,8 +996,13 @@ export default function YearboundApp() {
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <div className="text-base font-semibold text-white tracking-[-0.01em]">
-                    Demo account
+                  <div>
+                    <div className="text-base font-semibold text-white tracking-[-0.01em]">
+                      Demo account
+                    </div>
+                    <span className="text-[10px] font-mono text-[#71717A] uppercase tracking-wider">
+                      Deterministic Ed25519 Keypair
+                    </span>
                   </div>
                   <div
                     className={`w-4 h-4 rounded-full flex items-center justify-center transition-all duration-200 ${
@@ -978,20 +1016,23 @@ export default function YearboundApp() {
                 </div>
 
                 <p className="text-xs text-[#71717A] leading-relaxed">
-                  Pre-funded with testnet SUI for instant evaluation. No extension or faucet required.
+                  Pre-funded with 150 SUI sandbox balance. Operates with a real deterministic Ed25519 keypair for cryptographic signatures without requiring wallet extensions.
                 </p>
 
                 <div className="pt-3 border-t border-[#18181C] flex items-center justify-between text-xs font-mono">
                   <span className="text-[#A1A1AA]">
                     {DEMO_SUI_ADDRESS.slice(0, 6)}...{DEMO_SUI_ADDRESS.slice(-4)}
                   </span>
-                  <span className="text-white font-medium">50 SUI Balance</span>
+                  <span className="text-white font-medium">150.00 SUI Balance</span>
                 </div>
               </div>
 
               {/* Option 2: Real Account */}
               <div
-                onClick={() => setAccountType("real")}
+                onClick={() => {
+                  setAccountType("real");
+                  if (realAddress) refreshLiveBalance(realAddress);
+                }}
                 className={`bg-[#0A0A0C] rounded-2xl p-5 flex flex-col gap-3 cursor-pointer transition-all duration-200 active:scale-[0.99] border ${
                   accountType === "real"
                     ? "border-white shadow-sm"
@@ -999,8 +1040,13 @@ export default function YearboundApp() {
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <div className="text-base font-semibold text-white tracking-[-0.01em]">
-                    Real account
+                  <div>
+                    <div className="text-base font-semibold text-white tracking-[-0.01em]">
+                      Real account
+                    </div>
+                    <span className="text-[10px] font-mono text-[#71717A] uppercase tracking-wider">
+                      Self-Custodial Sui Burner
+                    </span>
                   </div>
                   <div
                     className={`w-4 h-4 rounded-full flex items-center justify-center transition-all duration-200 ${
@@ -1014,17 +1060,80 @@ export default function YearboundApp() {
                 </div>
 
                 <p className="text-xs text-[#71717A] leading-relaxed">
-                  Generates a fresh, self-custodial Sui keypair stored securely in your browser.
+                  Generates an actual Ed25519 Sui Keypair persisted in your browser's encrypted storage. Can be exported or funded directly on Sui Mainnet.
                 </p>
 
                 <div className="pt-3 border-t border-[#18181C] flex items-center justify-between text-xs font-mono">
-                  <span className="text-[#A1A1AA] truncate max-w-[200px]">
+                  <span className="text-[#A1A1AA] truncate max-w-[190px]">
                     {realAddress
                       ? `${realAddress.slice(0, 6)}...${realAddress.slice(-4)}`
-                      : "Generating keypair..."}
+                      : "Loading keypair..."}
                   </span>
-                  <span className="text-[#71717A]">Self-Custodial</span>
+                  <span className="text-white font-medium">
+                    {isCheckingLiveBalance
+                      ? "Querying RPC..."
+                      : `${liveOnChainBalanceSui !== null ? liveOnChainBalanceSui.toFixed(2) : "0.00"} SUI (Live)`}
+                  </span>
                 </div>
+
+                {accountType === "real" && realAddress && (
+                  <div
+                    className="pt-2 flex items-center justify-between gap-2 border-t border-[#18181C]"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (navigator?.clipboard?.writeText) {
+                          navigator.clipboard.writeText(realAddress).catch(() => {});
+                        }
+                        triggerSnackbar("Address Copied", `${realAddress.slice(0, 10)}...`);
+                      }}
+                      className="text-[10px] font-mono text-[#71717A] hover:text-white flex items-center gap-1 transition-colors"
+                    >
+                      <Copy size={11} />
+                      <span>Copy Address</span>
+                    </button>
+
+                    <a
+                      href={`https://suiscan.xyz/mainnet/account/${realAddress}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[10px] font-mono text-[#71717A] hover:text-white flex items-center gap-1 transition-colors"
+                    >
+                      <span>SuiScan</span>
+                      <ExternalLink size={11} />
+                    </a>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const hex = exportRealPrivateKeyHex();
+                        if (hex) {
+                          setExportedKey(hex);
+                          setShowExportPrivateKey(!showExportPrivateKey);
+                        }
+                      }}
+                      className="text-[10px] font-mono text-[#71717A] hover:text-white transition-colors"
+                    >
+                      {showExportPrivateKey ? "Hide Key" : "Export Key"}
+                    </button>
+                  </div>
+                )}
+
+                {showExportPrivateKey && exportedKey && (
+                  <div
+                    className="bg-[#131316] border border-[#27272A] rounded-xl p-3 flex flex-col gap-1.5 animate-in fade-in"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <span className="text-[10px] font-mono text-[#A1A1AA]">
+                      Ed25519 Secret Key (Hex):
+                    </span>
+                    <div className="bg-[#0A0A0C] p-2 rounded text-[10px] font-mono text-white break-all select-all border border-[#1F1F24]">
+                      {exportedKey}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Option 3: Centered clickable text only */}
@@ -1572,10 +1681,45 @@ export default function YearboundApp() {
                     <span className="text-[11px] font-mono text-[#71717A] uppercase">
                       Wallet Configuration
                     </span>
-                    <span className="text-xs font-mono text-white capitalize">{accountType}</span>
+                    <span className="text-xs font-mono text-white capitalize">
+                      {accountType === "demo" ? "Demo Keypair" : "Real Burner"}
+                    </span>
                   </div>
+
                   <div className="flex flex-col gap-1 border-t border-[#18181C] pt-3">
-                    <span className="text-xs text-[#71717A]">Active Address</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-[#71717A]">Active Address</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const addr =
+                              accountType === "demo"
+                                ? DEMO_SUI_ADDRESS
+                                : accountType === "real"
+                                ? realAddress
+                                : linkedAddress;
+                            if (navigator?.clipboard?.writeText) {
+                              navigator.clipboard.writeText(addr).catch(() => {});
+                            }
+                            triggerSnackbar("Address Copied", `${addr.slice(0, 10)}...`);
+                          }}
+                          className="text-[10px] font-mono text-[#71717A] hover:text-white flex items-center gap-1 transition-colors"
+                        >
+                          <Copy size={11} />
+                          <span>Copy</span>
+                        </button>
+                        <a
+                          href={`https://suiscan.xyz/mainnet/account/${accountType === "demo" ? DEMO_SUI_ADDRESS : realAddress || linkedAddress}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[10px] font-mono text-[#71717A] hover:text-white flex items-center gap-1 transition-colors"
+                        >
+                          <span>SuiScan</span>
+                          <ExternalLink size={11} />
+                        </a>
+                      </div>
+                    </div>
                     <span className="text-xs font-mono text-white truncate">
                       {accountType === "demo"
                         ? DEMO_SUI_ADDRESS
@@ -1584,10 +1728,67 @@ export default function YearboundApp() {
                         : linkedAddress}
                     </span>
                   </div>
+
+                  <div className="flex items-center justify-between border-t border-[#18181C] pt-3">
+                    <span className="text-xs text-[#71717A]">On-Chain Balance</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono text-white font-medium">
+                        {accountType === "demo"
+                          ? `${availableBalance.toFixed(2)} SUI (Sandbox)`
+                          : isCheckingLiveBalance
+                          ? "Querying RPC..."
+                          : `${liveOnChainBalanceSui !== null ? liveOnChainBalanceSui.toFixed(2) : "0.00"} SUI`}
+                      </span>
+                      {accountType === "real" && (
+                        <button
+                          type="button"
+                          onClick={() => refreshLiveBalance(realAddress)}
+                          disabled={isCheckingLiveBalance}
+                          className="text-[#71717A] hover:text-white text-[10px] font-mono transition-colors"
+                          title="Refresh on-chain balance"
+                        >
+                          ↻
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
                   <div className="flex items-center justify-between border-t border-[#18181C] pt-3">
                     <span className="text-xs text-[#71717A]">Network</span>
-                    <span className="text-xs text-white font-medium">Sui Testnet</span>
+                    <span className="text-xs text-white font-medium">Sui Mainnet</span>
                   </div>
+
+                  {accountType === "real" && (
+                    <div className="border-t border-[#18181C] pt-3 flex flex-col gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const hex = exportRealPrivateKeyHex();
+                          if (hex) {
+                            setExportedKey(hex);
+                            setShowExportPrivateKey(!showExportPrivateKey);
+                          }
+                        }}
+                        className="text-xs text-left text-[#A1A1AA] hover:text-white transition-colors flex items-center justify-between font-mono"
+                      >
+                        <span>Export Private Key</span>
+                        <span className="text-[10px] text-[#71717A]">
+                          {showExportPrivateKey ? "Hide" : "Reveal"}
+                        </span>
+                      </button>
+
+                      {showExportPrivateKey && exportedKey && (
+                        <div className="bg-[#131316] border border-[#27272A] rounded-xl p-3 flex flex-col gap-1.5 animate-in fade-in">
+                          <span className="text-[10px] font-mono text-[#A1A1AA]">
+                            Ed25519 Secret Key (Hex):
+                          </span>
+                          <div className="bg-[#0A0A0C] p-2 rounded text-[10px] font-mono text-white break-all select-all border border-[#1F1F24]">
+                            {exportedKey}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <button
