@@ -1022,7 +1022,7 @@ export default function YearboundApp() {
       : `Linked · ${linkedAddress ? `${linkedAddress.slice(0, 6)}...${linkedAddress.slice(-4)}` : "Wallet"}`;
 
   return (
-    <main className="fixed inset-0 w-full h-[100dvh] bg-[#000000] text-[#FFFFFF] flex items-start sm:items-center justify-center p-0 md:p-6 select-none overflow-hidden font-sans">
+    <main className="fixed inset-0 w-full h-[100dvh] bg-[#000000] text-[#FFFFFF] flex items-start sm:items-center justify-center p-0 md:p-6 overflow-hidden font-sans">
       {/* ====================================================================
           MOBILE SHELL (Centered vertical frame on desktop, solid black ground)
           ==================================================================== */}
@@ -1033,16 +1033,15 @@ export default function YearboundApp() {
             ================================================================== */}
         {step === 1 && (
           <div className="flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-200">
-            <div className="pt-6 sm:pt-8 px-7 pb-3">
-              <div className="text-[30px] sm:text-[34px] font-semibold tracking-[-0.02em] leading-tight text-white">
+            <div className="pt-5 sm:pt-7 px-5 sm:px-7 pb-2 shrink-0">
+              <div className="text-[26px] sm:text-[32px] font-semibold tracking-[-0.02em] leading-tight text-white">
                 Write your resolutions
               </div>
             </div>
 
             <div
               ref={scrollContainerRef}
-              onClick={handleCloseActiveRule}
-              className="flex-1 overflow-y-auto px-7 py-2 flex flex-col pb-4 overscroll-contain"
+              className="flex-1 overflow-y-auto px-5 sm:px-7 py-2 flex flex-col pb-4 overscroll-contain"
             >
               {/* STACK OF MINIMIZED RESOLUTIONS AT TOP */}
               <div className="flex flex-col gap-2.5 transition-all duration-300 ease-out">
@@ -1093,21 +1092,13 @@ export default function YearboundApp() {
                 })}
               </div>
 
-              {/* DYNAMIC PILL CONTAINER (Rests at true center middle of screen until stack reaches it, then goes downwards) */}
+              {/* EXPANDED EDITOR OR ADD ACTION CONTAINER */}
               {(() => {
-                const minimizedCount = rules.filter((r) => r.id !== expandedRuleId).length;
-                const currentStackHeight = minimizedCount * 60;
-                // Target center is dynamically calculated to place the pill in the center middle of the screen
-                const targetCenter = Math.max(280, Math.floor(scrollContainerHeight * 0.44));
-                const pillMarginTop = Math.max(14, targetCenter - currentStackHeight);
                 const expandedRule = rules.find((r) => r.id === expandedRuleId);
                 const expandedIndex = expandedRule ? rules.findIndex((r) => r.id === expandedRule.id) : -1;
 
                 return (
-                  <div
-                    style={{ marginTop: `${pillMarginTop}px` }}
-                    className="flex flex-col items-center transition-all duration-300 ease-out w-full"
-                  >
+                  <div className="flex flex-col items-center transition-all duration-200 ease-out w-full mt-3">
                     {/* Active Expanded Resolution Card */}
                     {expandedRule && (
                       <div
@@ -1176,7 +1167,7 @@ export default function YearboundApp() {
                           <div className="flex flex-col gap-1.5 animate-in fade-in duration-200">
                             <div className="flex items-center justify-between">
                               <label className="text-[11px] font-medium text-[#A1A1AA]">
-                                Why this matters to you <span className="text-[#52525B] font-normal">(optional)</span>
+                                Why this matters to you
                               </label>
                               <button
                                 type="button"
@@ -1207,7 +1198,7 @@ export default function YearboundApp() {
                             className="self-start text-[11px] font-mono text-[#71717A] hover:text-[#E4E4E7] flex items-center gap-1.5 transition-colors pt-0.5"
                           >
                             <Plus size={11} />
-                            <span>Add personal motivation (optional)</span>
+                            <span>Add personal motivation</span>
                           </button>
                         )}
                       </div>
@@ -1230,7 +1221,7 @@ export default function YearboundApp() {
               })()}
             </div>
 
-            <div className="p-6 bg-[#000000]">
+            <div className="p-4 sm:p-6 bg-[#000000] shrink-0 border-t border-[#18181C]">
               <button
                 type="button"
                 onClick={() => setStep(2)}
