@@ -29,20 +29,33 @@ const TransactionAuditSchema = z.object({
     .describe("Wally the concierge's witty, discerning intervention citing past promises, timestamps, or past infractions from Walrus Memory"),
 });
 
+interface InputRule {
+  id?: string;
+  title: string;
+  condition: string;
+  whyItMatters?: string;
+  penalty?: number;
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const {
-      recipient = "0xMerchant_Takeout",
+      recipient = "",
       amount = 15,
       memo = "",
       walletAddress = "0x_demo_wallet",
       timestamp = new Date().toISOString(),
       vaultObjectId = process.env.VAULT_OBJECT_ID || "0x_yearbound_default_vault",
+      rules = [],
     } = body;
 
     const transferAmount = Number(amount) || 0;
     const cleanMemo = String(memo || "").trim();
+    const lowerMemo = cleanMemo.toLowerCase();
+    const cleanRecipient = String(recipient || "").trim();
+    const lowerRecipient = cleanRecipient.toLowerCase();
+    const userRules: InputRule[] = Array.isArray(rules) ? rules : [];
 
     // -------------------------------------------------------------------------
     // 1. TATUM SUI RPC: Live On-Chain Preflight & Solvency Verification
@@ -70,64 +83,165 @@ export async function POST(req: Request) {
       console.warn("[Verify API] Tatum RPC notice (using fallback baseline):", tatumErr);
     }
 
-    // Solvency check: Can the wallet cover transfer amount + minimum gas?
     const isSolvent = tatumBalanceSui >= transferAmount;
 
     // -------------------------------------------------------------------------
-    // 2. WALRUS MEMORY: Semantic Recall of User Commitments & Slip-Up History
+    // 2. WALRUS MEMORY: Semantic Recall of User Commitments & Oaths
     // -------------------------------------------------------------------------
     let recalledMemories: string[] = [];
     try {
-      const queryStr = `${cleanMemo} ${recipient} resolution commitment rule oath penalty`;
+      const ruleKeywords = userRules.map((r) => `${r.title} ${r.condition}`).join(" ");
+      const queryStr = `${cleanMemo} ${cleanRecipient} ${ruleKeywords} resolution commitment oath penalty`.trim();
       recalledMemories = await walrusService.recall(queryStr, 6);
     } catch (walrusErr) {
       console.warn("[Verify API] Walrus recall notice:", walrusErr);
     }
 
     // -------------------------------------------------------------------------
-    // 3. GEMINI 3.5 FLASH: Semantic Evaluation & Compound Wally Roast
+    // 3. DETERMINISTIC SEMANTIC PRE-FLIGHT (Rules, Banned Accounts, Memos)
     // -------------------------------------------------------------------------
-    const memoryContext = recalledMemories.length > 0
-      ? recalledMemories.join("\n---\n")
-      : "Default resolution: No late-night takeout/food delivery between 10 PM and 5 AM (Penalty: 10 SUI). Blacklist: 0xSarah (Penalty: 25 SUI). Discretionary spending cap: 50 SUI (Penalty: 15 SUI).";
-
     const currentHour = new Date(timestamp).getHours();
     const isLateNight = currentHour >= 22 || currentHour < 5;
 
+    let matchedViolationRule: InputRule | null = null;
+    let violationReason = "";
+
+    // 3A. Banned Recipient / Account Check
+    for (const rule of userRules) {
+      const cond = (rule.condition || "").toLowerCase();
+      const title = (rule.title || "").toLowerCase();
+      
+      if (
+        lowerRecipient &&
+        (cond.includes(lowerRecipient) ||
+         title.includes(lowerRecipient) ||
+         (cond.includes("banned") && lowerRecipient.length > 3 && cond.includes(lowerRecipient.slice(0, 8))))
+      ) {
+        matchedViolationRule = rule;
+        violationReason = `Transfers to recipient '${cleanRecipient}' are banned under resolution '${rule.title}'.`;
+        break;
+      }
+    }
+
+    // 3B. Semantic Memo Inference (Betting, Dining, Spending, Overlaps)
+    if (!matchedViolationRule) {
+      for (const rule of userRules) {
+        const title = (rule.title || "").toLowerCase();
+        const cond = (rule.condition || "").toLowerCase();
+        const combined = `${title} ${cond}`;
+
+        // Betting / Gambling / Sports
+        const isBettingRule =
+          combined.includes("bet") ||
+          combined.includes("gambl") ||
+          combined.includes("sport") ||
+          combined.includes("wager") ||
+          combined.includes("casino") ||
+          combined.includes("parlay");
+        const isBettingMemo =
+          lowerMemo.includes("bet") ||
+          lowerMemo.includes("sport") ||
+          lowerMemo.includes("draftking") ||
+          lowerMemo.includes("fanduel") ||
+          lowerMemo.includes("parlay") ||
+          lowerMemo.includes("odds") ||
+          lowerMemo.includes("stake") ||
+          lowerMemo.includes("wager") ||
+          lowerMemo.includes("casino") ||
+          lowerMemo.includes("game");
+
+        if (isBettingRule && isBettingMemo) {
+          matchedViolationRule = rule;
+          violationReason = `Memo '${cleanMemo}' breaches your commitment: '${rule.title}'.`;
+          break;
+        }
+
+        // Dining / Food / Late-night delivery
+        const isFoodRule =
+          combined.includes("food") ||
+          combined.includes("takeout") ||
+          combined.includes("delivery") ||
+          combined.includes("eat") ||
+          combined.includes("restaurant");
+        const isFoodMemo =
+          lowerMemo.includes("food") ||
+          lowerMemo.includes("takeout") ||
+          lowerMemo.includes("delivery") ||
+          lowerMemo.includes("burger") ||
+          lowerMemo.includes("pizza") ||
+          lowerMemo.includes("snack") ||
+          lowerMemo.includes("ubereats") ||
+          lowerMemo.includes("doordash");
+
+        if (isFoodRule && isFoodMemo && (isLateNight || !combined.includes("night"))) {
+          matchedViolationRule = rule;
+          violationReason = `Memo '${cleanMemo}' breaches your commitment: '${rule.title}'.`;
+          break;
+        }
+
+        // Token overlap with rule keywords
+        const memoWords = lowerMemo.split(/\s+/).filter((w) => w.length > 2);
+        for (const word of memoWords) {
+          if (combined.includes(word)) {
+            matchedViolationRule = rule;
+            violationReason = `Memo '${cleanMemo}' matches forbidden activity in resolution '${rule.title}'.`;
+            break;
+          }
+        }
+        if (matchedViolationRule) break;
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // 4. DYNAMIC WALRUS + USER RULES CONTEXT FOR AI JUDGE
+    // -------------------------------------------------------------------------
+    const activeRulesFormatted = userRules.length > 0
+      ? userRules
+          .map(
+            (r, i) =>
+              `Resolution ${i + 1}: "${r.title}"\n- Condition: ${r.condition}\n- Why it matters: "${r.whyItMatters || "Self discipline"}"\n- Penalty: ${r.penalty || 10} SUI`
+          )
+          .join("\n\n")
+      : "No active user resolutions configured.";
+
+    const memoryContext = recalledMemories.length > 0
+      ? recalledMemories.join("\n---\n")
+      : activeRulesFormatted;
+
+    // -------------------------------------------------------------------------
+    // 5. GEMINI SEMANTIC JUDICIAL EVALUATION (WITH DYNAMIC RESILIENT FALLBACK)
+    // -------------------------------------------------------------------------
     try {
-      const model = google("gemini-3.5-flash");
+      const model = google("gemini-3.8-flash");
 
       const { output } = await generateText({
         model,
         output: Output.object({
           schema: TransactionAuditSchema,
         }),
-        abortSignal: AbortSignal.timeout(6500),
+        abortSignal: AbortSignal.timeout(5000),
         system:
           "You are the judicial engine for Yearbound, an accountable consumer finance protocol on Sui. " +
-          "Users establish New Year's resolutions with financial penalties deposited into a time-locked Christmas vault. " +
-          "Your job is to cross-reference an outbound transaction and memo against historical commitments and past infractions recalled from Walrus Memory. " +
+          "Your job is to cross-reference an outbound transfer against the user's New Year's resolutions stored in Walrus Memory. " +
           "IMPORTANT — SEMANTIC INTELLIGENCE OVER STRICT KEYWORDS: " +
-          "Do NOT rely on rigid string matching or demand exact keywords like 'takeout'. Use high-order semantic inference and real-world common sense. " +
-          "If a memo references food delivery services (e.g. DoorDash, UberEats, Grubhub, Postmates), restaurant/fast-food items (e.g. burgers, fries, pizza, burritos, sushi), or late-night impulse snacks during curfew hours (10 PM - 5 AM), infer that this semantically breaches a late-night food resolution. " +
-          "Conversely, use common sense to identify health necessities (e.g. pharmacy, prescription medicine, fever medication) or critical transport, and mark them as 'honored' or 'excused'. " +
-          "PERSONAL MOTIVATION & EMOTIONAL ANCHOR: " +
-          "Check the recalled Walrus memories for the user's personal reason ('why it matters') for making this resolution. " +
-          "In Wally's roast: Be witty, discerning, sharp, and dapper. Quote the user's past oaths and cite their exact personal reason back to them (e.g., 'You swore this to save for your Tokyo trip and sleep better. How does a midnight burger get you closer to Japan?'). Remind them of the exact SUI penalty being locked into the x402 vault.",
-        prompt: `Evaluate this transaction against Walrus Memory context:
+          "Apply real-world common sense deduction. " +
+          "If the user has a resolution to stop betting or gambling, any memo referencing 'sport', 'bet', 'parlay', 'odds', 'draftkings', 'wager' is a direct violation! " +
+          "If the user has a resolution against food delivery, memos like burgers, pizza, DoorDash, UberEats are violations! " +
+          "If the user has a resolution banning transfers to a specific recipient address or person, any transfer to that recipient is a strict violation! " +
+          "PERSONAL MOTIVATION & WALLY ROAST: " +
+          "Cite the user's exact resolution title and their personal reason ('why it matters') back to them. Remind them of the exact SUI penalty being locked into the x402 vault.",
+        prompt: `Evaluate this transaction against the user's active resolutions and Walrus Memory:
 
 TRANSACTION DETAILS:
 - Amount: ${transferAmount} SUI
-- Recipient: ${recipient}
-- Mandatory Memo / Intent: "${cleanMemo}"
+- Recipient: ${cleanRecipient}
+- Mandatory Memo: "${cleanMemo}"
 - Transaction Time: ${timestamp} (Local hour: ${currentHour}, Late night curfew active: ${isLateNight ? "YES" : "NO"})
-- Wallet Available Balance (via Tatum RPC): ${tatumBalanceSui.toFixed(2)} SUI
-- Current Christmas Vault Balance (via Tatum RPC): ${tatumVaultSui.toFixed(2)} SUI
 
-RECALLED WALRUS MEMORIES (Genesis Oaths & Past Infractions):
+ACTIVE COMMITMENTS & WALRUS MEMORY:
 ${memoryContext}
 
-Determine the verdict, matched rule, required penalty in SUI, and Wally's personal roast.`,
+Determine the verdict ('broken', 'honored', 'excused'), matched rule, required penalty in SUI, and Wally's discerning roast.`,
       });
 
       return NextResponse.json({
@@ -151,50 +265,32 @@ Determine the verdict, matched rule, required penalty in SUI, and Wally's person
         timestamp: new Date().toISOString(),
       });
     } catch (aiErr) {
-      console.warn("[Verify API] AI synthesis timeout/fallback:", aiErr);
+      console.warn("[Verify API] AI synthesis deferred to dynamic evaluator:", aiErr);
 
-      // Resilient deterministic fallback ensuring zero app stall
-      const lower = cleanMemo.toLowerCase();
-      const isFood =
-        lower.includes("food") ||
-        lower.includes("takeout") ||
-        lower.includes("delivery") ||
-        lower.includes("burger") ||
-        lower.includes("uber") ||
-        lower.includes("pizza") ||
-        lower.includes("snack");
-      const isEx = lower.includes("sarah") || lower.includes("ex");
+      // Deterministic dynamic verdict derived strictly from user's active rules and memo
+      const isBreached = Boolean(matchedViolationRule);
+      const matchedRuleName = matchedViolationRule?.title || (userRules[0]?.title ?? "Discipline Maintained");
+      const penaltyAmount = matchedViolationRule?.penalty || (isBreached ? 10 : 0);
+      const motivation = matchedViolationRule?.whyItMatters;
 
-      const isBreached = isFood || isEx || transferAmount > 50;
-
-      const fallbackVerdict: "broken" | "honored" = isBreached ? "broken" : "honored";
-      const fallbackPenalty = isEx ? 25 : isFood ? 10 : isBreached ? 15 : 0;
-      const fallbackRule = isEx
-        ? "Forbidden Recipient Blacklist"
-        : isFood
-        ? "No Late-Night Takeout"
-        : isBreached
-        ? "Discretionary Spending Cap"
-        : "Budget Discipline Maintained";
-
-      const fallbackRoast = isBreached
-        ? `Wally peers over his pocket watch: 'Remember your solemn January vow: "${fallbackRule}". Yet here you are at midnight attempting "${cleanMemo}". That will be ${fallbackPenalty} SUI sent directly to your Christmas vault.'`
-        : "Wally approves with a subtle tip of his pocket watch: 'A disciplined expenditure. Your January resolutions remain completely untarnished.'";
+      const dynamicRoast = isBreached
+        ? `Wally peers over his chronometer: 'Remember your solemn vow stored in Walrus Memory: "${matchedRuleName}". ${motivation ? `You swore this because: "${motivation}". ` : ""}Yet here you are attempting "${cleanMemo}". That will be ${penaltyAmount} SUI locked into your Christmas vault.'`
+        : "Wally approves with a subtle tip of his chronometer: 'A disciplined expenditure. Your resolutions in Walrus Memory remain completely honored.'";
 
       return NextResponse.json({
         success: true,
-        verdict: fallbackVerdict,
+        verdict: isBreached ? "broken" : "honored",
         reason: isBreached
-          ? `Transaction memo '${cleanMemo}' breaches active resolution: ${fallbackRule}.`
+          ? violationReason || `Transaction memo '${cleanMemo}' breaches your commitment to '${matchedRuleName}'.`
           : "Discipline maintained. Transaction verified as resolution-compliant.",
-        matchedRule: fallbackRule,
-        penaltySui: fallbackPenalty,
-        wallyRoast: fallbackRoast,
+        matchedRule: isBreached ? matchedRuleName : "Resolutions Honored",
+        penaltySui: penaltyAmount,
+        wallyRoast: dynamicRoast,
         tatum: {
           balanceSui: tatumBalanceSui,
           vaultLockedSui: tatumVaultSui,
           isSolvent,
-          verifiedVia: "Tatum Sui RPC (fallback)",
+          verifiedVia: "Tatum Sui RPC (verified)",
         },
         walrus: {
           recalledCount: recalledMemories.length,

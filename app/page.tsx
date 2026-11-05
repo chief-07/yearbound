@@ -734,6 +734,13 @@ export default function YearboundApp() {
           memo: sendMemo,
           walletAddress: activeAccountAddress,
           timestamp: new Date().toISOString(),
+          rules: activeRulesList.map((r) => ({
+            id: r.id,
+            title: r.title,
+            condition: r.condition,
+            whyItMatters: r.whyItMatters,
+            penalty: r.penalty,
+          })),
         }),
       });
 
