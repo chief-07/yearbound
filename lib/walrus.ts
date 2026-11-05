@@ -1,3 +1,27 @@
+import dns from "node:dns";
+
+// Ensure IPv4 lookup precedence on Windows to prevent ENOTFOUND on IPv4-only relayers
+if (typeof dns?.setDefaultResultOrder === "function") {
+  dns.setDefaultResultOrder("ipv4first");
+}
+
+// Ensure Next.js fetch cache does not interfere with Walrus relayer calls
+if (typeof globalThis.fetch === "function") {
+  const originalFetch = globalThis.fetch;
+  (globalThis as any).fetch = async (input: any, init?: any) => {
+    const urlStr =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+        ? input.toString()
+        : input?.url;
+    if (urlStr && (urlStr.includes("walrus") || urlStr.includes("railway.app"))) {
+      return originalFetch(input, { ...init, cache: "no-store" });
+    }
+    return originalFetch(input, init);
+  };
+}
+
 import {
   MemWal,
   MemWalMock,
@@ -7,14 +31,38 @@ import {
 export interface CommitmentRulePayload {
   type: "commitment_rule";
   commitment_id: string;
+  rule_id: string;
   title: string;
   description: string;
-  category: "fitness" | "finance" | "productivity" | "health" | "custom";
+  category: "fitness" | "finance" | "productivity" | "health" | "lifestyle" | "custom";
   penalty_amount_sui: number;
   cadence: "daily" | "weekly" | "monthly" | "event_based";
   exceptions: string[];
+  keywords: string[];
+  behavioral_rule: string;
+  wally_roast_angle: string;
+  verbatim_oath: string;
+  wallet_address?: string;
   created_at: string;
   status: "active" | "paused" | "completed";
+}
+
+export interface GenesisPactPayload {
+  type: "genesis_pact";
+  pact_id: string;
+  wallet_address: string;
+  created_at: string;
+  unlock_date: string;
+  initial_deposit_sui: number;
+  resolution_blobs: {
+    rule_id: string;
+    blob_id: string;
+    title: string;
+    penalty_sui: number;
+    category: string;
+  }[];
+  total_rules: number;
+  status: "locked";
 }
 
 export interface AccountabilityEventPayload {
@@ -38,6 +86,7 @@ export interface BehavioralPatternPayload {
 
 export type YearboundMemoryPayload =
   | CommitmentRulePayload
+  | GenesisPactPayload
   | AccountabilityEventPayload
   | BehavioralPatternPayload;
 
@@ -48,7 +97,7 @@ export class WalrusMemoryService {
   constructor() {
     const delegateKey = process.env.WALRUS_DELEGATE_KEY;
     const accountId = process.env.WALRUS_ACCOUNT_ID;
-    const serverUrl = process.env.WALRUS_RELAYER_URL || "https://relayer.walrus.space";
+    const serverUrl = process.env.WALRUS_RELAYER_URL || "https://relayer.memory.walrus.xyz";
     const namespace = process.env.WALRUS_NAMESPACE || "yearbound";
 
     if (delegateKey && accountId && !delegateKey.includes("your_")) {

@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 import {
   walrusService,
   type CommitmentRulePayload,
+  type GenesisPactPayload,
   type AccountabilityEventPayload,
 } from "@/lib/walrus";
+import { analyzeMultipleResolutions } from "@/lib/ai-resolution-parser";
 
 export async function POST(req: Request) {
   try {
@@ -31,8 +33,13 @@ export async function POST(req: Request) {
       });
     }
 
-    // 2. Handling Initial Commitment Rules Storage
-    const { rules, initialDepositSui = 10, unlockDate = "2026-12-25" } = body;
+    // 2. Handling Initial Commitment Rules & Genesis Pact Storage
+    const {
+      rules,
+      initialDepositSui = 10,
+      unlockDate = "2026-12-25",
+      walletAddress = "0x_demo_wallet",
+    } = body;
 
     if (!rules || !Array.isArray(rules) || rules.length === 0) {
       return NextResponse.json(
@@ -41,47 +48,109 @@ export async function POST(req: Request) {
       );
     }
 
-    const commitmentId = `pact_${Date.now()}`;
-    const results = [];
+    const pactId = `pact_${Date.now()}`;
+    console.log(`[Walrus API] Processing ${rules.length} resolutions for pact ${pactId}...`);
 
-    for (const rule of rules) {
+    // Step A: Semantic analysis via Google Gemini 3.5 Flash
+    const analyzedRules = await analyzeMultipleResolutions(
+      rules.map((r) => ({
+        id: String(r.id),
+        title: String(r.title || "Untitled Resolution"),
+        condition: String(r.condition || ""),
+        penalty: Number(r.penalty) || 5,
+      }))
+    );
+
+    // Step B: Persist each behavioral contract into Walrus Memory
+    const committedBlobs: {
+      ruleId: string;
+      blobId: string;
+      jobId: string;
+      title: string;
+      category: string;
+      penaltySui: number;
+      keywords: string[];
+      behavioralRule: string;
+      wallyRoastAngle: string;
+    }[] = [];
+
+    for (const analyzed of analyzedRules) {
       const payload: CommitmentRulePayload = {
         type: "commitment_rule",
-        commitment_id: commitmentId,
-        title: rule.title || "Untitled Rule",
-        description: rule.condition || "",
-        category: "custom",
-        penalty_amount_sui: Number(rule.penalty) || 5,
-        cadence: "event_based",
-        exceptions: [],
+        commitment_id: pactId,
+        rule_id: analyzed.ruleId,
+        title: analyzed.originalTitle,
+        description: analyzed.originalCondition,
+        category: analyzed.category,
+        penalty_amount_sui: analyzed.penaltySui,
+        cadence: analyzed.cadence,
+        exceptions: analyzed.exceptions,
+        keywords: analyzed.keywords,
+        behavioral_rule: analyzed.behavioral_rule,
+        wally_roast_angle: analyzed.wally_roast_angle,
+        verbatim_oath: analyzed.verbatimOath,
+        wallet_address: walletAddress,
         created_at: new Date().toISOString(),
         status: "active",
       };
 
       const rememberResult = await walrusService.remember(payload);
-      results.push({
-        ruleId: rule.id,
+      committedBlobs.push({
+        ruleId: analyzed.ruleId,
         blobId: rememberResult.blobId,
         jobId: rememberResult.jobId,
+        title: analyzed.originalTitle,
+        category: analyzed.category,
+        penaltySui: analyzed.penaltySui,
+        keywords: analyzed.keywords,
+        behavioralRule: analyzed.behavioral_rule,
+        wallyRoastAngle: analyzed.wally_roast_angle,
       });
     }
 
-    const primaryBlobId =
-      results[0]?.blobId || `blob_${Math.random().toString(36).substring(2, 10)}`;
+    // Step C: Persist Master Genesis Pact manifest referencing all individual resolution blobs
+    const genesisManifest: GenesisPactPayload = {
+      type: "genesis_pact",
+      pact_id: pactId,
+      wallet_address: walletAddress,
+      created_at: new Date().toISOString(),
+      unlock_date: unlockDate,
+      initial_deposit_sui: Number(initialDepositSui),
+      resolution_blobs: committedBlobs.map((b) => ({
+        rule_id: b.ruleId,
+        blob_id: b.blobId,
+        title: b.title,
+        penalty_sui: b.penaltySui,
+        category: b.category,
+      })),
+      total_rules: committedBlobs.length,
+      status: "locked",
+    };
+
+    const genesisRememberResult = await walrusService.remember(genesisManifest);
+
+    console.log(
+      `[Walrus API] Genesis Pact committed! Manifest Blob ID: ${genesisRememberResult.blobId}`
+    );
 
     return NextResponse.json({
       success: true,
-      commitmentId,
-      primaryBlobId,
-      storedRulesCount: results.length,
-      initialDepositSui,
+      pactId,
+      genesisBlobId: genesisRememberResult.blobId,
+      genesisJobId: genesisRememberResult.jobId,
+      primaryBlobId: genesisRememberResult.blobId,
+      storedRulesCount: committedBlobs.length,
+      initialDepositSui: Number(initialDepositSui),
       unlockDate,
+      walletAddress,
       isMock: walrusService.getIsMock(),
       timestamp: new Date().toISOString(),
-      blobs: results,
+      blobs: committedBlobs,
+      manifest: genesisManifest,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Walrus storage error";
+    console.error("[Walrus API] Error during pact commit:", error);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

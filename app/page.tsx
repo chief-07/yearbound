@@ -46,6 +46,11 @@ export interface RuleItem {
   condition: string;
   penalty: number;
   breaches?: number;
+  blobId?: string;
+  category?: string;
+  keywords?: string[];
+  behavioralRule?: string;
+  wallyRoastAngle?: string;
 }
 
 export interface InfractionRecord {
@@ -61,7 +66,7 @@ export interface InfractionRecord {
 
 export interface WalrusMemoryBlob {
   blobId: string;
-  type: "commitment_pact" | "accountability_event" | "added_resolution";
+  type: "commitment_pact" | "accountability_event" | "added_resolution" | "resolution_contract";
   title: string;
   timestamp: string;
   payload: any;
@@ -284,8 +289,9 @@ export default function YearboundApp() {
       });
 
       const data = await res.json();
-      if (data.success && data.primaryBlobId) {
-        setWalrusBlobId(data.primaryBlobId);
+      if (data.success && (data.genesisBlobId || data.primaryBlobId)) {
+        const genesisId = data.genesisBlobId || data.primaryBlobId;
+        setWalrusBlobId(genesisId);
 
         const timestampStr = new Intl.DateTimeFormat("en-US", {
           month: "short",
@@ -294,29 +300,76 @@ export default function YearboundApp() {
           minute: "2-digit",
         }).format(new Date());
 
-        const initialPactBlob: WalrusMemoryBlob = {
-          blobId: data.primaryBlobId,
-          type: "commitment_pact",
-          title: "Initial Yearly Resolution Pact",
+        // 1. Map individual resolution contract blobs
+        const individualBlobs: WalrusMemoryBlob[] = (data.blobs || []).map((b: any) => ({
+          blobId: b.blobId,
+          type: "resolution_contract",
+          title: `Resolution: ${b.title}`,
           timestamp: timestampStr,
           payload: {
             protocol: "Yearbound v1",
             storage: "Walrus Memory (MemWal)",
-            type: "commitment_pact",
+            type: "commitment_rule",
+            ruleId: b.ruleId,
+            title: b.title,
+            category: b.category,
+            penaltySui: b.penaltySui,
+            keywords: b.keywords,
+            behavioralRule: b.behavioralRule,
+            wallyRoastAngle: b.wallyRoastAngle,
+            wallet: activeAccountAddress,
+            status: "active",
+          },
+        }));
+
+        // 2. Genesis Pact Master Manifest Blob
+        const initialPactBlob: WalrusMemoryBlob = {
+          blobId: genesisId,
+          type: "commitment_pact",
+          title: "Genesis Resolution Pact Manifest",
+          timestamp: timestampStr,
+          payload: {
+            protocol: "Yearbound v1",
+            storage: "Walrus Memory (MemWal)",
+            type: "genesis_pact",
+            pactId: data.pactId,
             wallet: activeAccountAddress,
             x402VaultLock: `${escrowDeposit} SUI until ${unlockDate}`,
-            resolutions: activeRules.map((r, i) => ({
+            totalRules: (data.blobs || []).length,
+            resolutions: (data.blobs || []).map((b: any, i: number) => ({
               index: i + 1,
-              title: r.title,
-              condition: r.condition,
-              penaltySui: r.penalty,
+              title: b.title,
+              category: b.category,
+              blobId: b.blobId,
+              penaltySui: b.penaltySui,
               status: "active",
             })),
           },
         };
-        setWalrusBlobs([initialPactBlob]);
 
-        triggerSnackbar("Saved to Walrus", `Blob #${data.primaryBlobId.slice(0, 12)}...`, data.primaryBlobId);
+        // 3. Update in-memory rules with their individual Walrus blob IDs and Gemini analysis
+        if (data.blobs && data.blobs.length > 0) {
+          setRules((prev) =>
+            prev.map((r) => {
+              const matched = data.blobs.find((b: any) => b.ruleId === r.id);
+              if (matched) {
+                return {
+                  ...r,
+                  blobId: matched.blobId,
+                  category: matched.category,
+                  keywords: matched.keywords,
+                  behavioralRule: matched.behavioralRule,
+                  wallyRoastAngle: matched.wallyRoastAngle,
+                };
+              }
+              return r;
+            })
+          );
+        }
+
+        setWalrusBlobs([initialPactBlob, ...individualBlobs]);
+
+        triggerSnackbar("Saved to Walrus", `Genesis Pact #${genesisId.slice(0, 12)}...`, genesisId);
         setStep(4);
         setActiveTab("home");
       } else {
@@ -355,6 +408,17 @@ export default function YearboundApp() {
       const data = await res.json();
       const generatedBlobId =
         data.primaryBlobId || `blob_${Math.random().toString(36).substring(2, 10)}`;
+
+      if (data.blobs && data.blobs[0]) {
+        const enriched = data.blobs[0];
+        newRule.blobId = enriched.blobId;
+        newRule.category = enriched.category;
+        newRule.keywords = enriched.keywords;
+        newRule.behavioralRule = enriched.behavioralRule;
+        newRule.wallyRoastAngle = enriched.wallyRoastAngle;
+      } else {
+        newRule.blobId = generatedBlobId;
+      }
 
       setRules((prev) => [...prev, newRule]);
 
@@ -1006,7 +1070,10 @@ export default function YearboundApp() {
                 }`}
               >
                 {isSubmitting ? (
-                  <span>Saving to Walrus...</span>
+                  <span className="flex items-center gap-2">
+                    <span className="w-3.5 h-3.5 border-2 border-[#71717A] border-t-white rounded-full animate-spin inline-block" />
+                    <span>Sealing to Walrus Mainnet...</span>
+                  </span>
                 ) : (
                   <>
                     <span>Lock Vault & Commit</span>
@@ -1292,20 +1359,26 @@ export default function YearboundApp() {
                               <span className="text-[10px] font-mono text-[#A1A1AA] uppercase tracking-wider">
                                 Walrus Memory Record
                               </span>
-                              <span className="text-[10px] font-mono text-white">
-                                Verified
-                              </span>
+                              {rule.category ? (
+                                <span className="text-[10px] font-mono text-[#E4E4E7] bg-[#1F1F24] px-1.5 py-0.5 rounded uppercase">
+                                  {rule.category}
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-mono text-white">
+                                  Verified
+                                </span>
+                              )}
                             </div>
 
                             <div className="flex items-center justify-between bg-[#0A0A0C] border border-[#1E1E22] rounded-lg px-2.5 py-1.5">
                               <span className="text-[11px] font-mono text-white truncate mr-2">
-                                Blob #{walrusBlobId ? `${walrusBlobId.slice(0, 16)}...` : "d4a97f2e8c9b4e11..."}
+                                Blob #{rule.blobId ? `${rule.blobId.slice(0, 16)}...` : walrusBlobId ? `${walrusBlobId.slice(0, 16)}...` : "d4a97f2e8c9b4e11..."}
                               </span>
                               <button
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  const bid = walrusBlobId || "d4a97f2e8c9b4e11a2f6";
+                                  const bid = rule.blobId || walrusBlobId || "d4a97f2e8c9b4e11a2f6";
                                   if (navigator?.clipboard?.writeText) {
                                     navigator.clipboard.writeText(bid).catch(() => {});
                                   }
@@ -1318,20 +1391,25 @@ export default function YearboundApp() {
                               </button>
                             </div>
 
+                            {rule.keywords && rule.keywords.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-0.5">
+                                {rule.keywords.slice(0, 4).map((kw, kIdx) => (
+                                  <span key={kIdx} className="text-[9px] font-mono text-[#71717A] bg-[#18181C] px-1.5 py-0.5 rounded border border-[#222226]">
+                                    #{kw}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+
                             <div className="text-[11px] font-mono text-[#71717A] leading-relaxed">
                               Boundary: "{rule.condition || rule.title}"
                             </div>
 
-                            <a
-                              href={`https://aggregator.walrus-testnet.walrus.space/v1/blobs/${walrusBlobId || "d4a97f2e8c9b4e11a2f6"}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="text-[11px] text-white hover:underline flex items-center gap-1 font-mono pt-0.5"
-                            >
-                              <span>Inspect on Walrus Aggregator</span>
-                              <ExternalLink size={11} />
-                            </a>
+                            {rule.wallyRoastAngle && (
+                              <div className="text-[10px] text-[#A1A1AA] italic bg-[#0E0E11] p-2 rounded border border-[#1E1E24]">
+                                Wally Angle: &ldquo;{rule.wallyRoastAngle}&rdquo;
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
