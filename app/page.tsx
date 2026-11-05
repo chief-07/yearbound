@@ -211,6 +211,11 @@ export default function YearboundApp() {
   const [sendRecipient, setSendRecipient] = useState<string>("0x8f4c...cafe");
   const [sendMemo, setSendMemo] = useState<string>("");
   const [breachReason, setBreachReason] = useState<string>("");
+  const [wallyRoast, setWallyRoast] = useState<string>("");
+  const [breachPenaltySui, setBreachPenaltySui] = useState<number>(10);
+  const [matchedRuleTitle, setMatchedRuleTitle] = useState<string>("");
+  const [checkingProgressStage, setCheckingProgressStage] = useState<string>("Connecting to Tatum & Walrus...");
+  const [walrusRecalledCount, setWalrusRecalledCount] = useState<number>(0);
 
   // Initialize real persistent self-custodial Sui keypair and detect extensions
   useEffect(() => {
@@ -572,38 +577,62 @@ export default function YearboundApp() {
     setSendSubStep("amount");
   };
 
-  // Handle Memo Submission & Trigger Checking Screen
-  const handleReviewAndCheck = () => {
+  // Handle Memo Submission & Trigger Checking Screen via Tatum & Walrus
+  const handleReviewAndCheck = async () => {
     if (!sendMemo.trim()) return;
 
     setSendSubStep("checking");
+    setCheckingProgressStage("Auditing wallet & vault via Tatum Sui RPC...");
 
-    const lower = sendMemo.toLowerCase();
-    const isFood =
-      lower.includes("food") ||
-      lower.includes("takeout") ||
-      lower.includes("delivery") ||
-      lower.includes("burger") ||
-      lower.includes("eats") ||
-      lower.includes("late");
-    const isEx = lower.includes("sarah") || lower.includes("ex");
+    const stageTimer1 = setTimeout(() => {
+      setCheckingProgressStage("Cross-referencing oaths on Walrus Mainnet...");
+    }, 1200);
 
-    let detectedBreach = false;
-    let reason = "";
+    const activeAccountAddress =
+      accountType === "demo"
+        ? DEMO_SUI_ADDRESS
+        : accountType === "real"
+        ? realAddress
+        : linkedAddress || DEMO_SUI_ADDRESS;
 
-    if (isFood) {
-      detectedBreach = true;
-      reason = "Late-night food delivery violates Rule 01 (curfew restriction between 10 PM and 5 AM).";
-    } else if (isEx) {
-      detectedBreach = true;
-      reason = "Attempted transfer to forbidden recipient 0xSarah in violation of blacklist rule.";
-    }
+    try {
+      const res = await fetch("/api/verify-transaction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipient: sendRecipient,
+          amount: parseFloat(sendAmount) || 0,
+          memo: sendMemo,
+          walletAddress: activeAccountAddress,
+          timestamp: new Date().toISOString(),
+        }),
+      });
 
-    setBreachReason(reason);
+      const data = await res.json();
+      clearTimeout(stageTimer1);
 
-    // Agent Wally checks transaction against Walrus Memory & Tatum RPC
-    setTimeout(() => {
-      if (!detectedBreach) {
+      if (data && data.success) {
+        setBreachReason(data.reason || "");
+        setWallyRoast(data.wallyRoast || "");
+        setMatchedRuleTitle(data.matchedRule || "New Year's Resolution");
+        setBreachPenaltySui(data.penaltySui || 10);
+        setWalrusRecalledCount(data.walrus?.recalledCount || 0);
+
+        if (data.verdict === "broken") {
+          setTimeout(() => {
+            setSendSubStep("breach");
+          }, 300);
+        } else {
+          setSendSubStep("approved");
+          setTimeout(() => {
+            const numAmount = parseFloat(sendAmount) || 0;
+            setAvailableBalance((prev) => Math.max(0, prev - numAmount));
+            closeSendFlow();
+            triggerSnackbar("Transfer confirmed", "Resolutions maintained · 0 penalties");
+          }, 1800);
+        }
+      } else {
+        // Fallback to approved if network check returns unexpected shape
         setSendSubStep("approved");
         setTimeout(() => {
           const numAmount = parseFloat(sendAmount) || 0;
@@ -611,19 +640,24 @@ export default function YearboundApp() {
           closeSendFlow();
           triggerSnackbar("Transfer confirmed", "Resolutions maintained · 0 penalties");
         }, 1800);
-      } else {
-        setTimeout(() => {
-          setSendSubStep("breach");
-        }, 400);
       }
-    }, 1800);
+    } catch (err) {
+      console.warn("[Send Check] Verification notice, proceeding gracefully:", err);
+      clearTimeout(stageTimer1);
+      setSendSubStep("approved");
+      setTimeout(() => {
+        const numAmount = parseFloat(sendAmount) || 0;
+        setAvailableBalance((prev) => Math.max(0, prev - numAmount));
+        closeSendFlow();
+      }, 1500);
+    }
   };
 
   // Handle Penalty Payment when Breach is Accepted
   const handlePayFineAndProceed = async () => {
     setIsSubmitting(true);
     try {
-      const penaltyAmt = 10;
+      const penaltyAmt = breachPenaltySui || 10;
       const transferAmt = parseFloat(sendAmount) || 0;
 
       const res = await fetch("/api/walrus", {
@@ -650,7 +684,7 @@ export default function YearboundApp() {
 
       const newInfraction: InfractionRecord = {
         id: `infr_${Date.now()}`,
-        ruleTitle: activeRulesList[0]?.title || "Resolution 01",
+        ruleTitle: matchedRuleTitle || activeRulesList[0]?.title || "Resolution 01",
         ruleCondition: activeRulesList[0]?.condition || "Behavioral boundary",
         amount: sendAmount,
         memo: sendMemo,
@@ -2161,10 +2195,30 @@ export default function YearboundApp() {
                 </div>
 
                 <div className="text-lg font-semibold text-white tracking-tight">
-                  Checking transaction against resolutions
+                  Auditing Transaction
                 </div>
-                <div className="text-xs font-mono text-[#71717A] mt-2">
-                  Cross-referencing Walrus Memory & Tatum RPC...
+                
+                {/* Live Split Status Cards: Tatum RPC + Walrus Memory */}
+                <div className="mt-4 w-full flex flex-col gap-2">
+                  <div className="bg-[#0A0A0C] border border-[#222226] rounded-xl px-4 py-2.5 flex items-center justify-between text-left">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      <span className="text-xs text-[#A1A1AA]">Tatum Sui RPC</span>
+                    </div>
+                    <span className="text-[10px] font-mono text-[#71717A]">Verifying Solvency</span>
+                  </div>
+
+                  <div className="bg-[#0A0A0C] border border-[#222226] rounded-xl px-4 py-2.5 flex items-center justify-between text-left">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
+                      <span className="text-xs text-[#A1A1AA]">Walrus Memory</span>
+                    </div>
+                    <span className="text-[10px] font-mono text-[#71717A]">Recalling Oaths</span>
+                  </div>
+                </div>
+
+                <div className="text-xs font-mono text-[#71717A] mt-4 truncate max-w-full">
+                  {checkingProgressStage}
                 </div>
               </div>
             )}
@@ -2206,13 +2260,17 @@ export default function YearboundApp() {
                   <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-3.5">
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] font-mono uppercase tracking-wider text-[#71717A]">
-                        Wally · Walrus Memory Enforcer
+                        Wally · Walrus Memory Recall
                       </span>
-                      <AlertCircle size={14} className="text-white" />
+                      <span className="text-[10px] font-mono text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                        {walrusRecalledCount > 0 ? `${walrusRecalledCount} Memories Matched` : "Memory Verified"}
+                      </span>
                     </div>
 
                     <p className="text-sm text-[#E4E4E7] leading-relaxed font-normal">
-                      You swore in Walrus memory: <span className="text-white font-medium">"{activeRulesList[0]?.condition || "No food delivery between 10 PM and 5 AM"}"</span>.
+                      {wallyRoast || (
+                        <>You swore in Walrus memory: <span className="text-white font-medium">"{activeRulesList[0]?.condition || "No food delivery between 10 PM and 5 AM"}"</span>.</>
+                      )}
                     </p>
 
                     <p className="text-xs text-[#71717A] leading-relaxed">
@@ -2222,9 +2280,14 @@ export default function YearboundApp() {
 
                   {/* Penalty Breakdown Card */}
                   <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-3">
-                    <span className="text-[11px] font-mono uppercase tracking-wider text-[#71717A]">
-                      Enforced Penalty Toll
-                    </span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-mono uppercase tracking-wider text-[#71717A]">
+                        Enforced Penalty Toll
+                      </span>
+                      <span className="text-[10px] font-mono text-[#71717A]">
+                        Audited by Tatum RPC
+                      </span>
+                    </div>
 
                     <div className="flex items-center justify-between pt-1">
                       <span className="text-xs text-[#A1A1AA]">Transfer Amount</span>
@@ -2233,7 +2296,7 @@ export default function YearboundApp() {
 
                     <div className="flex items-center justify-between border-t border-[#18181C] pt-2.5">
                       <span className="text-xs text-[#A1A1AA]">x402 Vault Penalty</span>
-                      <span className="text-xs font-mono font-semibold text-white">10 SUI</span>
+                      <span className="text-xs font-mono font-semibold text-white">{breachPenaltySui} SUI</span>
                     </div>
 
                     <div className="flex items-center justify-between border-t border-[#18181C] pt-2.5">
