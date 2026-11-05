@@ -148,7 +148,7 @@ export default function YearboundApp() {
       id: "1",
       title: "No Late-Night Takeout",
       condition: "Any food delivery ordered between 10 PM and 5 AM",
-      whyItMatters: "Save $3,000 for Tokyo trip & fix sleep routine",
+      whyItMatters: "",
       penalty: 10,
       breaches: 0,
     },
@@ -156,11 +156,12 @@ export default function YearboundApp() {
       id: "2",
       title: "Gym 4x Per Week",
       condition: "Must log check-in before 9 AM on scheduled mornings",
-      whyItMatters: "Peak health & sustained daily energy",
+      whyItMatters: "",
       penalty: 10,
       breaches: 0,
     },
   ]);
+  const [showMotivationIds, setShowMotivationIds] = useState<Record<string, boolean>>({});
 
   // Screen 2: Escrow Settings
   const [escrowDeposit, setEscrowDeposit] = useState<number>(10);
@@ -968,21 +969,44 @@ export default function YearboundApp() {
                           />
                         </div>
 
-                        <div className="flex flex-col gap-1.5">
-                          <div className="flex items-center justify-between">
-                            <label className="text-[11px] font-medium text-[#A1A1AA]">
-                              Why this matters to you
-                            </label>
-                            <span className="text-[10px] text-[#71717A]">Personal Motivation</span>
+                        {showMotivationIds[expandedRule.id] || Boolean(expandedRule.whyItMatters) ? (
+                          <div className="flex flex-col gap-1.5 animate-in fade-in duration-200">
+                            <div className="flex items-center justify-between">
+                              <label className="text-[11px] font-medium text-[#A1A1AA]">
+                                Why this matters to you <span className="text-[#52525B] font-normal">(optional)</span>
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  updateRule(expandedRule.id, "whyItMatters", "");
+                                  setShowMotivationIds((prev) => ({ ...prev, [expandedRule.id]: false }));
+                                }}
+                                className="text-[10px] text-[#71717A] hover:text-[#EF4444] transition-colors"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                            <input
+                              type="text"
+                              value={expandedRule.whyItMatters || ""}
+                              onChange={(e) => updateRule(expandedRule.id, "whyItMatters", e.target.value)}
+                              placeholder="e.g. Save $3,000 for Tokyo trip & fix sleep routine"
+                              className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-3.5 py-2 text-sm text-white placeholder-[#52525B] outline-none focus:border-white transition-colors"
+                              autoFocus
+                            />
                           </div>
-                          <input
-                            type="text"
-                            value={expandedRule.whyItMatters || ""}
-                            onChange={(e) => updateRule(expandedRule.id, "whyItMatters", e.target.value)}
-                            placeholder="e.g. Save $3,000 for Tokyo trip & fix sleep routine"
-                            className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-3.5 py-2 text-sm text-white placeholder-[#52525B] outline-none focus:border-white transition-colors"
-                          />
-                        </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setShowMotivationIds((prev) => ({ ...prev, [expandedRule.id]: true }))
+                            }
+                            className="self-start text-[11px] font-mono text-[#71717A] hover:text-[#E4E4E7] flex items-center gap-1.5 transition-colors pt-0.5"
+                          >
+                            <Plus size={11} />
+                            <span>Add personal motivation (optional)</span>
+                          </button>
+                        )}
                       </div>
                     )}
 
