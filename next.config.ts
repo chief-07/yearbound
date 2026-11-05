@@ -1,4 +1,5 @@
 import dns from "node:dns";
+import os from "node:os";
 
 if (typeof dns?.setDefaultResultOrder === "function") {
   dns.setDefaultResultOrder("ipv4first");
@@ -6,20 +7,43 @@ if (typeof dns?.setDefaultResultOrder === "function") {
 
 import type { NextConfig } from "next";
 
+// Dynamically discover all IPv4 interfaces on host
+const detectedIps: string[] = [];
+try {
+  const interfaces = os.networkInterfaces();
+  for (const devName in interfaces) {
+    const iface = interfaces[devName];
+    if (iface) {
+      for (const alias of iface) {
+        if (alias.family === "IPv4") {
+          detectedIps.push(alias.address);
+          detectedIps.push(`${alias.address}:3000`);
+        }
+      }
+    }
+  }
+} catch {
+  // fallback if networkInterfaces fails
+}
+
 const nextConfig: NextConfig = {
   /* config options here */
   cacheComponents: true,
   partialPrefetching: true,
   allowedDevOrigins: [
-    'became-privacy-roman-meter.trycloudflare.com',
-    'tab-kai-wins-times.trycloudflare.com',
+    ...detectedIps,
+    '10.85.31.175',
+    '10.85.31.175:3000',
     '10.99.21.175',
     '10.99.21.175:3000',
     '10.176.217.175',
     '10.109.171.175',
     '10.33.118.175',
     '10.33.118.175:3000',
+    'localhost',
     'localhost:3000',
+    '127.0.0.1',
+    '127.0.0.1:3000',
     '*.trycloudflare.com',
   ],
   images: {

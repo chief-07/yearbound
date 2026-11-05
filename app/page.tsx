@@ -337,8 +337,20 @@ export default function YearboundApp() {
   };
 
   const removeRule = (id: string) => {
-    if (rules.length <= 1) return;
+    if (rules.length <= 1) {
+      setRules((prev) =>
+        prev.map((r) =>
+          r.id === id ? { ...r, title: "", condition: "", whyItMatters: "" } : r
+        )
+      );
+      setShowMotivationIds((prev) => ({ ...prev, [id]: false }));
+      triggerSnackbar("Cleared", "Resolution fields reset");
+      return;
+    }
     setRules((prev) => prev.filter((r) => r.id !== id));
+    if (expandedRuleId === id) {
+      setExpandedRuleId(null);
+    }
   };
 
   const isStep1Valid =
@@ -1041,7 +1053,8 @@ export default function YearboundApp() {
 
             <div
               ref={scrollContainerRef}
-              className="flex-1 overflow-y-auto px-5 sm:px-7 py-2 flex flex-col pb-4 overscroll-contain"
+              onClick={handleCloseActiveRule}
+              className="flex-1 overflow-y-auto px-5 sm:px-7 py-2 flex flex-col pb-4 overscroll-contain cursor-default"
             >
               {/* STACK OF MINIMIZED RESOLUTIONS AT TOP */}
               <div className="flex flex-col gap-2.5 transition-all duration-300 ease-out">
@@ -1104,7 +1117,7 @@ export default function YearboundApp() {
                       <div
                         key={expandedRule.id}
                         onClick={(e) => e.stopPropagation()}
-                        className="w-full bg-[#0A0A0C] border border-[#3F3F46] rounded-2xl p-4 flex flex-col gap-3 relative focus-within:border-white transition-all duration-300 ease-out shadow-xl mb-4 animate-in fade-in zoom-in-95"
+                        className="w-full bg-[#0A0A0C] border border-[#3F3F46] rounded-2xl p-4 flex flex-col gap-3 relative focus-within:border-white transition-all duration-300 ease-out shadow-xl mb-4 animate-in fade-in zoom-in-95 cursor-auto"
                       >
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-mono font-medium text-[#71717A] tracking-wider">
@@ -1113,26 +1126,29 @@ export default function YearboundApp() {
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
-                              onClick={handleCloseActiveRule}
-                              disabled={!expandedRule.title.trim() || !expandedRule.condition.trim()}
-                              className={`text-xs font-bold tracking-wider transition-colors duration-150 ${
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCloseActiveRule();
+                              }}
+                              className={`text-xs font-bold tracking-wider transition-colors duration-150 py-1 px-2.5 rounded-lg active:scale-95 ${
                                 expandedRule.title.trim() && expandedRule.condition.trim()
-                                  ? "text-white hover:text-[#E4E4E7] cursor-pointer"
-                                  : "text-[#52525B] cursor-not-allowed"
+                                  ? "text-white bg-[#1F1F23] hover:bg-[#27272A] cursor-pointer"
+                                  : "text-[#71717A] bg-[#141416] hover:text-white cursor-pointer"
                               }`}
                             >
                               Done
                             </button>
-                            {rules.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => removeRule(expandedRule.id)}
-                                className="text-[#71717A] hover:text-[#EF4444] p-1 transition-colors active:scale-95"
-                                title="Remove resolution"
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeRule(expandedRule.id);
+                              }}
+                              className="text-[#71717A] hover:text-[#EF4444] p-1.5 transition-colors active:scale-95 rounded-lg hover:bg-[#18181B] cursor-pointer"
+                              title={rules.length > 1 ? "Remove resolution" : "Clear fields"}
+                            >
+                              <Trash2 size={13} />
+                            </button>
                           </div>
                         </div>
 
@@ -1224,12 +1240,17 @@ export default function YearboundApp() {
             <div className="p-4 sm:p-6 bg-[#000000] shrink-0 border-t border-[#18181C]">
               <button
                 type="button"
-                onClick={() => setStep(2)}
-                disabled={!isStep1Valid}
-                className={`w-full py-4 px-6 rounded-full font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 ${
+                onClick={() => {
+                  if (!isStep1Valid) {
+                    triggerSnackbar("Incomplete resolutions", "Please provide a title and condition for all resolutions");
+                    return;
+                  }
+                  setStep(2);
+                }}
+                className={`w-full py-4 px-6 rounded-full font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98] ${
                   isStep1Valid
-                    ? "bg-[#FFFFFF] text-[#000000] hover:bg-[#E4E4E7] active:scale-[0.98]"
-                    : "bg-[#222226] text-[#52525B] cursor-not-allowed"
+                    ? "bg-[#FFFFFF] text-[#000000] hover:bg-[#E4E4E7] cursor-pointer"
+                    : "bg-[#1C1C20] text-[#71717A] hover:bg-[#26262B] hover:text-[#A1A1AA] cursor-pointer"
                 }`}
               >
                 <span>Next</span>
