@@ -24,6 +24,9 @@
 .DS_Store
 *.pem
 cloudflared.exe
+*.mp4
+.agents/
+skills-lock.json
 
 # debug
 npm-debug.log*
