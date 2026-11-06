@@ -38,7 +38,7 @@ import {
   executeTransferWithExtension,
   type InstalledSuiWallet,
 } from "@/lib/wallet";
-import { executeX402VaultDeposit } from "@/lib/vault-x402";
+import { executeX402VaultDeposit, YEARBOUND_VAULT_ADDRESS } from "@/lib/vault-x402";
 import { DisciplineGrid } from "@/components/discipline-grid";
 import { TimeTravelScrubber, type TimeMilestone } from "@/components/time-travel-scrubber";
 
@@ -92,6 +92,10 @@ export interface InfractionRecord {
   streakBroken?: boolean;
   behavioralInsight?: string;
   source?: "user" | "timeline";
+  isRealOnChain?: boolean;
+  isOffChainVoucher?: boolean;
+  voucherSignature?: string;
+  settlementType?: "on_chain_ptb" | "cryptographic_voucher";
 }
 
 export interface WalrusMemoryBlob {
@@ -220,6 +224,15 @@ export default function YearboundApp() {
   const [expandedJsonBlobId, setExpandedJsonBlobId] = useState<string | null>(null);
   const [selectedMemoryRuleId, setSelectedMemoryRuleId] = useState<string | null>(null);
   const [latestFineBlobId, setLatestFineBlobId] = useState<string>("");
+  const [latestSettlement, setLatestSettlement] = useState<{
+    isRealOnChain: boolean;
+    settlementType: "on_chain_ptb" | "cryptographic_voucher";
+    txHash?: string;
+    voucherSignature?: string;
+    explorerUrl?: string;
+    provider: string;
+    message?: string;
+  } | null>(null);
 
   // Degraded Mode (Web2 stateless banking simulation vs Walrus Total Recall + Tatum Gateway)
   const [isDegradedMode, setIsDegradedMode] = useState<boolean>(false);
@@ -860,10 +873,11 @@ export default function YearboundApp() {
         ? realAddress
         : linkedAddress || DEMO_SUI_ADDRESS;
 
-    let txHash = `0x_sui_ptb_${Date.now().toString(16)}`;
-    let explorerUrl = `https://suiscan.xyz/mainnet/tx/${txHash}`;
+    let txHash: string | undefined = undefined;
+    let explorerUrl: string | undefined = undefined;
     let transferProvider = "Tatum Sui Gateway";
     let isUnfunded = false;
+    let isRealOnChain = false;
 
     // 1. If Linked wallet extension, try to execute on-chain directly
     let preExecutedDigest: string | undefined = undefined;
@@ -900,9 +914,10 @@ export default function YearboundApp() {
       const ptbData = await ptbRes.json();
       if (ptbData && ptbData.digest) {
         txHash = ptbData.digest;
-        explorerUrl = ptbData.explorerUrl || `https://suiscan.xyz/mainnet/tx/${txHash}`;
+        explorerUrl = ptbData.explorerUrl || undefined;
         transferProvider = ptbData.provider || "Tatum Sui Gateway";
         isUnfunded = Boolean(ptbData.unfunded);
+        isRealOnChain = Boolean(ptbData.onChain);
       }
     } catch (ptbErr) {
       console.warn("[PTB Transfer] Tatum API notice:", ptbErr);
@@ -960,6 +975,8 @@ export default function YearboundApp() {
       explorerUrl,
       provider: transferProvider,
       isUnfunded,
+      isRealOnChain,
+      isOffChainVoucher: !isRealOnChain,
       source: "user",
     };
     setInfractions((prev) => [approvedRecord, ...prev]);
@@ -989,7 +1006,9 @@ export default function YearboundApp() {
     closeSendFlow();
     triggerSnackbar(
       "Transfer confirmed",
-      `Tatum PTB #${txHash.slice(0, 10)}... · Inscribed to Walrus`,
+      txHash
+        ? `Tatum PTB #${txHash.slice(0, 10)}... · Inscribed to Walrus`
+        : `Transfer authorized · Inscribed to Walrus Memory`,
       txBlobId
     );
   };
@@ -1142,25 +1161,53 @@ export default function YearboundApp() {
           : linkedAddress || DEMO_SUI_ADDRESS;
 
       // 1. Execute Real x402 Challenge-Response Flow with Sui Move Vault
-      let txHash = `0x_sui_ptb_${Date.now().toString(16)}`;
-      let vaultDestination = "0x_yearbound_christmas_vault";
+      let isRealOnChain = false;
+      let settlementType: "on_chain_ptb" | "cryptographic_voucher" = "cryptographic_voucher";
+      let txHash: string | undefined = undefined;
+      let voucherSignature: string | undefined = undefined;
+      let explorerUrl: string | undefined = undefined;
+      let vaultDestination = YEARBOUND_VAULT_ADDRESS;
+      let settlementProvider = "x402 Agent-Native Personal Signature Voucher";
+      let settlementMsg = "";
+
+      const privateKeySecret = accountType === "real" ? exportRealPrivateKeyHex() : undefined;
+
       try {
         const x402Result = await executeX402VaultDeposit({
           amountSui: penaltyAmt,
           reason: breachReason || `Breached resolution: ${matchedRuleTitle || "Curfew"}`,
-          commitmentId: "pact_primary",
+          commitmentId: hydratedPactId || "pact_primary",
           walletMode: accountType,
+          privateKeySecret: privateKeySecret || undefined,
+          senderAddress: activeAccountAddress,
         });
+
+        isRealOnChain = x402Result.isRealOnChain;
+        settlementType = x402Result.settlementType;
         txHash = x402Result.txHash;
+        voucherSignature = x402Result.voucherSignature;
+        explorerUrl = x402Result.explorerUrl;
         vaultDestination = x402Result.vaultDestination;
-        console.log("[x402] Penalty successfully settled into Move Vault:", x402Result);
+        settlementProvider = x402Result.provider;
+        settlementMsg = x402Result.message || "";
+        console.log("[x402] Penalty successfully settled:", x402Result);
       } catch (x402Err) {
-        console.warn("[x402] Challenge flow notice (proceeding with fallback settlement):", x402Err);
+        console.warn("[x402] Challenge flow notice (proceeding with fallback voucher):", x402Err);
       }
+
+      setLatestSettlement({
+        isRealOnChain,
+        settlementType,
+        txHash,
+        voucherSignature,
+        explorerUrl,
+        provider: settlementProvider,
+        message: settlementMsg,
+      });
 
       setPayFineStage("Inscribing to Walrus memory...");
 
-      // 2. Persist Accountability Event Blob to Walrus Mainnet with verified tx hash
+      // 2. Persist Accountability Event Blob to Walrus Mainnet with verified tx hash / voucher
       let fineBlobId = `blob_infr_${Date.now().toString(36)}`;
       try {
         const res = await fetch("/api/walrus", {
@@ -1175,7 +1222,11 @@ export default function YearboundApp() {
             verdict: "broken",
             user_explanation: sendMemo,
             penalty_deposited_sui: penaltyAmt,
-            vault_tx_hash: txHash,
+            vault_tx_hash: txHash || undefined,
+            voucher_signature: voucherSignature || undefined,
+            settlement_type: settlementType,
+            is_real_on_chain: isRealOnChain,
+            explorer_url: explorerUrl || undefined,
             recipient: sendRecipient,
             amount_sui: transferAmt,
             repeat_infraction_count: repeatInfractionCount,
@@ -1199,8 +1250,6 @@ export default function YearboundApp() {
         minute: "2-digit",
       }).format(new Date());
 
-      const explorerUrl = `https://suiscan.xyz/mainnet/tx/${txHash}`;
-
       const newInfraction: InfractionRecord = {
         id: `infr_${Date.now()}`,
         ruleTitle: matchedRuleTitle || activeRulesList[0]?.title || "Resolution 01",
@@ -1215,7 +1264,11 @@ export default function YearboundApp() {
         recipient: sendRecipient,
         txHash,
         explorerUrl,
-        provider: "Tatum Sui Gateway (x402 Protocol)",
+        isRealOnChain,
+        isOffChainVoucher: !isRealOnChain,
+        voucherSignature,
+        settlementType,
+        provider: settlementProvider,
         repeatCount: repeatInfractionCount,
         streakBroken: streakBroken,
         behavioralInsight: behavioralInsight,
@@ -1235,9 +1288,12 @@ export default function YearboundApp() {
           verdict: "broken",
           userMemo: sendMemo,
           penaltyDepositedSui: penaltyAmt,
-          vaultTxHash: txHash,
-          explorerUrl,
-          settlementEngine: "Tatum Sui Gateway (x402 Protocol)",
+          settlementType,
+          isRealOnChain,
+          vaultTxHash: txHash || null,
+          voucherSignature: voucherSignature || null,
+          explorerUrl: explorerUrl || null,
+          settlementEngine: settlementProvider,
           breachedResolution: matchedRuleTitle || activeRulesList[0]?.title || "Resolution 01",
           repeatCount: repeatInfractionCount,
           streakBroken: streakBroken,
@@ -2683,9 +2739,9 @@ export default function YearboundApp() {
                                 {isHonored ? `-${item.amount} SUI` : `+${item.penaltySui} SUI`}
                               </span>
                               <div className="flex items-center gap-1.5">
-                                {item.txHash && (
+                                {item.isRealOnChain && item.txHash && item.explorerUrl ? (
                                   <a
-                                    href={item.explorerUrl || `https://suiscan.xyz/mainnet/tx/${item.txHash}`}
+                                    href={item.explorerUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="text-[9px] font-mono text-[#E5A93C] hover:text-[#F3BA5B] flex items-center gap-0.5 transition-colors"
@@ -2694,7 +2750,14 @@ export default function YearboundApp() {
                                     <span>PTB</span>
                                     <ExternalLink size={8} />
                                   </a>
-                                )}
+                                ) : item.voucherSignature || item.isOffChainVoucher ? (
+                                  <span
+                                    className="text-[9px] font-mono text-[#71717A] bg-[#18181C] px-1.5 py-0.5 rounded border border-[#222226]"
+                                    title="x402 Agent Cryptographic Voucher (Inscribed to Walrus)"
+                                  >
+                                    x402 Voucher
+                                  </span>
+                                ) : null}
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -3092,6 +3155,22 @@ export default function YearboundApp() {
                     <span className="text-xs text-[#71717A]">Protocol Standard</span>
                     <span className="text-xs font-mono text-[#A1A1AA]">x402 Agent Toll</span>
                   </div>
+                  <div className="flex items-center justify-between border-t border-[#18181C] pt-3">
+                    <span className="text-xs text-[#71717A]">Escrow Destination</span>
+                    <span className="text-xs font-mono text-[#A1A1AA]" title={YEARBOUND_VAULT_ADDRESS}>
+                      {YEARBOUND_VAULT_ADDRESS.slice(0, 8)}...{YEARBOUND_VAULT_ADDRESS.slice(-6)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between border-t border-[#18181C] pt-3">
+                    <span className="text-xs text-[#71717A]">Settlement Mode</span>
+                    <span className="text-xs font-mono text-white">
+                      {accountType === "real"
+                        ? "Tatum Mainnet Gateway"
+                        : accountType === "linked"
+                        ? "Sui Wallet Standard"
+                        : "Ed25519 Cryptographic Voucher"}
+                    </span>
+                  </div>
                 </div>
 
                 {/* TATUM INFLOW & ACCUMULATION SENTINEL CARD */}
@@ -3259,9 +3338,9 @@ export default function YearboundApp() {
                                   : `Breach: ${infr.ruleTitle}`}
                               </span>
                               <div className="flex items-center gap-2">
-                                {infr.txHash && (
+                                {infr.isRealOnChain && infr.txHash && infr.explorerUrl ? (
                                   <a
-                                    href={infr.explorerUrl || `https://suiscan.xyz/mainnet/tx/${infr.txHash}`}
+                                    href={infr.explorerUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="text-[10px] font-mono text-[#E5A93C] hover:text-[#F3BA5B] flex items-center gap-0.5 transition-colors"
@@ -3270,7 +3349,14 @@ export default function YearboundApp() {
                                     <span>PTB #{infr.txHash.slice(0, 6)}...</span>
                                     <ExternalLink size={9} />
                                   </a>
-                                )}
+                                ) : infr.voucherSignature || infr.isOffChainVoucher ? (
+                                  <span
+                                    className="text-[10px] font-mono text-[#71717A] bg-[#141417] px-2 py-0.5 rounded border border-[#222226]"
+                                    title="x402 Cryptographic Debt Voucher (Inscribed to Walrus)"
+                                  >
+                                    x402 Voucher
+                                  </span>
+                                ) : null}
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -3948,7 +4034,7 @@ export default function YearboundApp() {
                     Penalty Recorded
                   </div>
                   <p className="text-xs text-[#71717A] leading-relaxed">
-                    10 SUI penalty has been deposited to the x402 Vault and logged immutably in Walrus memory.
+                    {breachPenaltySui || 10} SUI penalty has been processed via x402 and inscribed to Walrus memory.
                   </p>
                 </div>
 
@@ -3963,12 +4049,50 @@ export default function YearboundApp() {
 
                     <div className="flex items-center justify-between border-t border-[#18181C] pt-3">
                       <span className="text-xs text-[#A1A1AA]">Penalty Deposit</span>
-                      <span className="text-xs font-mono font-semibold text-white">10 SUI → x402 Vault</span>
+                      <span className="text-xs font-mono font-semibold text-white">
+                        {breachPenaltySui || 10} SUI → x402 Vault
+                      </span>
                     </div>
 
                     <div className="flex items-center justify-between border-t border-[#18181C] pt-2.5">
+                      <span className="text-xs text-[#A1A1AA]">Settlement Engine</span>
+                      <span className="text-xs font-mono text-[#A1A1AA]">
+                        {latestSettlement?.isRealOnChain
+                          ? "Sui Mainnet PTB (Tatum Gateway)"
+                          : "Agent Cryptographic Debt Voucher"}
+                      </span>
+                    </div>
+
+                    {latestSettlement?.isRealOnChain && latestSettlement?.txHash && (
+                      <div className="flex items-center justify-between border-t border-[#18181C] pt-2.5">
+                        <span className="text-xs text-[#A1A1AA]">On-Chain Digest</span>
+                        <a
+                          href={latestSettlement.explorerUrl || `https://suiscan.xyz/mainnet/tx/${latestSettlement.txHash}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs font-mono text-[#E5A93C] hover:underline flex items-center gap-1"
+                        >
+                          <span>{latestSettlement.txHash.slice(0, 10)}...</span>
+                          <ExternalLink size={10} />
+                        </a>
+                      </div>
+                    )}
+
+                    {!latestSettlement?.isRealOnChain && latestSettlement?.voucherSignature && (
+                      <div className="flex items-center justify-between border-t border-[#18181C] pt-2.5">
+                        <span className="text-xs text-[#A1A1AA]">x402 Signature</span>
+                        <span
+                          className="text-[11px] font-mono text-[#71717A] truncate max-w-[180px]"
+                          title={latestSettlement.voucherSignature}
+                        >
+                          ed25519_{latestSettlement.voucherSignature.slice(0, 12)}...
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between border-t border-[#18181C] pt-2.5">
                       <span className="text-xs text-[#A1A1AA]">Lock Expiry</span>
-                      <span className="text-xs text-[#A1A1AA]">Dec 25, 2026</span>
+                      <span className="text-xs text-[#A1A1AA]">{unlockDate}</span>
                     </div>
 
                     <div className="flex items-center justify-between bg-[#131316] border border-[#1E1E22] rounded-xl px-3 py-2 mt-1">
@@ -4234,7 +4358,7 @@ export default function YearboundApp() {
                         </div>
 
                         <div className="flex items-center gap-3 pt-1">
-                          {item.payload?.vaultTxHash && (
+                          {item.payload?.isRealOnChain && item.payload?.vaultTxHash && (
                             <a
                               href={item.payload?.explorerUrl || `https://suiscan.xyz/mainnet/tx/${item.payload.vaultTxHash}`}
                               target="_blank"
@@ -4244,6 +4368,11 @@ export default function YearboundApp() {
                               <span>SuiScan PTB</span>
                               <ExternalLink size={10} />
                             </a>
+                          )}
+                          {!item.payload?.isRealOnChain && (item.payload?.voucherSignature || item.payload?.settlementType === "cryptographic_voucher") && (
+                            <span className="text-[11px] text-[#71717A] font-mono">
+                              x402 Voucher
+                            </span>
                           )}
                           <a
                             href={`https://aggregator.walrus-testnet.walrus.space/v1/blobs/${item.blobId}`}

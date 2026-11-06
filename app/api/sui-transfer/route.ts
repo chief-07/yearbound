@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
         mode: "demo",
         onChain: false,
         digest: demoDigest,
-        explorerUrl: `https://suiscan.xyz/mainnet/tx/${demoDigest}`,
+        explorerUrl: undefined,
         amountSui: numAmount,
         recipient: recipientAddress,
         provider: "Tatum Sui Gateway (Simulated)",

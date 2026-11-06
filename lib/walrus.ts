@@ -75,6 +75,10 @@ export interface AccountabilityEventPayload {
   user_explanation: string;
   penalty_deposited_sui: number;
   vault_tx_hash?: string;
+  voucher_signature?: string;
+  settlement_type?: "on_chain_ptb" | "cryptographic_voucher";
+  is_real_on_chain?: boolean;
+  explorer_url?: string;
   timestamp: string;
   recipient?: string;
   amount_sui?: number;
