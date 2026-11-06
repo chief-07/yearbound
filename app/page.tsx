@@ -221,6 +221,15 @@ export default function YearboundApp() {
   const [selectedMemoryRuleId, setSelectedMemoryRuleId] = useState<string | null>(null);
   const [latestFineBlobId, setLatestFineBlobId] = useState<string>("");
 
+  // Degraded Mode (Web2 stateless banking simulation vs Walrus Total Recall + Tatum Gateway)
+  const [isDegradedMode, setIsDegradedMode] = useState<boolean>(false);
+
+  // Walrus Cold-Boot Hydration & Compounding Pattern Synthesis state
+  const [isHydrating, setIsHydrating] = useState<boolean>(false);
+  const [hasHydratedFromWalrus, setHasHydratedFromWalrus] = useState<boolean>(false);
+  const [behavioralPatterns, setBehavioralPatterns] = useState<any[]>([]);
+  const [hydratedPactId, setHydratedPactId] = useState<string | null>(null);
+
   // Time-Travel Scrubber state (Demo account only)
   const [activeMilestone, setActiveMilestone] = useState<TimeMilestone>("jan1");
   const [currentDayOfYear, setCurrentDayOfYear] = useState<number>(1);
@@ -314,6 +323,106 @@ export default function YearboundApp() {
       setIsCheckingLiveBalance(false);
     }
   };
+
+  // Walrus Cold-Boot Hydration: reconstruct state from decentralized memory blobs
+  const hydrateFromWalrus = async (targetAddress?: string) => {
+    const addr =
+      targetAddress ||
+      (accountType === "demo"
+        ? DEMO_SUI_ADDRESS
+        : accountType === "real"
+        ? realAddress
+        : linkedAddress || DEMO_SUI_ADDRESS);
+    setIsHydrating(true);
+    try {
+      const res = await fetch(`/api/walrus/hydrate?address=${encodeURIComponent(addr || "")}`);
+      const data = await res.json();
+      if (data && data.success) {
+        setHasHydratedFromWalrus(true);
+        if (data.pact) {
+          setHydratedPactId(data.pact.pact_id || data.pact.blob_id || null);
+          if (data.pact.x402_escrow_deposit_sui) {
+            setEscrowDeposit(data.pact.x402_escrow_deposit_sui);
+          }
+        }
+        if (data.rules && Array.isArray(data.rules) && data.rules.length > 0) {
+          setRules(
+            data.rules.map((r: any, idx: number) => ({
+              id: r.rule_id || String(idx + 1),
+              title: r.title,
+              condition: r.behavioral_rule || r.condition || "Commitment boundary",
+              whyItMatters: r.why_it_matters || "",
+              penalty: r.penalty_amount_sui || 10,
+              breaches: 0,
+              blobId: r.blob_id,
+              category: r.category,
+              keywords: r.keywords,
+              behavioralRule: r.behavioral_rule,
+              wallyRoastAngle: r.wally_roast_angle,
+            }))
+          );
+        }
+        if (data.events && Array.isArray(data.events) && data.events.length > 0) {
+          setInfractions(data.events);
+        }
+        if (data.patterns && Array.isArray(data.patterns) && data.patterns.length > 0) {
+          setBehavioralPatterns(data.patterns);
+        }
+
+        // Hydrate walrusBlobs for Memory Inspector drawer
+        const hydratedBlobs: WalrusMemoryBlob[] = [];
+        if (data.pact) {
+          hydratedBlobs.push({
+            blobId: data.pact.blob_id || data.pact.pact_id || "genesis_pact",
+            type: "commitment_pact",
+            title: "Genesis Resolution Pact Manifest",
+            timestamp: data.pact.created_at || "Genesis",
+            payload: data.pact,
+          });
+        }
+        if (data.rules && Array.isArray(data.rules)) {
+          data.rules.forEach((r: any) => {
+            hydratedBlobs.push({
+              blobId: r.blob_id || `blob_rule_${r.rule_id}`,
+              type: "resolution_contract",
+              title: `Resolution: ${r.title}`,
+              timestamp: r.created_at || "Active",
+              payload: r,
+            });
+          });
+        }
+        if (data.events && Array.isArray(data.events)) {
+          data.events.forEach((e: any) => {
+            hydratedBlobs.push({
+              blobId: e.blobId || `blob_evt_${e.id}`,
+              type: "accountability_event",
+              title: `${e.verdict === "honored" ? "Honored Transfer" : "Resolution Infraction"}: ${e.ruleTitle}`,
+              timestamp: e.timestamp || "Recalled",
+              payload: e,
+            });
+          });
+        }
+        if (hydratedBlobs.length > 0) {
+          setWalrusBlobs((prev) => {
+            const existingIds = new Set(prev.map((b) => b.blobId));
+            const newBlobs = hydratedBlobs.filter((b) => !existingIds.has(b.blobId));
+            return [...newBlobs, ...prev];
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("[Walrus Hydration] Notice:", err);
+    } finally {
+      setIsHydrating(false);
+    }
+  };
+
+  // Run hydration when entering dashboard or switching active account
+  useEffect(() => {
+    if (step === 4) {
+      hydrateFromWalrus();
+    }
+  }, [step, accountType]);
 
   // Rule management
   const addRule = () => {
@@ -787,6 +896,24 @@ export default function YearboundApp() {
   const handleReviewAndCheck = async () => {
     if (!sendMemo.trim()) return;
 
+    // Degraded Mode (Web2 stateless banking simulation)
+    if (isDegradedMode) {
+      setSendSubStep("checking");
+      setCheckingProgressStage("Routing through legacy Web2 processor (zero memory)...");
+      setTimeout(() => {
+        setBreachReason("Transaction flagged by basic keyword filter #0492.");
+        setWallyRoast("Automated System Notice: Your bank has declined this transfer under Rule #0492. (Degraded mode active: zero memory, zero habit analysis, flat penalty).");
+        setMatchedRuleTitle("Default Cardholder Policy");
+        setBreachPenaltySui(10);
+        setWalrusRecalledCount(0);
+        setRepeatInfractionCount(1);
+        setStreakBroken(false);
+        setBehavioralInsight("Legacy Banking Notice: Cross-session pattern synthesis unavailable. Transaction history will not carry over.");
+        setSendSubStep("breach");
+      }, 900);
+      return;
+    }
+
     setSendSubStep("checking");
     setCheckingProgressStage("Auditing wallet & vault via Tatum Sui RPC...");
 
@@ -840,6 +967,20 @@ export default function YearboundApp() {
         setRepeatInfractionCount(data.repeatInfractionCount || 1);
         setStreakBroken(Boolean(data.streakBroken));
         setBehavioralInsight(data.behavioralInsight || "");
+
+        if (data.behavioralInsight) {
+          setBehavioralPatterns((prev) => [
+            {
+              type: "behavioral_pattern",
+              pattern_title: (data.repeatInfractionCount || 1) >= 3 ? "Chronic Relapse Pattern" : "Recurring Violation Habit",
+              observation: data.behavioralInsight,
+              recommended_intervention: `Escalated fine to ${data.penaltySui || 15} SUI. Enforcing strict transfer curfew.`,
+              confidence: 0.94,
+              generated_at: new Date().toISOString(),
+            },
+            ...prev,
+          ]);
+        }
 
         const matchedRuleObj = activeRulesList.find(
           (r) =>
@@ -1278,7 +1419,87 @@ export default function YearboundApp() {
       {/* ====================================================================
           MOBILE SHELL (Centered vertical frame on desktop, solid black ground)
           ==================================================================== */}
-      <div className="relative w-full max-w-[420px] h-full md:h-[860px] md:max-h-[92vh] bg-[#000000] md:border md:border-[#222226] md:rounded-[40px] flex flex-col justify-between overflow-hidden shadow-2xl transition-all duration-300">
+      <div className={`relative w-full max-w-[420px] h-full md:h-[860px] md:max-h-[92vh] bg-[#000000] md:border md:border-[#222226] md:rounded-[40px] flex flex-col justify-between overflow-hidden shadow-2xl transition-all duration-300 ${
+        isDegradedMode ? "filter grayscale contrast-90" : ""
+      }`}>
+        {/* ====================================================================
+            TOP SYSTEM BAR: TOTAL RECALL vs DEGRADED LEGACY TOGGLE
+            ==================================================================== */}
+        <div
+          className={`w-full px-4 py-2 border-b transition-colors duration-200 flex items-center justify-between shrink-0 z-30 ${
+            isDegradedMode
+              ? "bg-[#18181B] border-[#27272A]"
+              : "bg-[#0A0A0C] border-[#18181C]"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                isDegradedMode
+                  ? "bg-[#71717A]"
+                  : "bg-[#10B981] shadow-[0_0_8px_#10B981]"
+              }`}
+            />
+            <span
+              className={`text-[10px] font-mono tracking-wider uppercase font-semibold ${
+                isDegradedMode ? "text-[#A1A1AA]" : "text-white"
+              }`}
+            >
+              {isDegradedMode ? "Legacy Banking (Degraded)" : "Walrus Recall · Tatum"}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {isHydrating && (
+              <span className="text-[9px] font-mono text-[#E5A93C] animate-pulse">
+                Hydrating...
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => setIsDegradedMode((prev) => !prev)}
+              className={`text-[10px] font-mono px-2.5 py-1 rounded-full border transition-all duration-150 active:scale-95 flex items-center gap-1 ${
+                isDegradedMode
+                  ? "bg-[#27272A] text-white border-[#3F3F46] hover:bg-[#3F3F46]"
+                  : "bg-[#131316] text-[#A1A1AA] border-[#27272A] hover:text-white hover:border-[#3F3F46]"
+              }`}
+              title={
+                isDegradedMode
+                  ? "Restore Walrus Total Recall & Tatum Gateway"
+                  : "Simulate stateless Web2 legacy banking without memory"
+              }
+            >
+              <span>{isDegradedMode ? "⚡ Restore Recall" : "Simulate Degraded"}</span>
+            </button>
+          </div>
+        </div>
+
+        {isDegradedMode && (
+          <div className="w-full bg-[#1C1917] border-b border-[#292524] px-4 py-1.5 flex items-center justify-between text-[10px] font-mono text-[#FCA5A5] animate-in slide-in-from-top-1 shrink-0 z-20">
+            <span>⚠️ Web2 Mode: Walrus Memory bypassed · Flat fines · Stateless</span>
+            <span className="text-[#A8A29E]">No Recall</span>
+          </div>
+        )}
+
+        {/* Existing Genesis Pact Banner (if hydrated from Walrus on Steps 1-3) */}
+        {step < 4 && hydratedPactId && (
+          <div className="mx-4 mt-2 mb-1 bg-[#14120C] border border-[#3E2812] rounded-xl px-3 py-2 flex items-center justify-between text-xs animate-in fade-in shrink-0 z-20">
+            <div className="flex flex-col min-w-0 pr-2">
+              <span className="font-medium text-white truncate">Walrus Genesis Pact Found</span>
+              <span className="text-[10px] font-mono text-[#E5A93C] truncate">#{hydratedPactId.slice(0, 12)}...</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setStep(4);
+                setActiveTab("home");
+              }}
+              className="text-[10px] font-mono font-semibold bg-[#E5A93C] text-black px-2.5 py-1 rounded-lg hover:bg-[#F5B84D] transition-colors shrink-0"
+            >
+              Resume Pact →
+            </button>
+          </div>
+        )}
         
         {/* ==================================================================
             SCREEN 1: RESOLUTION BUILDER (Accordion - Single Expanded Rule)
@@ -1961,14 +2182,16 @@ export default function YearboundApp() {
                 <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-2.5 relative transition-all duration-200 hover:border-[#3F3F46]">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-mono uppercase tracking-wider text-[#71717A]">
-                      Wally · Walrus Memory
+                      {isDegradedMode ? "Legacy Banking Engine" : "Wally · Walrus Memory"}
                     </span>
                     <span className="text-[11px] font-mono text-[#71717A]">
-                      {walrusBlobId ? `Blob #${walrusBlobId.slice(0, 8)}` : "Blob #d4a97f"}
+                      {isDegradedMode ? "Stateless (Web2)" : walrusBlobId ? `Blob #${walrusBlobId.slice(0, 8)}` : "Blob #d4a97f"}
                     </span>
                   </div>
                   <p className="text-sm text-[#E4E4E7] leading-relaxed font-normal">
-                    {isVaultUnlocked && !isVaultClaimed
+                    {isDegradedMode
+                      ? "Stateless Session: Web2 banking mode active. Walrus memory is disconnected. Outgoing transfers are not cross-referenced against your resolutions and past infractions are forgotten."
+                      : isVaultUnlocked && !isVaultClaimed
                       ? `🎅 Merry Christmas! The Sui network clock has passed the vault unlock timestamp (1798156800000 ms). Your accumulated savings of ${escrowDeposit}.00 SUI are now ready to be claimed!`
                       : isVaultClaimed
                       ? `🎉 Christmas gift claimed! You successfully locked ${escrowDeposit}.00 SUI away from your impulsive past self and reclaimed it for the holidays.`
@@ -2018,6 +2241,95 @@ export default function YearboundApp() {
                       <span>{copiedAddress ? "Copied" : "Receive"}</span>
                     </button>
                   </div>
+                </div>
+
+                {/* 3A. WALLY'S COMPOUNDING MEMORY JOURNAL */}
+                <div
+                  className={`border rounded-2xl p-5 flex flex-col gap-3 transition-all duration-200 ${
+                    isDegradedMode
+                      ? "bg-[#111113] border-[#222226] text-[#71717A]"
+                      : "bg-[#0A0A0C] border-[#222226] hover:border-[#3F3F46]"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Sparkles
+                        size={14}
+                        className={isDegradedMode ? "text-[#52525B]" : "text-[#E5A93C]"}
+                      />
+                      <span className="text-[11px] font-mono uppercase tracking-wider text-[#71717A]">
+                        Wally's Memory Journal · Pattern Synthesis
+                      </span>
+                    </div>
+                    <span
+                      className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                        isDegradedMode
+                          ? "text-[#71717A] bg-[#18181B] border-[#27272A]"
+                          : "text-[#10B981] bg-[#10B981]/10 border-[#10B981]/25"
+                      }`}
+                    >
+                      {isDegradedMode ? "Offline (Web2)" : "Compounding Active"}
+                    </span>
+                  </div>
+
+                  {isDegradedMode ? (
+                    <p className="text-xs text-[#71717A] leading-relaxed italic">
+                      Decentralized memory journal offline. Traditional Web2 banking does not synthesize recurring behavioral habits or cross-session accountability.
+                    </p>
+                  ) : behavioralPatterns.length > 0 ? (
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-white">
+                          {behavioralPatterns[0].pattern_title || "Emerging Behavioral Habit"}
+                        </span>
+                        <span className="text-[10px] font-mono text-[#E5A93C]">
+                          {Math.round((behavioralPatterns[0].confidence || 0.94) * 100)}% Confidence
+                        </span>
+                      </div>
+                      <p className="text-xs text-[#D4D4D8] leading-relaxed">
+                        {behavioralPatterns[0].observation || "Multiple breaches detected. Agent has synthesized habit correlation across your transaction history."}
+                      </p>
+                      {behavioralPatterns[0].recommended_intervention && (
+                        <div className="text-[11px] font-mono text-[#A1A1AA] bg-[#131316] border border-[#222226] p-2.5 rounded-xl">
+                          💡 Intervention: {behavioralPatterns[0].recommended_intervention}
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const patternBlobId = `blob_pattern_${(behavioralPatterns[0].pattern_title || "habit").toLowerCase().replace(/\s+/g, "_")}`;
+                          setExpandedJsonBlobId(patternBlobId);
+                          setIsMemoryInspectorOpen(true);
+                        }}
+                        className="self-start text-[11px] font-mono text-[#E5A93C] hover:text-[#F5B84D] flex items-center gap-1 mt-1 transition-colors"
+                      >
+                        <span>Inspect Pattern Blob Proof</span>
+                        <ExternalLink size={10} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-white">
+                          Zero Habit Decay Detected · Clean Record
+                        </span>
+                        <span className="text-[10px] font-mono text-[#10B981]">
+                          100% Adherence
+                        </span>
+                      </div>
+                      <p className="text-xs text-[#A1A1AA] leading-relaxed">
+                        Walrus memory is actively cross-referencing your transactions against {activeRulesList.length} locked commitments. As transactions accumulate, Wally synthesizes recurring timing vulnerabilities and escalating deterrents.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setIsMemoryInspectorOpen(true)}
+                        className="self-start text-[11px] font-mono text-[#A1A1AA] hover:text-white flex items-center gap-1 mt-1 transition-colors"
+                      >
+                        <span>View Decentralized Memory Ledger</span>
+                        <ExternalLink size={10} />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* 3B. RECENT ACTIVITY · WALRUS MEMORY LEDGER */}
@@ -2425,18 +2737,23 @@ export default function YearboundApp() {
                 {/* 365-DAY DISCIPLINE GRID HEATMAP */}
                 <DisciplineGrid
                   currentDayOfYear={currentDayOfYear}
-                  infractions={infractions
-                    .filter((i) => i.verdict !== "honored")
-                    .map((i) => ({
-                      dayOfYear: i.dayOfYear || 45,
-                      dateStr: i.timestamp,
-                      memo: i.memo,
-                      penaltySui: i.penaltySui,
-                      ruleTitle: i.ruleTitle,
-                      blobId: i.blobId,
-                    }))}
+                  infractions={infractions.map((i) => ({
+                    dayOfYear: i.dayOfYear || 45,
+                    dateStr: i.timestamp,
+                    memo: i.memo,
+                    penaltySui: i.penaltySui,
+                    ruleTitle: i.ruleTitle,
+                    blobId: i.blobId,
+                    verdict: i.verdict || (i.penaltySui > 0 ? "broken" : "honored"),
+                    txHash: i.txHash,
+                  }))}
                   totalEscrowSui={escrowDeposit}
                   isUnlocked={isVaultUnlocked}
+                  isDegraded={isDegradedMode}
+                  onInspectBlob={(blobId) => {
+                    setExpandedJsonBlobId(blobId);
+                    setIsMemoryInspectorOpen(true);
+                  }}
                 />
 
                 {/* Primary Vault Balance Card */}

@@ -68,6 +68,7 @@ export class TatumSuiService {
 
     this.gqlClient = new SuiGraphQLClient({
       url: this.gatewayUrl,
+      network: "mainnet",
       headers,
     });
   }

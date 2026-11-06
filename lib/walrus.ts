@@ -223,16 +223,21 @@ export class WalrusMemoryService {
    * Recalls historical context matching the given natural language or semantic query.
    */
   public async recall(query: string, maxResults: number = 8): Promise<string[]> {
-    const response = await this.client.recall({
-      query,
-      maxTokens: 2000,
-    });
+    try {
+      const response = await this.client.recall({
+        query,
+        maxTokens: 2000,
+      });
 
-    if (!response || !response.results) {
+      if (!response || !response.results) {
+        return [];
+      }
+
+      return response.results.slice(0, maxResults).map((hit) => hit.text);
+    } catch (err: unknown) {
+      console.warn(`[Walrus] Recall notice for '${query}':`, err instanceof Error ? err.message : err);
       return [];
     }
-
-    return response.results.slice(0, maxResults).map((hit) => hit.text);
   }
 
   /**
