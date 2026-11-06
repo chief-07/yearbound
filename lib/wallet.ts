@@ -215,3 +215,34 @@ export async function signPayloadWithWallet(
 
   throw new Error("Signing with an external address requires a connected Sui wallet extension.");
 }
+
+// -----------------------------------------------------------------------------
+// SUI PTB EXECUTION VIA BROWSER WALLET EXTENSION
+// Executes real on-chain Programmable Transaction Block via connected wallet
+// -----------------------------------------------------------------------------
+export async function executeTransferWithExtension(params: {
+  recipient: string;
+  amountSui: number;
+}): Promise<{ digest: string }> {
+  const detected = detectInstalledSuiWallet();
+  if (!detected?.provider) {
+    throw new Error("No connected Sui wallet extension detected.");
+  }
+
+  const { Transaction } = await import("@mysten/sui/transactions");
+  const tx = new Transaction();
+  const amountMist = Math.round(params.amountSui * 1_000_000_000);
+  const [coin] = tx.splitCoins(tx.gas, [amountMist]);
+  tx.transferObjects([coin], params.recipient);
+
+  const provider = detected.provider;
+  if (typeof provider.signAndExecuteTransactionBlock === "function") {
+    const res = await provider.signAndExecuteTransactionBlock({ transactionBlock: tx });
+    return { digest: res.digest };
+  } else if (typeof provider.signAndExecuteTransaction === "function") {
+    const res = await provider.signAndExecuteTransaction({ transaction: tx });
+    return { digest: res.digest };
+  }
+
+  throw new Error("Connected extension does not support transaction execution");
+}
