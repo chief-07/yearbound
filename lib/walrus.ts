@@ -69,11 +69,17 @@ export interface GenesisPactPayload {
 export interface AccountabilityEventPayload {
   type: "accountability_event";
   commitment_id: string;
+  rule_id?: string;
+  rule_title?: string;
   verdict: "honored" | "broken" | "excused";
   user_explanation: string;
   penalty_deposited_sui: number;
   vault_tx_hash?: string;
   timestamp: string;
+  recipient?: string;
+  amount_sui?: number;
+  repeat_infraction_count?: number;
+  streak_broken?: boolean;
 }
 
 export interface BehavioralPatternPayload {
@@ -83,6 +89,9 @@ export interface BehavioralPatternPayload {
   recommended_intervention: string;
   confidence: number;
   generated_at: string;
+  rule_title?: string;
+  repeat_count?: number;
+  wallet_address?: string;
 }
 
 export type YearboundMemoryPayload =
@@ -230,17 +239,31 @@ export class WalrusMemoryService {
    * Recalls and parses typed memories from Walrus context.
    */
   public async recallTyped<T extends YearboundMemoryPayload>(query: string, typeFilter: T["type"]): Promise<T[]> {
-    const rawMemories = await this.recall(query, 12);
+    const rawMemories = await this.recall(query, 16);
     const parsed: T[] = [];
 
     for (const mem of rawMemories) {
+      if (!mem) continue;
       try {
-        const item = JSON.parse(mem) as T;
+        const item = typeof mem === "object" ? (mem as unknown as T) : (JSON.parse(mem) as T);
         if (item && item.type === typeFilter) {
           parsed.push(item);
+          continue;
         }
       } catch {
-        continue;
+        // Fallback for substring JSON extraction if text has headers
+        const first = mem.indexOf("{");
+        const last = mem.lastIndexOf("}");
+        if (first !== -1 && last > first) {
+          try {
+            const sub = JSON.parse(mem.slice(first, last + 1)) as T;
+            if (sub && sub.type === typeFilter) {
+              parsed.push(sub);
+            }
+          } catch {
+            // Ignore unparseable memory string
+          }
+        }
       }
     }
 

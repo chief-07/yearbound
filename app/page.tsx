@@ -88,6 +88,9 @@ export interface InfractionRecord {
   explorerUrl?: string;
   provider?: string;
   isUnfunded?: boolean;
+  repeatCount?: number;
+  streakBroken?: boolean;
+  behavioralInsight?: string;
   source?: "user" | "timeline";
 }
 
@@ -255,6 +258,10 @@ export default function YearboundApp() {
   const [matchedRuleTitle, setMatchedRuleTitle] = useState<string>("");
   const [checkingProgressStage, setCheckingProgressStage] = useState<string>("Connecting to Tatum & Walrus...");
   const [walrusRecalledCount, setWalrusRecalledCount] = useState<number>(0);
+  const [repeatInfractionCount, setRepeatInfractionCount] = useState<number>(1);
+  const [streakBroken, setStreakBroken] = useState<boolean>(false);
+  const [behavioralInsight, setBehavioralInsight] = useState<string>("");
+  const [matchedRuleMotivation, setMatchedRuleMotivation] = useState<string>("");
 
   // Initialize real persistent self-custodial Sui keypair and detect extensions
   useEffect(() => {
@@ -811,6 +818,13 @@ export default function YearboundApp() {
             whyItMatters: r.whyItMatters,
             penalty: r.penalty,
           })),
+          history: infractions.map((i) => ({
+            ruleTitle: i.ruleTitle,
+            verdict: i.verdict,
+            memo: i.memo,
+            timestamp: i.timestamp,
+            penaltySui: i.penaltySui,
+          })),
         }),
       });
 
@@ -823,6 +837,16 @@ export default function YearboundApp() {
         setMatchedRuleTitle(data.matchedRule || "New Year's Resolution");
         setBreachPenaltySui(data.penaltySui || 10);
         setWalrusRecalledCount(data.walrus?.recalledCount || 0);
+        setRepeatInfractionCount(data.repeatInfractionCount || 1);
+        setStreakBroken(Boolean(data.streakBroken));
+        setBehavioralInsight(data.behavioralInsight || "");
+
+        const matchedRuleObj = activeRulesList.find(
+          (r) =>
+            r.title.toLowerCase().includes((data.matchedRule || "").toLowerCase()) ||
+            (data.matchedRule || "").toLowerCase().includes(r.title.toLowerCase())
+        );
+        setMatchedRuleMotivation(matchedRuleObj?.whyItMatters || "");
 
         if (data.verdict === "broken") {
           setTimeout(() => {
@@ -888,10 +912,16 @@ export default function YearboundApp() {
           body: JSON.stringify({
             type: "accountability_event",
             commitment_id: "pact_primary",
+            rule_id: activeRulesList.find((r) => r.title === matchedRuleTitle)?.id,
+            rule_title: matchedRuleTitle,
             verdict: "broken",
             user_explanation: sendMemo,
             penalty_deposited_sui: penaltyAmt,
             vault_tx_hash: txHash,
+            recipient: sendRecipient,
+            amount_sui: transferAmt,
+            repeat_infraction_count: repeatInfractionCount,
+            streak_broken: streakBroken,
           }),
         });
 
@@ -927,6 +957,9 @@ export default function YearboundApp() {
         txHash,
         explorerUrl,
         provider: "Tatum Sui Gateway (x402 Protocol)",
+        repeatCount: repeatInfractionCount,
+        streakBroken: streakBroken,
+        behavioralInsight: behavioralInsight,
         source: "user",
       };
       setInfractions((prev) => [newInfraction, ...prev]);
@@ -934,7 +967,7 @@ export default function YearboundApp() {
       const infractionBlob: WalrusMemoryBlob = {
         blobId: fineBlobId,
         type: "accountability_event",
-        title: `Infraction: ${matchedRuleTitle || activeRulesList[0]?.title || "Resolution Breach"}`,
+        title: `Infraction #${repeatInfractionCount}: ${matchedRuleTitle || activeRulesList[0]?.title || "Resolution Breach"}`,
         timestamp: timestampStr,
         payload: {
           protocol: "Yearbound v1",
@@ -947,6 +980,9 @@ export default function YearboundApp() {
           explorerUrl,
           settlementEngine: "Tatum Sui Gateway (x402 Protocol)",
           breachedResolution: matchedRuleTitle || activeRulesList[0]?.title || "Resolution 01",
+          repeatCount: repeatInfractionCount,
+          streakBroken: streakBroken,
+          behavioralInsight: behavioralInsight,
           destination: vaultDestination,
           timestamp: new Date().toISOString(),
         },
@@ -2013,15 +2049,22 @@ export default function YearboundApp() {
                             className="bg-[#131316] border border-[#222226] rounded-xl p-3 flex items-center justify-between gap-3"
                           >
                             <div className="flex items-center gap-3 min-w-0">
-                              <span
-                                className={`text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border shrink-0 ${
-                                  isHonored
-                                    ? "text-[#10B981] bg-[#10B981]/10 border-[#10B981]/25"
-                                    : "text-[#EF4444] bg-[#EF4444]/10 border-[#EF4444]/25"
-                                }`}
-                              >
-                                {isHonored ? "Honored" : "Breach"}
-                              </span>
+                              <div className="flex flex-col gap-0.5 shrink-0">
+                                <span
+                                  className={`text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border text-center ${
+                                    isHonored
+                                      ? "text-[#10B981] bg-[#10B981]/10 border-[#10B981]/25"
+                                      : "text-[#EF4444] bg-[#EF4444]/10 border-[#EF4444]/25"
+                                  }`}
+                                >
+                                  {isHonored ? "Honored" : "Breach"}
+                                </span>
+                                {item.repeatCount && item.repeatCount > 1 && (
+                                  <span className="text-[8px] font-mono text-red-400 text-center font-semibold">
+                                    #{item.repeatCount}
+                                  </span>
+                                )}
+                              </div>
                               <div className="flex flex-col min-w-0">
                                 <span className="text-xs font-medium text-white truncate">
                                   {item.memo || (isHonored ? "Transfer" : "Breach Fine")}
@@ -2475,7 +2518,7 @@ export default function YearboundApp() {
                                       : "text-[#EF4444] bg-[#EF4444]/10 border-[#EF4444]/25"
                                   }`}
                                 >
-                                  {isHonored ? "Honored" : "Breach Fine"}
+                                  {isHonored ? "Honored" : infr.repeatCount && infr.repeatCount > 1 ? `Breach #${infr.repeatCount}` : "Breach Fine"}
                                 </span>
                                 <span className="text-xs font-semibold text-white">
                                   {isHonored ? `-${infr.amount} SUI` : `+${infr.penaltySui} SUI Locked`}
@@ -3003,11 +3046,18 @@ export default function YearboundApp() {
                   {/* Wally Memory Quote Card */}
                   <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-3.5">
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-mono uppercase tracking-wider text-[#71717A]">
-                        Wally · Walrus Memory Recall
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-mono uppercase tracking-wider text-[#71717A]">
+                          Wally · Walrus Memory
+                        </span>
+                        {repeatInfractionCount > 1 && (
+                          <span className="text-[10px] font-mono text-red-400 bg-red-500/10 border border-red-500/25 px-2 py-0.5 rounded-full font-semibold">
+                            Attempt #{repeatInfractionCount}
+                          </span>
+                        )}
+                      </div>
                       <span className="text-[10px] font-mono text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full">
-                        {walrusRecalledCount > 0 ? `${walrusRecalledCount} Memories Matched` : "Memory Verified"}
+                        {walrusRecalledCount > 0 ? `${walrusRecalledCount} Memories Recalled` : "Memory Verified"}
                       </span>
                     </div>
 
@@ -3020,6 +3070,32 @@ export default function YearboundApp() {
                     <p className="text-xs text-[#71717A] leading-relaxed">
                       {breachReason || "This transaction violates your active yearly resolution. You committed to financial discipline."}
                     </p>
+
+                    {/* Sacred Vow Card from Walrus Memory */}
+                    {matchedRuleMotivation && (
+                      <div className="bg-[#100F17] border border-[#2D2245] rounded-xl p-3.5 flex flex-col gap-1 mt-1">
+                        <span className="text-[10px] font-mono text-[#A78BFA] uppercase tracking-wider flex items-center gap-1.5">
+                          <Sparkles size={11} />
+                          <span>Your Inscribed Vow (Walrus Memory)</span>
+                        </span>
+                        <p className="text-xs text-white/90 font-serif italic leading-relaxed">
+                          "{matchedRuleMotivation}"
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Behavioral Pattern Insight if recurring */}
+                    {behavioralInsight && (
+                      <div className="bg-[#14110C] border border-[#3E2812] rounded-xl p-3 flex flex-col gap-1 mt-1">
+                        <span className="text-[10px] font-mono text-[#F59E0B] uppercase tracking-wider flex items-center gap-1.5">
+                          <Activity size={11} />
+                          <span>Habit Pattern Detected</span>
+                        </span>
+                        <p className="text-xs text-[#D4D4D8] leading-relaxed">
+                          {behavioralInsight}
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Penalty Breakdown Card */}
@@ -3038,9 +3114,25 @@ export default function YearboundApp() {
                       <span className="text-xs font-mono text-white">{sendAmount} SUI</span>
                     </div>
 
+                    {streakBroken && (
+                      <div className="flex items-center justify-between border-t border-[#18181C] pt-2.5 text-amber-400">
+                        <span className="text-xs">Streak Status</span>
+                        <span className="text-xs font-mono font-medium">Shattered by Infraction</span>
+                      </div>
+                    )}
+
                     <div className="flex items-center justify-between border-t border-[#18181C] pt-2.5">
-                      <span className="text-xs text-[#A1A1AA]">x402 Vault Penalty</span>
-                      <span className="text-xs font-mono font-semibold text-white">{breachPenaltySui} SUI</span>
+                      <span className="text-xs text-[#A1A1AA]">
+                        {repeatInfractionCount > 1 ? "Escalated x402 Penalty" : "x402 Vault Penalty"}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {repeatInfractionCount > 1 && (
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/25">
+                            Repeat #{repeatInfractionCount} Fine
+                          </span>
+                        )}
+                        <span className="text-xs font-mono font-semibold text-white">{breachPenaltySui} SUI</span>
+                      </div>
                     </div>
 
                     <div className="flex items-center justify-between border-t border-[#18181C] pt-2.5">

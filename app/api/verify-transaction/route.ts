@@ -9,7 +9,11 @@ import { google } from "@ai-sdk/google";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import { tatumService } from "@/lib/tatum";
-import { walrusService } from "@/lib/walrus";
+import {
+  walrusService,
+  type AccountabilityEventPayload,
+  type BehavioralPatternPayload,
+} from "@/lib/walrus";
 
 const TransactionAuditSchema = z.object({
   verdict: z
@@ -23,10 +27,20 @@ const TransactionAuditSchema = z.object({
     .describe("The specific resolution title or category that was evaluated"),
   penalty_sui: z
     .number()
-    .describe("Penalty amount in SUI required to unlock the Christmas vault if broken (0 if honored)"),
+    .describe("Penalty amount in SUI required to unlock the Christmas vault if broken (escalated for repeat infractions)"),
   wally_roast: z
     .string()
     .describe("Wally the concierge's witty, discerning intervention citing past promises, timestamps, or past infractions from Walrus Memory"),
+  repeat_infraction_count: z
+    .number()
+    .describe("The count of infractions for this rule, including this one if broken"),
+  streak_broken: z
+    .boolean()
+    .describe("Whether an active clean streak was broken"),
+  behavioral_insight: z
+    .string()
+    .optional()
+    .describe("Agent's synthesized insight on repeating habits or temporal patterns"),
 });
 
 interface InputRule {
@@ -35,6 +49,16 @@ interface InputRule {
   condition: string;
   whyItMatters?: string;
   penalty?: number;
+}
+
+interface HistoricalRecord {
+  id?: string;
+  ruleTitle?: string;
+  verdict?: "honored" | "broken" | "excused";
+  memo?: string;
+  timestamp?: string;
+  penaltySui?: number;
+  amount?: string | number;
 }
 
 export async function POST(req: Request) {
@@ -48,6 +72,7 @@ export async function POST(req: Request) {
       timestamp = new Date().toISOString(),
       vaultObjectId = process.env.VAULT_OBJECT_ID || "0x_yearbound_default_vault",
       rules = [],
+      history = [],
     } = body;
 
     const transferAmount = Number(amount) || 0;
@@ -56,13 +81,13 @@ export async function POST(req: Request) {
     const cleanRecipient = String(recipient || "").trim();
     const lowerRecipient = cleanRecipient.toLowerCase();
     const userRules: InputRule[] = Array.isArray(rules) ? rules : [];
+    const clientHistory: HistoricalRecord[] = Array.isArray(history) ? history : [];
 
     // -------------------------------------------------------------------------
     // 1. TATUM SUI RPC: Live On-Chain Preflight & Solvency Verification
     // -------------------------------------------------------------------------
     let tatumBalanceSui = 150;
     let tatumVaultSui = 10;
-    let tatumAuditPassed = true;
 
     try {
       if (walletAddress && walletAddress.startsWith("0x") && walletAddress.length > 10) {
@@ -86,16 +111,60 @@ export async function POST(req: Request) {
     const isSolvent = tatumBalanceSui >= transferAmount;
 
     // -------------------------------------------------------------------------
-    // 2. WALRUS MEMORY: Semantic Recall of User Commitments & Oaths
+    // 2. WALRUS MEMORY: Deep Structured Recall of Historical Oaths & Patterns
     // -------------------------------------------------------------------------
-    let recalledMemories: string[] = [];
+    let walrusEvents: AccountabilityEventPayload[] = [];
+    let walrusPatterns: BehavioralPatternPayload[] = [];
+    let rawRecalledTexts: string[] = [];
+
     try {
       const ruleKeywords = userRules.map((r) => `${r.title} ${r.condition}`).join(" ");
       const queryStr = `${cleanMemo} ${cleanRecipient} ${ruleKeywords} resolution commitment oath penalty`.trim();
-      recalledMemories = await walrusService.recall(queryStr, 6);
+
+      const [events, patterns, rawTexts] = await Promise.all([
+        walrusService.recallTyped<AccountabilityEventPayload>("accountability_event", "accountability_event"),
+        walrusService.recallTyped<BehavioralPatternPayload>("behavioral_pattern", "behavioral_pattern"),
+        walrusService.recall(queryStr, 6),
+      ]);
+
+      walrusEvents = events || [];
+      walrusPatterns = patterns || [];
+      rawRecalledTexts = rawTexts || [];
     } catch (walrusErr) {
-      console.warn("[Verify API] Walrus recall notice:", walrusErr);
+      console.warn("[Verify API] Walrus typed recall notice:", walrusErr);
     }
+
+    // Combine Walrus events with client session history for unified chronology
+    const combinedHistory: HistoricalRecord[] = [...clientHistory];
+    for (const we of walrusEvents) {
+      const alreadyIncluded = combinedHistory.some(
+        (h) => h.memo === we.user_explanation && h.timestamp === we.timestamp
+      );
+      if (!alreadyIncluded) {
+        combinedHistory.push({
+          ruleTitle: we.rule_title,
+          verdict: we.verdict,
+          memo: we.user_explanation,
+          timestamp: we.timestamp,
+          penaltySui: we.penalty_deposited_sui,
+        });
+      }
+    }
+
+    // Separate into historical breaches and honored transfers
+    const pastBreaches = combinedHistory.filter((h) => h.verdict === "broken");
+    const pastHonored = combinedHistory.filter((h) => h.verdict === "honored");
+
+    // Calculate Clean Streak
+    let cleanStreakCount = 0;
+    for (let i = 0; i < combinedHistory.length; i++) {
+      if (combinedHistory[i].verdict === "honored") {
+        cleanStreakCount++;
+      } else if (combinedHistory[i].verdict === "broken") {
+        break;
+      }
+    }
+    const cleanStreakDays = Math.max(1, Math.round(cleanStreakCount * 1.5));
 
     // -------------------------------------------------------------------------
     // 3. DETERMINISTIC SEMANTIC PRE-FLIGHT (Rules, Banned Accounts, Memos)
@@ -110,12 +179,12 @@ export async function POST(req: Request) {
     for (const rule of userRules) {
       const cond = (rule.condition || "").toLowerCase();
       const title = (rule.title || "").toLowerCase();
-      
+
       if (
         lowerRecipient &&
         (cond.includes(lowerRecipient) ||
-         title.includes(lowerRecipient) ||
-         (cond.includes("banned") && lowerRecipient.length > 3 && cond.includes(lowerRecipient.slice(0, 8))))
+          title.includes(lowerRecipient) ||
+          (cond.includes("banned") && lowerRecipient.length > 3 && cond.includes(lowerRecipient.slice(0, 8))))
       ) {
         matchedViolationRule = rule;
         violationReason = `Transfers to recipient '${cleanRecipient}' are banned under resolution '${rule.title}'.`;
@@ -193,24 +262,73 @@ export async function POST(req: Request) {
     }
 
     // -------------------------------------------------------------------------
-    // 4. DYNAMIC WALRUS + USER RULES CONTEXT FOR AI JUDGE
+    // 4. ACCUMULATED MEMORY SYNTHESIS (Repeats, Streaks, Penalties)
     // -------------------------------------------------------------------------
-    const activeRulesFormatted = userRules.length > 0
-      ? userRules
-          .map(
-            (r, i) =>
-              `Resolution ${i + 1}: "${r.title}"\n- Condition: ${r.condition}\n- Why it matters: "${r.whyItMatters || "Self discipline"}"\n- Penalty: ${r.penalty || 10} SUI`
-          )
-          .join("\n\n")
-      : "No active user resolutions configured.";
+    const targetRuleTitle = matchedViolationRule?.title || userRules[0]?.title || "Resolution";
+    const pastRuleBreaches = pastBreaches.filter((b) => {
+      const bTitle = (b.ruleTitle || "").toLowerCase();
+      const tTitle = targetRuleTitle.toLowerCase();
+      return bTitle.includes(tTitle) || tTitle.includes(bTitle);
+    });
 
-    const memoryContext = recalledMemories.length > 0
-      ? recalledMemories.join("\n---\n")
-      : activeRulesFormatted;
+    const previousBreachCount = pastRuleBreaches.length;
+    const isBreached = Boolean(matchedViolationRule);
+    const repeatCount = isBreached ? previousBreachCount + 1 : 0;
+    const streakBroken = isBreached && cleanStreakCount > 0;
+
+    // Escalated Penalty Curve for Repeat Breaches:
+    // 1st breach: 1.0x | 2nd breach: 1.5x | 3rd breach: 2.0x | 4th+ breach: 2.5x
+    const basePenalty = Number(matchedViolationRule?.penalty) || 10;
+    const penaltyMultiplier = repeatCount <= 1 ? 1 : repeatCount === 2 ? 1.5 : repeatCount === 3 ? 2 : 2.5;
+    const escalatedPenalty = Math.round(basePenalty * penaltyMultiplier);
+
+    // Past breach memos summary
+    const pastBreachSummaries = pastRuleBreaches
+      .slice(0, 3)
+      .map((b) => `"${b.memo || "Unspecified"}" on ${b.timestamp || "recent date"}`)
+      .join(", ");
+
+    // Behavioral Pattern Detection
+    let newPatternDetected: BehavioralPatternPayload | null = null;
+    if (isBreached && repeatCount >= 2) {
+      newPatternDetected = {
+        type: "behavioral_pattern",
+        pattern_title: repeatCount >= 3 ? "Chronic Relapse Pattern" : "Recurring Violation Habit",
+        observation: `User has breached '${targetRuleTitle}' ${repeatCount} times. Prior memos include: ${pastBreachSummaries || cleanMemo}.`,
+        recommended_intervention: `Escalated fine to ${escalatedPenalty} SUI. Recommend enforcing strict transfer lock between 22:00 and 05:00.`,
+        confidence: 0.94,
+        rule_title: targetRuleTitle,
+        repeat_count: repeatCount,
+        wallet_address: walletAddress,
+        generated_at: new Date().toISOString(),
+      };
+
+      // Autonomously inscribe emerging pattern into Walrus Memory in background
+      walrusService
+        .remember(newPatternDetected, 4000)
+        .then((res) => console.log(`[Walrus] Autonomously recorded pattern blob #${res.blobId}`))
+        .catch((err) => console.warn("[Walrus] Pattern background save notice:", err));
+    }
 
     // -------------------------------------------------------------------------
-    // 5. GEMINI SEMANTIC JUDICIAL EVALUATION (WITH DYNAMIC RESILIENT FALLBACK)
+    // 5. GEMINI SEMANTIC JUDICIAL EVALUATION WITH ACCUMULATED WALRUS MEMORY
     // -------------------------------------------------------------------------
+    const motivation = matchedViolationRule?.whyItMatters || "Personal financial discipline";
+
+    const promptMemoryDossier = `
+ACCUMULATED WALRUS MEMORY & INFRACTION DOSSIER:
+- Evaluated Resolution: "${targetRuleTitle}"
+- User's Personal Motivation (Sacred Oath): "${motivation}"
+- Base Penalty Stake: ${basePenalty} SUI
+- Repeat Infraction Sequence: Attempt #${repeatCount || 1} for this rule
+- Total Past Infractions on Record in Walrus: ${pastBreaches.length}
+- Previous Memos for this Rule: ${pastBreachSummaries || "None (First recorded breach)"}
+- Current Clean Streak: ${cleanStreakCount} consecutive honored transfers (${cleanStreakDays} days)
+- Late Night Curfew Active: ${isLateNight ? "YES (Hour " + currentHour + ":00)" : "NO"}
+- Escalated Penalty Calculated: ${escalatedPenalty} SUI (Multiplier: ${penaltyMultiplier}x)
+${walrusPatterns.length > 0 ? "- Active Behavioral Patterns in Walrus: " + walrusPatterns.map((p) => p.pattern_title).join(", ") : ""}
+    `.trim();
+
     try {
       const model = google("gemini-3.8-flash");
 
@@ -221,27 +339,28 @@ export async function POST(req: Request) {
         }),
         abortSignal: AbortSignal.timeout(5000),
         system:
-          "You are the judicial engine for Yearbound, an accountable consumer finance protocol on Sui. " +
-          "Your job is to cross-reference an outbound transfer against the user's New Year's resolutions stored in Walrus Memory. " +
-          "IMPORTANT — SEMANTIC INTELLIGENCE OVER STRICT KEYWORDS: " +
-          "Apply real-world common sense deduction. " +
-          "If the user has a resolution to stop betting or gambling, any memo referencing 'sport', 'bet', 'parlay', 'odds', 'draftkings', 'wager' is a direct violation! " +
-          "If the user has a resolution against food delivery, memos like burgers, pizza, DoorDash, UberEats are violations! " +
-          "If the user has a resolution banning transfers to a specific recipient address or person, any transfer to that recipient is a strict violation! " +
-          "PERSONAL MOTIVATION & WALLY ROAST: " +
-          "Cite the user's exact resolution title and their personal reason ('why it matters') back to them. Remind them of the exact SUI penalty being locked into the x402 vault.",
-        prompt: `Evaluate this transaction against the user's active resolutions and Walrus Memory:
+          "You are Wally the Concierge, the discerning autonomous judicial engine for Yearbound on Sui. " +
+          "You have TOTAL RECALL of the user's commitments, oaths, and every past infraction stored in Walrus Memory. " +
+          "JUDICIAL CITATION DIRECTIVES: " +
+          "1. If BROKEN: " +
+          "   - Explicitly cite the repeat attempt count (e.g. 'Attempt #2' or 'Third breach'). " +
+          "   - QUOTE their personal motivation verbatim back to them with gravitas (e.g. 'Remember your vow: \"...\"'). " +
+          "   - If they had a clean streak, dramatically note that their streak has been shattered. " +
+          "   - Announce the exact escalated penalty in SUI (${escalatedPenalty} SUI) being locked into the Christmas vault. " +
+          "2. If HONORED: " +
+          "   - Deliver a warm, polished compliment acknowledging their ongoing streak and fidelity to their Walrus Memory oaths. " +
+          "3. Common sense semantics: betting/sports memos violate gambling rules; burger/takeout/pizza memos violate dining/delivery rules.",
+        prompt: `Evaluate this transfer against the user's active resolutions and Walrus Memory:
 
 TRANSACTION DETAILS:
 - Amount: ${transferAmount} SUI
 - Recipient: ${cleanRecipient}
-- Mandatory Memo: "${cleanMemo}"
-- Transaction Time: ${timestamp} (Local hour: ${currentHour}, Late night curfew active: ${isLateNight ? "YES" : "NO"})
+- Memo: "${cleanMemo}"
+- Timestamp: ${timestamp}
 
-ACTIVE COMMITMENTS & WALRUS MEMORY:
-${memoryContext}
+${promptMemoryDossier}
 
-Determine the verdict ('broken', 'honored', 'excused'), matched rule, required penalty in SUI, and Wally's discerning roast.`,
+Determine the verdict ('broken', 'honored', 'excused'), matched rule, escalated penalty, repeat infraction count (${repeatCount}), streak broken status, and Wally's discerning roast.`,
       });
 
       return NextResponse.json({
@@ -249,8 +368,11 @@ Determine the verdict ('broken', 'honored', 'excused'), matched rule, required p
         verdict: output.verdict,
         reason: output.reason,
         matchedRule: output.matched_rule,
-        penaltySui: output.penalty_sui,
+        penaltySui: isBreached ? output.penalty_sui || escalatedPenalty : 0,
         wallyRoast: output.wally_roast,
+        repeatInfractionCount: repeatCount,
+        streakBroken: streakBroken,
+        behavioralInsight: output.behavioral_insight || newPatternDetected?.observation,
         tatum: {
           balanceSui: tatumBalanceSui,
           vaultLockedSui: tatumVaultSui,
@@ -258,8 +380,12 @@ Determine the verdict ('broken', 'honored', 'excused'), matched rule, required p
           verifiedVia: "Tatum Sui RPC (mainnet)",
         },
         walrus: {
-          recalledCount: recalledMemories.length,
-          memories: recalledMemories,
+          recalledCount: rawRecalledTexts.length + walrusEvents.length,
+          totalPastBreaches: pastBreaches.length,
+          previousRuleBreaches: previousBreachCount,
+          cleanStreakCount,
+          cleanStreakDays,
+          patternsCount: walrusPatterns.length,
           verifiedVia: "Walrus Memory (MemWal Mainnet)",
         },
         timestamp: new Date().toISOString(),
@@ -267,25 +393,32 @@ Determine the verdict ('broken', 'honored', 'excused'), matched rule, required p
     } catch (aiErr) {
       console.warn("[Verify API] AI synthesis deferred to dynamic evaluator:", aiErr);
 
-      // Deterministic dynamic verdict derived strictly from user's active rules and memo
-      const isBreached = Boolean(matchedViolationRule);
-      const matchedRuleName = matchedViolationRule?.title || (userRules[0]?.title ?? "Discipline Maintained");
-      const penaltyAmount = matchedViolationRule?.penalty || (isBreached ? 10 : 0);
-      const motivation = matchedViolationRule?.whyItMatters;
-
-      const dynamicRoast = isBreached
-        ? `Wally peers over his chronometer: 'Remember your solemn vow stored in Walrus Memory: "${matchedRuleName}". ${motivation ? `You swore this because: "${motivation}". ` : ""}Yet here you are attempting "${cleanMemo}". That will be ${penaltyAmount} SUI locked into your Christmas vault.'`
-        : "Wally approves with a subtle tip of his chronometer: 'A disciplined expenditure. Your resolutions in Walrus Memory remain completely honored.'";
+      // Deterministic dynamic verdict derived strictly from accumulated Walrus memory
+      let dynamicRoast = "";
+      if (isBreached) {
+        if (repeatCount === 1) {
+          dynamicRoast = `Wally peers over his chronometer: 'Your first recorded lapse against "${targetRuleTitle}". You swore this because: "${motivation}". That will be ${escalatedPenalty} SUI locked into your Christmas vault until Dec 25.'`;
+        } else if (repeatCount === 2) {
+          dynamicRoast = `Wally narrows his eyes: 'Attempt #2 against "${targetRuleTitle}". Your ${cleanStreakDays}-day clean streak ends here. As recorded in Walrus Memory, you previously slipped with ${pastBreachSummaries || "a past infraction"}. Penalty escalated to ${escalatedPenalty} SUI.'`;
+        } else {
+          dynamicRoast = `Wally taps his chronometer with cold precision: '${repeatCount} breaches of "${targetRuleTitle}" permanently inscribed to Walrus Memory. You specifically swore: "${motivation}". This recurring habit pattern is now locked in. Maximum penalty of ${escalatedPenalty} SUI routed to the vault.'`;
+        }
+      } else {
+        dynamicRoast = `Wally approves with a subtle tip of his chronometer: 'A disciplined expenditure. ${cleanStreakCount > 0 ? `${cleanStreakCount} consecutive transfers honoring your oaths.` : "Your resolutions in Walrus Memory remain completely honored."}'`;
+      }
 
       return NextResponse.json({
         success: true,
         verdict: isBreached ? "broken" : "honored",
         reason: isBreached
-          ? violationReason || `Transaction memo '${cleanMemo}' breaches your commitment to '${matchedRuleName}'.`
+          ? violationReason || `Transaction memo '${cleanMemo}' breaches your commitment to '${targetRuleTitle}'.`
           : "Discipline maintained. Transaction verified as resolution-compliant.",
-        matchedRule: isBreached ? matchedRuleName : "Resolutions Honored",
-        penaltySui: penaltyAmount,
+        matchedRule: isBreached ? targetRuleTitle : "Resolutions Honored",
+        penaltySui: isBreached ? escalatedPenalty : 0,
         wallyRoast: dynamicRoast,
+        repeatInfractionCount: repeatCount,
+        streakBroken: streakBroken,
+        behavioralInsight: newPatternDetected?.observation,
         tatum: {
           balanceSui: tatumBalanceSui,
           vaultLockedSui: tatumVaultSui,
@@ -293,8 +426,12 @@ Determine the verdict ('broken', 'honored', 'excused'), matched rule, required p
           verifiedVia: "Tatum Sui RPC (verified)",
         },
         walrus: {
-          recalledCount: recalledMemories.length,
-          memories: recalledMemories,
+          recalledCount: rawRecalledTexts.length + walrusEvents.length,
+          totalPastBreaches: pastBreaches.length,
+          previousRuleBreaches: previousBreachCount,
+          cleanStreakCount,
+          cleanStreakDays,
+          patternsCount: walrusPatterns.length,
           verifiedVia: "Walrus Memory (MemWal Mainnet)",
         },
         timestamp: new Date().toISOString(),

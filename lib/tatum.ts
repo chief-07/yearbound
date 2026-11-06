@@ -59,9 +59,7 @@ export class TatumSuiService {
       "https://sui-mainnet.gateway.tatum.io/graphql";
 
     this.rpcUrl =
-      this.apiKey && process.env.TATUM_SUI_RPC_URL
-        ? process.env.TATUM_SUI_RPC_URL
-        : "https://fullnode.mainnet.sui.io:443";
+      process.env.SUI_RPC_URL || "https://fullnode.mainnet.sui.io:443";
 
     const headers: Record<string, string> = {};
     if (this.apiKey) {

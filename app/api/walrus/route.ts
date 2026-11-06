@@ -11,6 +11,7 @@ import {
   type CommitmentRulePayload,
   type GenesisPactPayload,
   type AccountabilityEventPayload,
+  type BehavioralPatternPayload,
 } from "@/lib/walrus";
 import { analyzeMultipleResolutions } from "@/lib/ai-resolution-parser";
 
@@ -23,14 +24,44 @@ export async function POST(req: Request) {
       const payload: AccountabilityEventPayload = {
         type: "accountability_event",
         commitment_id: body.commitment_id || "pact_primary",
+        rule_id: body.rule_id,
+        rule_title: body.rule_title,
         verdict: body.verdict || "broken",
         user_explanation: body.user_explanation || "No explanation provided",
         penalty_deposited_sui: Number(body.penalty_deposited_sui) || 10,
         vault_tx_hash: body.vault_tx_hash || `0x_sui_ptb_${Date.now().toString(16)}`,
         timestamp: new Date().toISOString(),
+        recipient: body.recipient,
+        amount_sui: Number(body.amount_sui) || undefined,
+        repeat_infraction_count: Number(body.repeat_infraction_count) || undefined,
+        streak_broken: Boolean(body.streak_broken),
       };
 
       // Rapid timeout (3500ms) prevents UI stall while ensuring blob assignment
+      const rememberResult = await walrusService.remember(payload, 3500);
+      return NextResponse.json({
+        success: true,
+        blobId: rememberResult.blobId,
+        jobId: rememberResult.jobId,
+        payload,
+        isMock: walrusService.getIsMock(),
+      });
+    }
+
+    // 1B. Handling Autonomous Behavioral Pattern Inscription
+    if (body.type === "behavioral_pattern") {
+      const payload: BehavioralPatternPayload = {
+        type: "behavioral_pattern",
+        pattern_title: body.pattern_title || "Recurring Spending Pattern",
+        observation: body.observation || "Habit cluster observed across historical transactions",
+        recommended_intervention: body.recommended_intervention || "Increase vault lock stakes",
+        confidence: Number(body.confidence) || 0.92,
+        rule_title: body.rule_title,
+        repeat_count: Number(body.repeat_count) || undefined,
+        wallet_address: body.wallet_address,
+        generated_at: new Date().toISOString(),
+      };
+
       const rememberResult = await walrusService.remember(payload, 3500);
       return NextResponse.json({
         success: true,
