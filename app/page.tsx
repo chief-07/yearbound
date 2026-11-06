@@ -146,7 +146,25 @@ const QUICK_MEMO_PICKS = [
 ];
 
 export default function YearboundApp() {
-  const [step, setStep] = useState<0 | 1 | 2 | 3 | 4>(0);
+  const [step, setStep] = useState<-1 | 0 | 1 | 2 | 3 | 4>(-1);
+  const [carouselIndex, setCarouselIndex] = useState<number>(0);
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartX(e.touches[0].clientX);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX === null) return;
+    const diff = touchStartX - e.changedTouches[0].clientX;
+    if (diff > 40) {
+      setCarouselIndex((prev) => (prev < 2 ? prev + 1 : 0));
+    } else if (diff < -40) {
+      setCarouselIndex((prev) => (prev > 0 ? prev - 1 : 2));
+    }
+    setTouchStartX(null);
+  };
+
   const [activeTab, setActiveTab] = useState<NavTab>("home");
   const [expandedRuleId, setExpandedRuleId] = useState<string | null>("1");
   const [scrollContainerHeight, setScrollContainerHeight] = useState<number>(680);
@@ -1740,11 +1758,286 @@ export default function YearboundApp() {
         )}
         
         {/* ==================================================================
+            SCREEN -1: PRODUCT FEATURES CAROUSEL
+            ================================================================== */}
+        {step === -1 && (
+          <div
+            className="flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-200 select-none"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+          >
+            {/* Top Bar: Header Title on Left, Circular Progress Indicator on Right */}
+            <div className="pt-6 sm:pt-8 px-7 pb-2 flex items-start justify-between gap-3 shrink-0">
+              <div className="flex-1 min-w-0 pr-2">
+                <div className="text-[26px] sm:text-[30px] font-semibold tracking-[-0.02em] leading-[1.12] text-white">
+                  {carouselIndex === 0 && "Keep your financial resolve all year round"}
+                  {carouselIndex === 1 && "Wally agent checking against Walrus"}
+                  {carouselIndex === 2 && "x402 vault on Tatum"}
+                </div>
+              </div>
+
+              {/* Circular Progress Indicator */}
+              <button
+                type="button"
+                onClick={() => setCarouselIndex((prev) => (prev < 2 ? prev + 1 : 0))}
+                className="group relative inline-flex items-center justify-center shrink-0 cursor-pointer transition-transform active:scale-95 mt-1"
+                title={`Slide ${carouselIndex + 1} of 3 · Click for next`}
+              >
+                <svg width={38} height={38} className="transform -rotate-90">
+                  <circle
+                    cx={19}
+                    cy={19}
+                    r={16}
+                    stroke="#222226"
+                    strokeWidth={2.5}
+                    fill="none"
+                  />
+                  <circle
+                    cx={19}
+                    cy={19}
+                    r={16}
+                    stroke="#FFFFFF"
+                    strokeWidth={2.5}
+                    strokeLinecap="round"
+                    fill="none"
+                    strokeDasharray={2 * Math.PI * 16}
+                    strokeDashoffset={2 * Math.PI * 16 - (((carouselIndex + 1) / 3) * (2 * Math.PI * 16))}
+                    className="transition-all duration-300 ease-out"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-[10px] font-mono font-medium text-white">
+                    {carouselIndex + 1}/3
+                  </span>
+                </div>
+              </button>
+            </div>
+
+            {/* Middle Space for Bespoke Visual Illustration */}
+            <div className="flex-1 overflow-y-auto px-7 py-2.5 flex flex-col justify-center gap-3 overscroll-contain">
+              {/* SLIDE 0: 365-Day Resolve Commitment */}
+              {carouselIndex === 0 && (
+                <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-4 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono text-[#71717A] uppercase tracking-wider">
+                      Protocol Architecture · Year 2026
+                    </span>
+                    <span className="text-[10px] font-mono text-white bg-[#18181C] border border-[#27272A] px-2 py-0.5 rounded">
+                      Decentralized
+                    </span>
+                  </div>
+
+                  {/* Visual Dial Illustration */}
+                  <div className="relative py-2 flex flex-col items-center justify-center">
+                    <div className="relative w-36 h-36 flex items-center justify-center">
+                      <svg width={144} height={144} className="transform -rotate-90">
+                        {/* 12-Month Ring */}
+                        <circle
+                          cx={72}
+                          cy={72}
+                          r={60}
+                          stroke="#18181C"
+                          strokeWidth={6}
+                          fill="none"
+                        />
+                        <circle
+                          cx={72}
+                          cy={72}
+                          r={60}
+                          stroke="#FFFFFF"
+                          strokeWidth={6}
+                          strokeLinecap="round"
+                          fill="none"
+                          strokeDasharray={2 * Math.PI * 60}
+                          strokeDashoffset={(2 * Math.PI * 60) * 0.25}
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                        <span className="text-2xl font-bold font-mono tracking-tight text-white leading-none">
+                          365
+                        </span>
+                        <span className="text-[9px] font-mono text-[#71717A] uppercase tracking-widest mt-1">
+                          Days Locked
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Commitment Rule Card */}
+                  <div className="bg-[#131316] border border-[#222226] rounded-xl p-3 flex items-center justify-between">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-mono text-[#71717A] uppercase">Genesis Rule #1</span>
+                      <span className="text-xs font-semibold text-white">Zero Late-Night Delivery</span>
+                    </div>
+                    <span className="text-xs font-mono text-white bg-[#1F1F24] border border-[#27272A] px-2 py-1 rounded">
+                      10 SUI Stake
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-[#71717A] leading-relaxed">
+                    Cryptographic pact committed to Walrus decentralized memory. Once written, past commitments cannot be erased or rationalized away.
+                  </p>
+                </div>
+              )}
+
+              {/* SLIDE 1: Wally Agent Checking Against Walrus */}
+              {carouselIndex === 1 && (
+                <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-3.5 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                      <span className="text-[10px] font-mono text-[#71717A] uppercase tracking-wider">
+                        Walrus Node · yearbound-mainnet
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono text-[#A1A1AA]">
+                      Live Audit
+                    </span>
+                  </div>
+
+                  {/* Proposed Transaction Attempt */}
+                  <div className="bg-[#131316] border border-[#222226] rounded-xl p-3 flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono text-[#71717A] uppercase">Proposed Transfer</span>
+                      <span className="text-[10px] font-mono text-[#A1A1AA]">01:42 AM</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-white">Late-Night Takeout Pizza</span>
+                      <span className="text-xs font-mono text-white">42.50 SUI</span>
+                    </div>
+                  </div>
+
+                  {/* Wally Intervention Callout */}
+                  <div className="bg-[#141416] border border-[#3F3F46] rounded-xl p-3 flex items-start gap-2.5">
+                    <div className="w-5 h-5 rounded-full bg-white text-black flex items-center justify-center shrink-0 mt-0.5 font-bold text-[10px]">
+                      !
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-xs font-semibold text-white">
+                        Breach Intercepted by Wally
+                      </span>
+                      <span className="text-[11px] text-[#A1A1AA] leading-relaxed">
+                        Cross-referenced with Walrus blob #9e4f: contradicts your "Zero Late-Night Delivery" resolution.
+                      </span>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-[#71717A] leading-relaxed">
+                    Wally audits every payment intent against decentralized Walrus history before funds move.
+                  </p>
+                </div>
+              )}
+
+              {/* SLIDE 2: x402 Vault on Tatum */}
+              {carouselIndex === 2 && (
+                <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-3.5 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono text-[#71717A] uppercase tracking-wider">
+                      Tatum Sui Gateway · x402 Protocol
+                    </span>
+                    <span className="text-[10px] font-mono text-white bg-[#18181C] border border-[#27272A] px-2 py-0.5 rounded">
+                      PTB Enforced
+                    </span>
+                  </div>
+
+                  {/* Locked Collateral Card */}
+                  <div className="bg-[#131316] border border-[#222226] rounded-xl p-4 flex flex-col items-center gap-1.5 text-center">
+                    <div className="w-9 h-9 rounded-full bg-[#18181C] border border-[#27272A] flex items-center justify-center mb-1">
+                      <Lock size={15} className="text-white" />
+                    </div>
+                    <div className="text-xl font-semibold text-white tracking-tight">
+                      150.00 SUI Locked
+                    </div>
+                    <span className="text-[10px] font-mono text-[#71717A] uppercase tracking-wider">
+                      Matures December 31, 2026
+                    </span>
+                  </div>
+
+                  {/* Settlement Pipeline */}
+                  <div className="bg-[#131316] border border-[#222226] rounded-xl p-3 flex items-center justify-between text-xs font-mono">
+                    <span className="text-[#71717A]">Breach Settlement</span>
+                    <span className="text-white">-10.00 SUI fine to vault</span>
+                  </div>
+
+                  <p className="text-xs text-[#71717A] leading-relaxed">
+                    Programmable Transaction Blocks execute directly on Sui via Tatum Gateway. Funds remain locked until the resolution term matures.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Bottom Actions: Carousel Controls + Primary/Secondary CTAs */}
+            <div className="p-7 pt-3 pb-8 sm:pb-9 shrink-0 flex flex-col gap-3 border-t border-[#18181C]">
+              {/* Carousel Navigation Indicator Dots */}
+              <div className="flex items-center justify-between pb-1">
+                <div className="flex items-center gap-1.5">
+                  {[0, 1, 2].map((idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setCarouselIndex(idx)}
+                      className={`h-1.5 rounded-full transition-all duration-300 ${
+                        carouselIndex === idx ? "w-6 bg-white" : "w-1.5 bg-[#27272A] hover:bg-[#3F3F46]"
+                      }`}
+                      aria-label={`Go to slide ${idx + 1}`}
+                    />
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCarouselIndex((prev) => (prev > 0 ? prev - 1 : 2))}
+                    className="text-[#71717A] hover:text-white p-1 transition-colors text-xs font-mono"
+                  >
+                    Prev
+                  </button>
+                  <span className="text-[#3F3F46]">·</span>
+                  <button
+                    type="button"
+                    onClick={() => setCarouselIndex((prev) => (prev < 2 ? prev + 1 : 0))}
+                    className="text-[#71717A] hover:text-white p-1 transition-colors text-xs font-mono"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+
+              {/* Primary CTA: Create a pact (first) */}
+              <button
+                type="button"
+                onClick={() => setStep(1)}
+                className="w-full py-4 px-6 rounded-2xl bg-white text-black font-semibold text-sm hover:bg-[#E4E4E7] transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98] shadow-md"
+              >
+                <span>Create a pact</span>
+                <ArrowRight size={16} />
+              </button>
+
+              {/* Secondary CTA: Sign in to existing */}
+              <button
+                type="button"
+                onClick={() => setStep(0)}
+                className="w-full py-3.5 px-6 rounded-2xl bg-[#0A0A0C] border border-[#222226] text-white hover:border-[#3F3F46] font-medium text-xs transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98]"
+              >
+                <span>Sign in to existing pact</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ==================================================================
             SCREEN 0: SIGN IN & RESTORE MEMORY GATEWAY
             ================================================================== */}
         {step === 0 && (
           <div className="flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-200">
-            <div className="pt-6 sm:pt-8 px-7 pb-3 flex flex-col gap-1 shrink-0">
+            <div className="pt-6 sm:pt-8 px-7 pb-3 flex flex-col gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setStep(-1)}
+                className="self-start text-[#71717A] hover:text-white flex items-center gap-1.5 text-xs font-medium transition-colors active:scale-95"
+              >
+                <ArrowLeft size={14} />
+                <span>Back</span>
+              </button>
               <div className="text-[28px] sm:text-[32px] font-semibold tracking-[-0.02em] leading-tight text-white">
                 Sign in
               </div>
@@ -1896,7 +2189,7 @@ export default function YearboundApp() {
             <div className="pt-5 sm:pt-7 px-5 sm:px-7 pb-2 shrink-0 flex flex-col gap-1.5">
               <button
                 type="button"
-                onClick={() => setStep(0)}
+                onClick={() => setStep(-1)}
                 className="self-start text-[#71717A] hover:text-white flex items-center gap-1.5 text-xs font-medium transition-colors active:scale-95"
               >
                 <ArrowLeft size={14} />
