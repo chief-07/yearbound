@@ -35,6 +35,7 @@ export async function POST(req: Request) {
         amount_sui: Number(body.amount_sui) || undefined,
         repeat_infraction_count: Number(body.repeat_infraction_count) || undefined,
         streak_broken: Boolean(body.streak_broken),
+        wallet_address: body.wallet_address,
       };
 
       // Rapid timeout (3500ms) prevents UI stall while ensuring blob assignment

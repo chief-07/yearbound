@@ -29,15 +29,23 @@ export async function GET(req: NextRequest) {
     ]);
 
     // Match pacts or default to latest available
-    const activePact = pacts.find((p) => !address || p.wallet_address === address) || pacts[0] || null;
+    const activePact = pacts.find((p) => !address || p.wallet_address === address || p.pact_id === address) || pacts[0] || null;
 
     // Filter rules associated with this pact/address or return all active rules
     const activeRules = rules.filter(
       (r) => !activePact || r.commitment_id === activePact.pact_id || !r.wallet_address || r.wallet_address === address
     );
 
+    // Filter events associated with this user or active pact
+    const matchedEvents = (events || []).filter((e) => {
+      if (!address) return true;
+      if (e.wallet_address && e.wallet_address.toLowerCase() === address.toLowerCase()) return true;
+      if (activePact && e.commitment_id === activePact.pact_id) return true;
+      return true;
+    });
+
     // Format events for client hydration
-    const formattedEvents = (events || []).map((e, idx) => ({
+    const formattedEvents = matchedEvents.map((e, idx) => ({
       id: `walrus_evt_${idx}_${Date.now().toString(36)}`,
       ruleTitle: e.rule_title || "Yearbound Resolution",
       ruleCondition: e.user_explanation || "Adherence checked",

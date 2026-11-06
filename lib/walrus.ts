@@ -80,6 +80,7 @@ export interface AccountabilityEventPayload {
   amount_sui?: number;
   repeat_infraction_count?: number;
   streak_broken?: boolean;
+  wallet_address?: string;
 }
 
 export interface BehavioralPatternPayload {
@@ -140,7 +141,8 @@ export class WalrusMemoryService {
    */
   public async remember(
     payload: YearboundMemoryPayload,
-    timeoutMs: number = 45000
+    timeoutMs: number = 45000,
+    namespace?: string
   ): Promise<{ jobId: string; blobId: string }> {
     const serialized = JSON.stringify(payload);
 
@@ -149,7 +151,9 @@ export class WalrusMemoryService {
     let lastErr: unknown = null;
     for (let attempt = 1; attempt <= 4; attempt++) {
       try {
-        accepted = await this.client.remember(serialized);
+        accepted = namespace
+          ? await (this.client as any).remember(serialized, namespace)
+          : await this.client.remember(serialized);
         break;
       } catch (err: unknown) {
         lastErr = err;
@@ -222,11 +226,12 @@ export class WalrusMemoryService {
   /**
    * Recalls historical context matching the given natural language or semantic query.
    */
-  public async recall(query: string, maxResults: number = 8): Promise<string[]> {
+  public async recall(query: string, maxResults: number = 8, namespace?: string): Promise<string[]> {
     try {
       const response = await this.client.recall({
         query,
         maxTokens: 2000,
+        ...(namespace ? { namespace } : {}),
       });
 
       if (!response || !response.results) {
@@ -243,8 +248,12 @@ export class WalrusMemoryService {
   /**
    * Recalls and parses typed memories from Walrus context.
    */
-  public async recallTyped<T extends YearboundMemoryPayload>(query: string, typeFilter: T["type"]): Promise<T[]> {
-    const rawMemories = await this.recall(query, 16);
+  public async recallTyped<T extends YearboundMemoryPayload>(
+    query: string,
+    typeFilter: T["type"],
+    namespace?: string
+  ): Promise<T[]> {
+    const rawMemories = await this.recall(query, 16, namespace);
     const parsed: T[] = [];
 
     for (const mem of rawMemories) {

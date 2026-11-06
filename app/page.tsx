@@ -135,7 +135,7 @@ const QUICK_MEMO_PICKS = [
 ];
 
 export default function YearboundApp() {
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [step, setStep] = useState<0 | 1 | 2 | 3 | 4>(0);
   const [activeTab, setActiveTab] = useState<NavTab>("home");
   const [expandedRuleId, setExpandedRuleId] = useState<string | null>("1");
   const [scrollContainerHeight, setScrollContainerHeight] = useState<number>(680);
@@ -230,6 +230,11 @@ export default function YearboundApp() {
   const [behavioralPatterns, setBehavioralPatterns] = useState<any[]>([]);
   const [hydratedPactId, setHydratedPactId] = useState<string | null>(null);
 
+  // Screen 0: Sign In & Restore state
+  const [restoreInput, setRestoreInput] = useState<string>("");
+  const [isRestoring, setIsRestoring] = useState<boolean>(false);
+  const [showRestoreInput, setShowRestoreInput] = useState<boolean>(false);
+
   // Time-Travel Scrubber state (Demo account only)
   const [activeMilestone, setActiveMilestone] = useState<TimeMilestone>("jan1");
   const [currentDayOfYear, setCurrentDayOfYear] = useState<number>(1);
@@ -300,6 +305,53 @@ export default function YearboundApp() {
       triggerSnackbar("Connection Failed", msg);
     } finally {
       setIsConnectingExtension(false);
+    }
+  };
+
+  // Screen 0: 1-click connect and recall memory straight to dashboard
+  const handleConnectExtensionAndEnter = async () => {
+    setIsConnectingExtension(true);
+    try {
+      const res = await connectExtensionWallet();
+      setLinkedAddress(res.address);
+      setAccountType("linked");
+      triggerSnackbar("Wallet Connected", `${res.walletName}: ${res.address.slice(0, 10)}...`);
+      refreshLiveBalance(res.address);
+      await hydrateFromWalrus(res.address);
+      setStep(4);
+      setActiveTab("home");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to connect wallet";
+      triggerSnackbar("Connection Failed", msg);
+    } finally {
+      setIsConnectingExtension(false);
+    }
+  };
+
+  // Screen 0: Direct recall by pasting any Sui Address or Walrus Blob ID
+  const handleDirectRestore = async () => {
+    const input = restoreInput.trim();
+    if (!input) {
+      triggerSnackbar("Required field missing", "Enter a Sui address (0x...) or Walrus Blob ID");
+      return;
+    }
+    setIsRestoring(true);
+    try {
+      if (input.startsWith("0x")) {
+        setLinkedAddress(input);
+        setAccountType("linked");
+        refreshLiveBalance(input);
+      }
+      await hydrateFromWalrus(input);
+      setStep(4);
+      setActiveTab("home");
+      triggerSnackbar("Memory Restored", `Decentralized state reconstructed for ${input.slice(0, 10)}...`);
+    } catch {
+      triggerSnackbar("Notice", "Entering dashboard with specified memory identifier");
+      setStep(4);
+      setActiveTab("home");
+    } finally {
+      setIsRestoring(false);
     }
   };
 
@@ -819,11 +871,14 @@ export default function YearboundApp() {
         signal: AbortSignal.timeout(4000),
         body: JSON.stringify({
           type: "accountability_event",
-          commitment_id: "pact_primary",
+          commitment_id: hydratedPactId || "pact_primary",
           verdict: "honored",
           user_explanation: sendMemo || "Resolution-compliant transfer",
           penalty_deposited_sui: 0,
           vault_tx_hash: txHash,
+          recipient: sendRecipient,
+          amount_sui: numAmount,
+          wallet_address: activeAccountAddress,
         }),
       });
 
@@ -1023,6 +1078,12 @@ export default function YearboundApp() {
     try {
       const penaltyAmt = breachPenaltySui || 10;
       const transferAmt = parseFloat(sendAmount) || 0;
+      const activeAccountAddress =
+        accountType === "demo"
+          ? DEMO_SUI_ADDRESS
+          : accountType === "real"
+          ? realAddress
+          : linkedAddress || DEMO_SUI_ADDRESS;
 
       // 1. Execute Real x402 Challenge-Response Flow with Sui Move Vault
       let txHash = `0x_sui_ptb_${Date.now().toString(16)}`;
@@ -1052,7 +1113,7 @@ export default function YearboundApp() {
           signal: AbortSignal.timeout(4000), // Fast 4s timeout prevents UI hang
           body: JSON.stringify({
             type: "accountability_event",
-            commitment_id: "pact_primary",
+            commitment_id: hydratedPactId || "pact_primary",
             rule_id: activeRulesList.find((r) => r.title === matchedRuleTitle)?.id,
             rule_title: matchedRuleTitle,
             verdict: "broken",
@@ -1063,6 +1124,7 @@ export default function YearboundApp() {
             amount_sui: transferAmt,
             repeat_infraction_count: repeatInfractionCount,
             streak_broken: streakBroken,
+            wallet_address: activeAccountAddress,
           }),
         });
 
@@ -1482,7 +1544,7 @@ export default function YearboundApp() {
         )}
 
         {/* Existing Genesis Pact Banner (if hydrated from Walrus on Steps 1-3) */}
-        {step < 4 && hydratedPactId && (
+        {step > 0 && step < 4 && hydratedPactId && (
           <div className="mx-4 mt-2 mb-1 bg-[#14120C] border border-[#3E2812] rounded-xl px-3 py-2 flex items-center justify-between text-xs animate-in fade-in shrink-0 z-20">
             <div className="flex flex-col min-w-0 pr-2">
               <span className="font-medium text-white truncate">Walrus Genesis Pact Found</span>
@@ -1502,11 +1564,165 @@ export default function YearboundApp() {
         )}
         
         {/* ==================================================================
+            SCREEN 0: SIGN IN & RESTORE MEMORY GATEWAY
+            ================================================================== */}
+        {step === 0 && (
+          <div className="flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-200">
+            <div className="pt-6 sm:pt-8 px-7 pb-3 flex flex-col gap-1 shrink-0">
+              <div className="text-[28px] sm:text-[32px] font-semibold tracking-[-0.02em] leading-tight text-white">
+                Sign in
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-7 py-2 flex flex-col gap-3.5 pb-4 overscroll-contain">
+              {/* Option 1: Connect Sui Wallet */}
+              <div
+                onClick={handleConnectExtensionAndEnter}
+                className="bg-[#0A0A0C] rounded-2xl p-5 flex flex-col gap-3 cursor-pointer transition-all duration-200 active:scale-[0.99] border border-[#222226] hover:border-[#3F3F46]"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-base font-semibold text-white tracking-[-0.01em]">
+                      Connect wallet
+                    </div>
+                    <span className="text-[10px] font-mono text-[#71717A] uppercase tracking-wider">
+                      {detectedExtension ? detectedExtension.name : "Browser Extension"}
+                    </span>
+                  </div>
+                  <div className="text-xs font-mono text-[#A1A1AA] flex items-center gap-1">
+                    <span>{isConnectingExtension ? "Connecting..." : "Connect"}</span>
+                    <ArrowRight size={14} />
+                  </div>
+                </div>
+
+                <p className="text-xs text-[#71717A] leading-relaxed">
+                  Link an installed Sui extension wallet to verify your identity and restore past commitments from Walrus memory.
+                </p>
+
+                {linkedAddress && (
+                  <div className="pt-3 border-t border-[#18181C] flex items-center justify-between text-xs font-mono text-[#A1A1AA]">
+                    <span>Connected</span>
+                    <span>{linkedAddress.slice(0, 6)}...{linkedAddress.slice(-4)}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Option 2: Restore from Walrus with Address or Blob ID */}
+              <div
+                onClick={() => setShowRestoreInput((prev) => !prev)}
+                className={`bg-[#0A0A0C] rounded-2xl p-5 flex flex-col gap-3 cursor-pointer transition-all duration-200 border ${
+                  showRestoreInput ? "border-white/40" : "border-[#222226] hover:border-[#3F3F46]"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-base font-semibold text-white tracking-[-0.01em]">
+                      Restore from Walrus
+                    </div>
+                    <span className="text-[10px] font-mono text-[#71717A] uppercase tracking-wider">
+                      Decentralized State Recall
+                    </span>
+                  </div>
+                  <div className="text-xs font-mono text-[#A1A1AA] flex items-center gap-1">
+                    <span>{showRestoreInput ? "Close" : "Enter ID"}</span>
+                    {showRestoreInput ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </div>
+                </div>
+
+                <p className="text-xs text-[#71717A] leading-relaxed">
+                  Enter your Sui address or Genesis Walrus Blob ID to reconstruct your resolutions, streaks, and infractions on this device.
+                </p>
+
+                {showRestoreInput && (
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex flex-col gap-2.5 pt-3 border-t border-[#18181C]"
+                  >
+                    <input
+                      type="text"
+                      placeholder="0x... or blob_..."
+                      value={restoreInput}
+                      onChange={(e) => setRestoreInput(e.target.value)}
+                      className="w-full bg-[#131316] border border-[#222226] rounded-xl px-3.5 py-2.5 text-xs font-mono text-white placeholder-[#52525B] focus:outline-none focus:border-[#52525B]"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleDirectRestore}
+                      disabled={isRestoring || !restoreInput.trim()}
+                      className="py-2.5 px-4 rounded-xl bg-white text-black font-semibold text-xs hover:bg-[#E4E4E7] transition-all disabled:opacity-40 flex items-center justify-center gap-1.5 active:scale-[0.98]"
+                    >
+                      <span>{isRestoring ? "Recalling from Walrus..." : "Restore Memory"}</span>
+                      <ArrowRight size={14} />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Option 3: Demo Sandbox */}
+              <div
+                onClick={() => {
+                  setAccountType("demo");
+                  setAvailableBalance(150);
+                  hydrateFromWalrus(DEMO_SUI_ADDRESS);
+                  setStep(4);
+                  setActiveTab("home");
+                }}
+                className="bg-[#0A0A0C] rounded-2xl p-5 flex flex-col gap-3 cursor-pointer transition-all duration-200 active:scale-[0.99] border border-[#222226] hover:border-[#3F3F46]"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-base font-semibold text-white tracking-[-0.01em]">
+                      Demo sandbox
+                    </div>
+                    <span className="text-[10px] font-mono text-[#71717A] uppercase tracking-wider">
+                      Pre-funded 150 SUI
+                    </span>
+                  </div>
+                  <div className="text-xs font-mono text-[#A1A1AA] flex items-center gap-1">
+                    <span>Explore</span>
+                    <ArrowRight size={14} />
+                  </div>
+                </div>
+
+                <p className="text-xs text-[#71717A] leading-relaxed">
+                  Instant evaluation account for testing transaction auditing, Walrus memory roasts, and the 12-month timeline scrubber.
+                </p>
+
+                <div className="pt-3 border-t border-[#18181C] flex items-center justify-between text-xs font-mono text-[#71717A]">
+                  <span>{DEMO_SUI_ADDRESS.slice(0, 6)}...{DEMO_SUI_ADDRESS.slice(-4)}</span>
+                  <span className="text-white">150.00 SUI</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom: Start New Pact Action */}
+            <div className="p-7 pt-3 pb-8 sm:pb-9 shrink-0 flex flex-col gap-3 border-t border-[#18181C]">
+              <button
+                type="button"
+                onClick={() => setStep(1)}
+                className="w-full py-4 px-6 rounded-2xl bg-white text-black font-semibold text-sm hover:bg-[#E4E4E7] transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98] shadow-md"
+              >
+                <span>Create a new pact</span>
+                <ArrowRight size={16} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ==================================================================
             SCREEN 1: RESOLUTION BUILDER (Accordion - Single Expanded Rule)
             ================================================================== */}
         {step === 1 && (
           <div className="flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-200">
-            <div className="pt-5 sm:pt-7 px-5 sm:px-7 pb-2 shrink-0">
+            <div className="pt-5 sm:pt-7 px-5 sm:px-7 pb-2 shrink-0 flex flex-col gap-1.5">
+              <button
+                type="button"
+                onClick={() => setStep(0)}
+                className="self-start text-[#71717A] hover:text-white flex items-center gap-1.5 text-xs font-medium transition-colors active:scale-95"
+              >
+                <ArrowLeft size={14} />
+                <span>Back</span>
+              </button>
               <div className="text-[26px] sm:text-[32px] font-semibold tracking-[-0.02em] leading-tight text-white">
                 Write your resolutions
               </div>
