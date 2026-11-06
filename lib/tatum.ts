@@ -9,6 +9,8 @@ try {
   // Graceful no-op in non-Node or restricted environments
 }
 
+export type SuiNetwork = "mainnet" | "testnet";
+
 export interface SuiCoinBalance {
   coinType: string;
   coinObjectCount: number;
@@ -61,10 +63,11 @@ export interface TatumSpendingVelocity {
 }
 
 export class TatumSuiService {
-  private rpcUrl: string;
-  private gatewayUrl: string;
   private apiKey: string | null;
-  private gqlClient: SuiGraphQLClient;
+  private mainnetGqlClient: SuiGraphQLClient;
+  private testnetGqlClient: SuiGraphQLClient;
+  private mainnetRpcUrl: string;
+  private testnetRpcUrl: string;
 
   constructor() {
     this.apiKey =
@@ -72,30 +75,36 @@ export class TatumSuiService {
         ? process.env.TATUM_API_KEY
         : null;
 
-    this.gatewayUrl =
-      process.env.TATUM_SUI_GATEWAY_URL ||
-      "https://sui-mainnet.gateway.tatum.io/graphql";
-
-    this.rpcUrl =
+    this.mainnetRpcUrl =
       process.env.SUI_RPC_URL || "https://fullnode.mainnet.sui.io:443";
+    this.testnetRpcUrl =
+      process.env.SUI_TESTNET_RPC_URL || "https://fullnode.testnet.sui.io:443";
 
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
     if (this.apiKey) {
       headers["x-api-key"] = this.apiKey;
     }
 
-    this.gqlClient = new SuiGraphQLClient({
-      url: this.gatewayUrl,
+    this.mainnetGqlClient = new SuiGraphQLClient({
+      url: process.env.TATUM_SUI_GATEWAY_URL || "https://sui-mainnet.gateway.tatum.io/graphql",
       network: "mainnet",
+      headers,
+    });
+
+    this.testnetGqlClient = new SuiGraphQLClient({
+      url: process.env.TATUM_SUI_TESTNET_GATEWAY_URL || "https://sui-testnet.gateway.tatum.io/graphql",
+      network: "testnet",
       headers,
     });
   }
 
   /**
-   * Returns the initialized Sui GraphQL Client backed by Tatum Gateway.
+   * Returns the initialized Sui GraphQL Client backed by Tatum Gateway for mainnet or testnet.
    */
-  public getGraphQLClient(): SuiGraphQLClient {
-    return this.gqlClient;
+  public getGraphQLClient(network: SuiNetwork = "mainnet"): SuiGraphQLClient {
+    return network === "testnet" ? this.testnetGqlClient : this.mainnetGqlClient;
   }
 
   /**
@@ -108,7 +117,7 @@ export class TatumSuiService {
   /**
    * Internal JSON-RPC fallback caller for legacy nodes.
    */
-  private async rpcCall<T>(method: string, params: unknown[]): Promise<T> {
+  private async rpcCall<T>(method: string, params: unknown[], network: SuiNetwork = "mainnet"): Promise<T> {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
@@ -117,7 +126,9 @@ export class TatumSuiService {
       headers["x-api-key"] = this.apiKey;
     }
 
-    const response = await fetch(this.rpcUrl, {
+    const rpcUrl = network === "testnet" ? this.testnetRpcUrl : this.mainnetRpcUrl;
+
+    const response = await fetch(rpcUrl, {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -145,7 +156,7 @@ export class TatumSuiService {
   /**
    * Retrieves all token balances for a given Sui wallet address via Tatum GraphQL Gateway.
    */
-  public async getWalletBalances(address: string): Promise<SuiCoinBalance[]> {
+  public async getWalletBalances(address: string, network: SuiNetwork = "mainnet"): Promise<SuiCoinBalance[]> {
     if (!address || !address.startsWith("0x")) {
       return [];
     }
@@ -166,7 +177,8 @@ export class TatumSuiService {
         }
       `;
 
-      const result = await this.gqlClient.query<{
+      const client = this.getGraphQLClient(network);
+      const result = await client.query<{
         address?: {
           balances?: {
             nodes?: Array<{
@@ -189,12 +201,12 @@ export class TatumSuiService {
         }));
       }
     } catch (gqlErr) {
-      console.warn("[Tatum Gateway] GraphQL balance query notice, trying RPC fallback:", gqlErr);
+      console.warn(`[Tatum ${network} Gateway] GraphQL balance query notice, trying RPC fallback:`, gqlErr);
     }
 
     // Fallback to JSON-RPC if GraphQL is unavailable
     try {
-      return await this.rpcCall<SuiCoinBalance[]>("suix_getAllBalances", [address]);
+      return await this.rpcCall<SuiCoinBalance[]>("suix_getAllBalances", [address], network);
     } catch {
       return [];
     }
@@ -203,8 +215,8 @@ export class TatumSuiService {
   /**
    * Helper to retrieve SUI token balance formatted as a float.
    */
-  public async getSuiBalance(address: string): Promise<number> {
-    const balances = await this.getWalletBalances(address);
+  public async getSuiBalance(address: string, network: SuiNetwork = "mainnet"): Promise<number> {
+    const balances = await this.getWalletBalances(address, network);
     const suiCoin = balances.find(
       (b) => b.coinType === "0x2::sui::SUI" || b.coinType.endsWith("::sui::SUI")
     );
@@ -218,7 +230,8 @@ export class TatumSuiService {
    */
   public async executeTransaction(
     transactionDataBcs: string,
-    signatures: string[]
+    signatures: string[],
+    network: SuiNetwork = "mainnet"
   ): Promise<TatumExecutionResult> {
     const mutation = `
       mutation ExecuteTx($txBcs: Base64!, $sigs: [Base64!]!) {
@@ -233,7 +246,8 @@ export class TatumSuiService {
       }
     `;
 
-    const result = await this.gqlClient.query<{
+    const client = this.getGraphQLClient(network);
+    const result = await client.query<{
       executeTransaction?: {
         effects?: {
           digest?: string;
@@ -254,7 +268,7 @@ export class TatumSuiService {
     if (!effects || !effects.digest) {
       throw new Error(
         effects?.executionError ||
-          "Tatum Sui Gateway did not return a valid transaction digest"
+          `Tatum Sui ${network} Gateway did not return a valid transaction digest`
       );
     }
 
@@ -263,14 +277,14 @@ export class TatumSuiService {
       status: effects.status || "SUCCESS",
       timestamp: effects.timestamp,
       executionError: effects.executionError,
-      explorerUrl: `https://suiscan.xyz/mainnet/tx/${effects.digest}`,
+      explorerUrl: `https://suiscan.xyz/${network}/tx/${effects.digest}`,
     };
   }
 
   /**
    * Reads and parses on-chain state for a Yearbound Vault shared object.
    */
-  public async getVaultState(vaultObjectId: string): Promise<VaultState | null> {
+  public async getVaultState(vaultObjectId: string, network: SuiNetwork = "mainnet"): Promise<VaultState | null> {
     if (!vaultObjectId || !vaultObjectId.startsWith("0x")) {
       return null;
     }
@@ -294,7 +308,7 @@ export class TatumSuiService {
           showContent: true,
           showOwner: true,
         },
-      ]);
+      ], network);
 
       const fields = rawObject?.data?.content?.fields;
       if (!fields) {
@@ -315,7 +329,7 @@ export class TatumSuiService {
         unlockDate: new Date(unlockMs).toISOString(),
       };
     } catch (err) {
-      console.warn("Failed to query vault object via Tatum RPC:", err);
+      console.warn(`Failed to query vault object via Tatum ${network} RPC:`, err);
       return null;
     }
   }
@@ -323,7 +337,7 @@ export class TatumSuiService {
   /**
    * Queries recent transaction blocks from an address to monitor spending activity.
    */
-  public async getRecentTransactions(address: string, limit: number = 10): Promise<unknown[]> {
+  public async getRecentTransactions(address: string, limit: number = 10, network: SuiNetwork = "mainnet"): Promise<unknown[]> {
     if (!address || !address.startsWith("0x")) return [];
 
     try {
@@ -343,7 +357,8 @@ export class TatumSuiService {
         }
       `;
 
-      const result = await this.gqlClient.query<{
+      const client = this.getGraphQLClient(network);
+      const result = await client.query<{
         address?: {
           transactions?: {
             nodes?: unknown[];
@@ -368,10 +383,10 @@ export class TatumSuiService {
         null,
         limit,
         true,
-      ]);
+      ], network);
       return response?.data || [];
     } catch (err) {
-      console.warn("Failed to query transaction blocks via Tatum RPC:", err);
+      console.warn(`Failed to query transaction blocks via Tatum ${network} RPC:`, err);
       return [];
     }
   }
@@ -379,14 +394,14 @@ export class TatumSuiService {
   /**
    * Audits incoming coin deposits to calculate cumulative inflow progress towards savings resolutions.
    */
-  public async getInflowMetrics(address: string, daysWindow: number = 30): Promise<TatumInflowMetrics> {
+  public async getInflowMetrics(address: string, daysWindow: number = 30, network: SuiNetwork = "mainnet"): Promise<TatumInflowMetrics> {
     if (!address || !address.startsWith("0x")) {
       return {
         address: address || "",
         totalInflowSui: 0,
         incomingTxCount: 0,
         auditedPeriodDays: daysWindow,
-        provider: "Tatum Sui Gateway",
+        provider: `Tatum Sui ${network === "testnet" ? "Testnet" : "Mainnet"} Gateway`,
       };
     }
 
@@ -398,7 +413,8 @@ export class TatumSuiService {
           null,
           20,
           true,
-        ]
+        ],
+        network
       );
 
       const items = response?.data || [];
@@ -406,7 +422,7 @@ export class TatumSuiService {
       const cutoff = now - daysWindow * 24 * 60 * 60 * 1000;
       const recentIncoming = items.filter((tx) => !tx.timestampMs || Number(tx.timestampMs) >= cutoff);
 
-      const currentBalance = await this.getSuiBalance(address);
+      const currentBalance = await this.getSuiBalance(address, network);
       const estimatedInflow = Math.max(0, currentBalance);
 
       return {
@@ -414,19 +430,19 @@ export class TatumSuiService {
         totalInflowSui: Number(estimatedInflow.toFixed(2)),
         incomingTxCount: recentIncoming.length,
         auditedPeriodDays: daysWindow,
-        provider: "Tatum Sui Gateway",
+        provider: `Tatum Sui ${network === "testnet" ? "Testnet" : "Mainnet"} Gateway`,
         lastInflowTimestamp: items[0]?.timestampMs ? new Date(Number(items[0].timestampMs)).toISOString() : undefined,
       };
     } catch (err) {
-      console.warn("[Tatum Gateway] Inflow metrics notice:", err);
+      console.warn(`[Tatum ${network} Gateway] Inflow metrics notice:`, err);
       try {
-        const bal = await this.getSuiBalance(address);
+        const bal = await this.getSuiBalance(address, network);
         return {
           address,
           totalInflowSui: bal,
           incomingTxCount: bal > 0 ? 1 : 0,
           auditedPeriodDays: daysWindow,
-          provider: "Tatum Sui Gateway",
+          provider: `Tatum Sui ${network === "testnet" ? "Testnet" : "Mainnet"} Gateway`,
         };
       } catch {
         return {
@@ -434,7 +450,7 @@ export class TatumSuiService {
           totalInflowSui: 0,
           incomingTxCount: 0,
           auditedPeriodDays: daysWindow,
-          provider: "Tatum Sui Gateway",
+          provider: `Tatum Sui ${network === "testnet" ? "Testnet" : "Mainnet"} Gateway`,
         };
       }
     }
@@ -443,19 +459,19 @@ export class TatumSuiService {
   /**
    * Analyzes short-term on-chain transaction velocity to detect impulse spending sprees.
    */
-  public async getSpendingVelocity(address: string, hoursWindow: number = 24): Promise<TatumSpendingVelocity> {
+  public async getSpendingVelocity(address: string, hoursWindow: number = 24, network: SuiNetwork = "mainnet"): Promise<TatumSpendingVelocity> {
     if (!address || !address.startsWith("0x")) {
       return {
         address: address || "",
         recentTxCount: 0,
         isHighVelocity: false,
         auditedPeriodHours: hoursWindow,
-        provider: "Tatum Sui Gateway",
+        provider: `Tatum Sui ${network === "testnet" ? "Testnet" : "Mainnet"} Gateway`,
       };
     }
 
     try {
-      const recent = await this.getRecentTransactions(address, 10);
+      const recent = await this.getRecentTransactions(address, 10, network);
       const recentCount = Array.isArray(recent) ? recent.length : 0;
 
       return {
@@ -463,17 +479,17 @@ export class TatumSuiService {
         recentTxCount: recentCount,
         isHighVelocity: recentCount >= 3,
         auditedPeriodHours: hoursWindow,
-        provider: "Tatum Sui Gateway",
+        provider: `Tatum Sui ${network === "testnet" ? "Testnet" : "Mainnet"} Gateway`,
         lastTxTimestamp: new Date().toISOString(),
       };
     } catch (err) {
-      console.warn("[Tatum Gateway] Spending velocity notice:", err);
+      console.warn(`[Tatum ${network} Gateway] Spending velocity notice:`, err);
       return {
         address,
         recentTxCount: 0,
         isHighVelocity: false,
         auditedPeriodHours: hoursWindow,
-        provider: "Tatum Sui Gateway",
+        provider: `Tatum Sui ${network === "testnet" ? "Testnet" : "Mainnet"} Gateway`,
       };
     }
   }

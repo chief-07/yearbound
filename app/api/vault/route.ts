@@ -7,6 +7,7 @@ import {
   createX402Challenge,
   verifyAndSettleX402Payment,
   YEARBOUND_VAULT_ADDRESS,
+  YEARBOUND_TESTNET_VAULT_ADDRESS,
 } from "@/lib/vault-x402";
 
 export async function POST(req: Request) {
@@ -29,10 +30,11 @@ export async function POST(req: Request) {
       );
     }
 
-    const vaultDestination =
-      process.env.YEARBOUND_VAULT_ADDRESS ||
-      process.env.VAULT_OBJECT_ID ||
-      YEARBOUND_VAULT_ADDRESS;
+    const isDemo = wallet_mode === "demo";
+    const vaultDestination = isDemo
+      ? (process.env.YEARBOUND_TESTNET_VAULT_ADDRESS || YEARBOUND_TESTNET_VAULT_ADDRESS)
+      : (process.env.YEARBOUND_VAULT_ADDRESS || YEARBOUND_VAULT_ADDRESS);
+
     const xPaymentHeader = req.headers.get("x-payment");
 
     // Step 1: If no payment signature provided, return HTTP 402 challenge
@@ -76,6 +78,7 @@ export async function POST(req: Request) {
         status: "deposited",
         settlement_type: "on_chain_ptb",
         is_real_on_chain: true,
+        network: "mainnet",
         tx_hash: activeDigest,
         voucher_signature: payload.signature,
         explorer_url: `https://suiscan.xyz/mainnet/tx/${activeDigest}`,
@@ -90,7 +93,7 @@ export async function POST(req: Request) {
     }
 
     // -----------------------------------------------------------------------
-    // B. REAL BURNER WALLET (Tatum Gateway execution if funded)
+    // B. REAL BURNER WALLET (Sui Mainnet Tatum Gateway execution if funded)
     // -----------------------------------------------------------------------
     if (wallet_mode === "real" && private_key_secret) {
       try {
@@ -105,7 +108,7 @@ export async function POST(req: Request) {
         }
 
         const derivedAddress = keypair.toSuiAddress();
-        const liveBalance = await tatumService.getSuiBalance(derivedAddress);
+        const liveBalance = await tatumService.getSuiBalance(derivedAddress, "mainnet");
         const requiredMist = Math.round(penaltyAmount * 1_000_000_000);
         const minGasBufferSui = 0.002;
 
@@ -116,15 +119,16 @@ export async function POST(req: Request) {
           const [coin] = tx.splitCoins(tx.gas, [requiredMist]);
           tx.transferObjects([coin], vaultDestination);
 
-          const txBytes = await tx.build({ client: tatumService.getGraphQLClient() });
+          const txBytes = await tx.build({ client: tatumService.getGraphQLClient("mainnet") });
           const { signature } = await keypair.signTransaction(txBytes);
           const txBytesBase64 = Buffer.from(txBytes).toString("base64");
-          const execResult = await tatumService.executeTransaction(txBytesBase64, [signature]);
+          const execResult = await tatumService.executeTransaction(txBytesBase64, [signature], "mainnet");
 
           return NextResponse.json({
             status: "deposited",
             settlement_type: "on_chain_ptb",
             is_real_on_chain: true,
+            network: "mainnet",
             tx_hash: execResult.digest,
             voucher_signature: payload.signature,
             explorer_url: execResult.explorerUrl,
@@ -143,10 +147,11 @@ export async function POST(req: Request) {
           status: "deposited",
           settlement_type: "cryptographic_voucher",
           is_real_on_chain: false,
+          network: "mainnet",
           tx_hash: undefined,
           voucher_signature: payload.signature,
           explorer_url: `https://suiscan.xyz/mainnet/account/${derivedAddress}`,
-          provider: "Tatum Sui Gateway (Cryptographic Intent Voucher)",
+          provider: "Tatum Sui Mainnet Gateway (Cryptographic Intent Voucher)",
           message:
             "Burner wallet has 0 SUI balance on Sui Mainnet. Cryptographic authorization voucher signed by Ed25519 key & inscribed to Walrus Memory.",
           deposited_amount_sui: penaltyAmount,
@@ -161,24 +166,102 @@ export async function POST(req: Request) {
     }
 
     // -----------------------------------------------------------------------
-    // C. DEMO MODE (Cryptographically verified agent personal signature voucher)
+    // C. DEMO MODE (Sui Testnet Sandbox via Tatum Testnet Gateway!)
     // -----------------------------------------------------------------------
-    return NextResponse.json({
-      status: "deposited",
-      settlement_type: "cryptographic_voucher",
-      is_real_on_chain: false,
-      tx_hash: undefined,
-      voucher_signature: payload.signature,
-      explorer_url: undefined,
-      provider: "x402 Agent-Native Personal Signature Voucher",
-      message:
-        "Demo Mode: Verified cryptographic Ed25519 authorization voucher inscribed to Walrus Memory.",
-      deposited_amount_sui: penaltyAmount,
-      vault_destination: vaultDestination,
-      commitment_id: commitment_id || null,
-      reason: reason || null,
-      timestamp: new Date().toISOString(),
-    });
+    if (wallet_mode === "demo") {
+      if (private_key_secret) {
+        try {
+          let keypair: Ed25519Keypair;
+          if (private_key_secret.startsWith("suiprivkey")) {
+            keypair = Ed25519Keypair.fromSecretKey(private_key_secret);
+          } else {
+            const raw = fromHex(
+              private_key_secret.startsWith("0x") ? private_key_secret.slice(2) : private_key_secret
+            );
+            keypair = Ed25519Keypair.fromSecretKey(raw);
+          }
+
+          const derivedAddress = keypair.toSuiAddress();
+          const liveBalance = await tatumService.getSuiBalance(derivedAddress, "testnet");
+          const requiredMist = Math.round(penaltyAmount * 1_000_000_000);
+          const minGasBufferSui = 0.002;
+
+          // If funded on Testnet, broadcast real Sui PTB via Tatum Testnet Gateway!
+          if (liveBalance >= penaltyAmount + minGasBufferSui) {
+            const tx = new Transaction();
+            tx.setSender(derivedAddress);
+            const [coin] = tx.splitCoins(tx.gas, [requiredMist]);
+            tx.transferObjects([coin], vaultDestination);
+
+            const txBytes = await tx.build({ client: tatumService.getGraphQLClient("testnet") });
+            const { signature } = await keypair.signTransaction(txBytes);
+            const txBytesBase64 = Buffer.from(txBytes).toString("base64");
+            const execResult = await tatumService.executeTransaction(txBytesBase64, [signature], "testnet");
+
+            return NextResponse.json({
+              status: "deposited",
+              settlement_type: "on_chain_ptb",
+              is_real_on_chain: true,
+              network: "testnet",
+              tx_hash: execResult.digest,
+              voucher_signature: payload.signature,
+              explorer_url: `https://suiscan.xyz/testnet/tx/${execResult.digest}`,
+              provider: "Tatum Sui Testnet Gateway (x402 Protocol)",
+              message: "Escrow penalty successfully transferred on Sui Testnet via Tatum Gateway.",
+              deposited_amount_sui: penaltyAmount,
+              vault_destination: vaultDestination,
+              commitment_id: commitment_id || null,
+              reason: reason || null,
+              timestamp: new Date().toISOString(),
+            });
+          }
+
+          // Unfunded testnet demo voucher
+          return NextResponse.json({
+            status: "deposited",
+            settlement_type: "cryptographic_voucher",
+            is_real_on_chain: false,
+            network: "testnet",
+            tx_hash: undefined,
+            voucher_signature: payload.signature,
+            explorer_url: `https://suiscan.xyz/testnet/account/${derivedAddress}`,
+            provider: "Tatum Sui Testnet Gateway (Cryptographic Intent Voucher)",
+            message:
+              "Demo wallet has 0 Testnet SUI. Cryptographic authorization voucher signed by Ed25519 key & inscribed to Walrus Memory.",
+            deposited_amount_sui: penaltyAmount,
+            vault_destination: vaultDestination,
+            commitment_id: commitment_id || null,
+            reason: reason || null,
+            timestamp: new Date().toISOString(),
+          });
+        } catch (demoErr) {
+          console.warn("[x402 Demo Testnet Settlement] Notice:", demoErr);
+        }
+      }
+
+      return NextResponse.json({
+        status: "deposited",
+        settlement_type: "cryptographic_voucher",
+        is_real_on_chain: false,
+        network: "testnet",
+        tx_hash: undefined,
+        voucher_signature: payload.signature,
+        explorer_url: undefined,
+        provider: "x402 Agent-Native Personal Signature Voucher (Testnet)",
+        message:
+          "Demo Mode: Verified cryptographic Ed25519 authorization voucher inscribed to Walrus Memory.",
+        deposited_amount_sui: penaltyAmount,
+        vault_destination: vaultDestination,
+        commitment_id: commitment_id || null,
+        reason: reason || null,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    return NextResponse.json(
+      { error: "Unsupported wallet mode" },
+      { status: 400 }
+    );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Vault processing failed";
     return NextResponse.json({ error: message }, { status: 500 });

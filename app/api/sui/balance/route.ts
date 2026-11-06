@@ -3,15 +3,18 @@ import dns from "node:dns";
 if (typeof dns?.setDefaultResultOrder === "function") {
   dns.setDefaultResultOrder("ipv4first");
 }
+try {
+  dns.setServers(["8.8.8.8", "1.1.1.1"]);
+} catch {}
 
 import { NextResponse } from "next/server";
-import { SuiGrpcClient } from "@mysten/sui/grpc";
+import { tatumService, type SuiNetwork } from "@/lib/tatum";
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const address = searchParams.get("address");
-    const network = (searchParams.get("network") || "mainnet") as "testnet" | "mainnet";
+    const network = (searchParams.get("network") === "testnet" ? "testnet" : "mainnet") as SuiNetwork;
 
     if (!address || !address.startsWith("0x")) {
       return NextResponse.json(
@@ -20,40 +23,23 @@ export async function GET(req: Request) {
       );
     }
 
-    const baseUrl =
-      network === "mainnet"
-        ? "https://mysten-rpc.mainnet.sui.io"
-        : "https://mysten-rpc.testnet.sui.io";
-
-    const client = new SuiGrpcClient({ network, baseUrl });
-    const balanceData = await client.getBalance({
-      owner: address,
-      coinType: "0x2::sui::SUI",
-    });
-
-    const balanceObj = balanceData?.balance as any;
-    const mist =
-      balanceObj?.totalBalance ||
-      balanceObj?.balance ||
-      "0";
-    const balanceSui = Number(mist) / 1_000_000_000;
+    const balanceSui = await tatumService.getSuiBalance(address, network);
 
     return NextResponse.json({
       success: true,
       address,
       network,
       balanceSui,
-      mist,
+      provider: `Tatum Sui ${network === "testnet" ? "Testnet" : "Mainnet"} Gateway`,
       isLive: true,
       timestamp: new Date().toISOString(),
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Sui RPC query failed";
-    console.warn("[Sui RPC] Temporary notice querying balance (returning 0 SUI fallback):", message);
+    const message = error instanceof Error ? error.message : "Sui balance query failed";
+    console.warn("[Sui Balance API] Notice querying balance:", message);
     return NextResponse.json({
       success: true,
       balanceSui: 0,
-      mist: "0",
       isLive: false,
       notice: message,
       timestamp: new Date().toISOString(),

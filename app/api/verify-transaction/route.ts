@@ -86,17 +86,18 @@ export async function POST(req: Request) {
     // -------------------------------------------------------------------------
     // 1. TATUM SUI RPC: Live On-Chain Preflight & Telemetry Verification
     // -------------------------------------------------------------------------
+    const targetNetwork = body.network === "testnet" || body.walletMode === "demo" ? "testnet" : "mainnet";
     let tatumBalanceSui = 150;
     let tatumVaultSui = 10;
-    let spendingVelocity = { recentTxCount: 0, isHighVelocity: false, provider: "Tatum Sui Gateway" };
-    let inflowMetrics = { totalInflowSui: 0, incomingTxCount: 0, auditedPeriodDays: 30, provider: "Tatum Sui Gateway" };
+    let spendingVelocity = { recentTxCount: 0, isHighVelocity: false, provider: `Tatum Sui ${targetNetwork} Gateway` };
+    let inflowMetrics = { totalInflowSui: 0, incomingTxCount: 0, auditedPeriodDays: 30, provider: `Tatum Sui ${targetNetwork} Gateway` };
 
     try {
       if (walletAddress && walletAddress.startsWith("0x") && walletAddress.length > 10) {
         const [balances, velocity, inflows] = await Promise.all([
-          tatumService.getWalletBalances(walletAddress),
-          tatumService.getSpendingVelocity(walletAddress, 24),
-          tatumService.getInflowMetrics(walletAddress, 30),
+          tatumService.getWalletBalances(walletAddress, targetNetwork),
+          tatumService.getSpendingVelocity(walletAddress, 24, targetNetwork),
+          tatumService.getInflowMetrics(walletAddress, 30, targetNetwork),
         ]);
         const suiCoin = balances.find((b) => b.coinType.includes("::sui::SUI") || b.coinType === "0x2::sui::SUI");
         if (suiCoin) {
@@ -107,7 +108,7 @@ export async function POST(req: Request) {
       }
 
       if (vaultObjectId && vaultObjectId.startsWith("0x")) {
-        const vaultState = await tatumService.getVaultState(vaultObjectId);
+        const vaultState = await tatumService.getVaultState(vaultObjectId, targetNetwork);
         if (vaultState) {
           tatumVaultSui = vaultState.balanceSui;
         }

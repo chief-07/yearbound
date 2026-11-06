@@ -12,24 +12,63 @@ export interface WalletInfo {
 }
 
 // -----------------------------------------------------------------------------
-// DETERMINISTIC DEMO WALLET
-// Always derives the exact same cryptographic Ed25519 keypair from a constant seed.
-// This guarantees Demo mode is a 100% REAL cryptographic Sui wallet capable of signing.
+// PERSISTENT DEMO TESTNET WALLET
+// Stored in localStorage so each tester/judge has their own isolated testnet wallet
+// with no coin-lock contention. Derives deterministic keypair as fallback.
 // -----------------------------------------------------------------------------
 const DEMO_SEED_HEX = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
+const DEMO_WALLET_STORAGE_KEY = "yearbound_demo_testnet_wallet_v2";
 
 export function getDemoKeypair(): Ed25519Keypair {
   const seedBytes = fromHex(DEMO_SEED_HEX);
   return Ed25519Keypair.fromSecretKey(seedBytes);
 }
 
+export function getOrCreateDemoKeypair(): { keypair: Ed25519Keypair; isNew: boolean } {
+  if (typeof window === "undefined") {
+    return { keypair: getDemoKeypair(), isNew: false };
+  }
+
+  const existingSecret = localStorage.getItem(DEMO_WALLET_STORAGE_KEY);
+  if (existingSecret) {
+    try {
+      if (existingSecret.startsWith("suiprivkey")) {
+        return { keypair: Ed25519Keypair.fromSecretKey(existingSecret), isNew: false };
+      }
+      const raw = fromHex(existingSecret.startsWith("0x") ? existingSecret.slice(2) : existingSecret);
+      return { keypair: Ed25519Keypair.fromSecretKey(raw), isNew: false };
+    } catch (err) {
+      console.warn("[Wallet] Failed to restore demo testnet keypair from storage:", err);
+    }
+  }
+
+  const newKp = new Ed25519Keypair();
+  try {
+    localStorage.setItem(DEMO_WALLET_STORAGE_KEY, newKp.getSecretKey());
+  } catch (err) {
+    console.warn("[Wallet] Could not persist demo keypair to localStorage:", err);
+  }
+
+  return { keypair: newKp, isNew: true };
+}
+
+export function exportDemoPrivateKeyHex(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(DEMO_WALLET_STORAGE_KEY) || getDemoKeypair().getSecretKey();
+}
+
 export const DEMO_SUI_ADDRESS = "0xc3566d06a7384723209d9ed87fff4c7d867b83b839fc0efa43de6981f59e59bc";
 
+export function getDemoAddress(): string {
+  if (typeof window === "undefined") return DEMO_SUI_ADDRESS;
+  return getOrCreateDemoKeypair().keypair.toSuiAddress();
+}
+
 export function getDemoWalletInfo(): WalletInfo {
-  const kp = getDemoKeypair();
+  const kp = getOrCreateDemoKeypair().keypair;
   return {
     mode: "demo",
-    address: DEMO_SUI_ADDRESS,
+    address: kp.toSuiAddress(),
     publicKeyBase64: kp.getPublicKey().toBase64(),
     hasSigner: true,
     network: "testnet",
@@ -178,7 +217,7 @@ export async function signPayloadWithWallet(
   message: Uint8Array
 ): Promise<{ signature: string; publicKey: string; address: string }> {
   if (mode === "demo") {
-    const kp = getDemoKeypair();
+    const kp = getOrCreateDemoKeypair().keypair;
     const signed = await kp.signPersonalMessage(message);
     return {
       signature: signed.signature,

@@ -29,6 +29,9 @@ import {
 } from "lucide-react";
 import {
   DEMO_SUI_ADDRESS,
+  getDemoAddress,
+  getOrCreateDemoKeypair,
+  exportDemoPrivateKeyHex,
   getDemoWalletInfo,
   getOrCreateRealKeypair,
   getRealWalletInfo,
@@ -38,7 +41,11 @@ import {
   executeTransferWithExtension,
   type InstalledSuiWallet,
 } from "@/lib/wallet";
-import { executeX402VaultDeposit, YEARBOUND_VAULT_ADDRESS } from "@/lib/vault-x402";
+import {
+  executeX402VaultDeposit,
+  YEARBOUND_VAULT_ADDRESS,
+  YEARBOUND_TESTNET_VAULT_ADDRESS,
+} from "@/lib/vault-x402";
 import { DisciplineGrid } from "@/components/discipline-grid";
 import { TimeTravelScrubber, type TimeMilestone } from "@/components/time-travel-scrubber";
 
@@ -154,6 +161,10 @@ export default function YearboundApp() {
   const [currentDateStr, setCurrentDateStr] = useState<string>("");
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      const demo = getDemoAddress();
+      if (demo) setDemoAddress(demo);
+    }
     const now = new Date();
     setCurrentDateStr(
       new Intl.DateTimeFormat("en-US", {
@@ -195,6 +206,7 @@ export default function YearboundApp() {
 
   // Screen 3: Account / Wallet Selection
   const [accountType, setAccountType] = useState<AccountType>("demo");
+  const [demoAddress, setDemoAddress] = useState<string>(DEMO_SUI_ADDRESS);
   const [realAddress, setRealAddress] = useState<string>("");
   const [linkedAddress, setLinkedAddress] = useState<string>("");
   const [showLinkInput, setShowLinkInput] = useState<boolean>(false);
@@ -368,17 +380,28 @@ export default function YearboundApp() {
     }
   };
 
-  // Fetch live on-chain balance via Sui gRPC/RPC
-  const refreshLiveBalance = async (targetAddress?: string) => {
-    const addr = targetAddress || (accountType === "real" ? realAddress : linkedAddress);
+  // Fetch live on-chain balance via Tatum Gateway
+  const refreshLiveBalance = async (targetAddress?: string, explicitMode?: AccountType) => {
+    const currentMode = explicitMode || accountType;
+    const addr =
+      targetAddress ||
+      (currentMode === "real"
+        ? realAddress
+        : currentMode === "demo"
+        ? (demoAddress || DEMO_SUI_ADDRESS)
+        : linkedAddress);
     if (!addr || !addr.startsWith("0x")) return;
+    const network = currentMode === "demo" ? "testnet" : "mainnet";
     setIsCheckingLiveBalance(true);
     try {
-      const res = await fetch(`/api/sui/balance?address=${addr}&network=mainnet`);
+      const res = await fetch(`/api/sui/balance?address=${addr}&network=${network}`);
       const data = await res.json();
       if (data.success && typeof data.balanceSui === "number") {
         setLiveOnChainBalanceSui(data.balanceSui);
-        if (accountType === "real" || accountType === "linked") {
+        if (currentMode === "real" || currentMode === "linked") {
+          setAvailableBalance(data.balanceSui);
+        } else if (currentMode === "demo" && data.balanceSui > 0) {
+          // If demo address is funded on testnet, reflect it in available balance!
           setAvailableBalance(data.balanceSui);
         }
       }
@@ -394,10 +417,10 @@ export default function YearboundApp() {
     const addr =
       targetAddress ||
       (accountType === "demo"
-        ? DEMO_SUI_ADDRESS
+        ? (demoAddress || DEMO_SUI_ADDRESS)
         : accountType === "real"
         ? realAddress
-        : linkedAddress || DEMO_SUI_ADDRESS);
+        : linkedAddress || (demoAddress || DEMO_SUI_ADDRESS));
     setIsHydrating(true);
     try {
       const res = await fetch(`/api/walrus/hydrate?address=${encodeURIComponent(addr || "")}`);
@@ -487,14 +510,15 @@ export default function YearboundApp() {
     const addr =
       targetAddress ||
       (accountType === "demo"
-        ? DEMO_SUI_ADDRESS
+        ? (demoAddress || DEMO_SUI_ADDRESS)
         : accountType === "real"
         ? realAddress
-        : linkedAddress || DEMO_SUI_ADDRESS);
+        : linkedAddress || (demoAddress || DEMO_SUI_ADDRESS));
     if (!addr || !addr.startsWith("0x")) return;
 
     try {
-      const res = await fetch(`/api/sui/inflow?address=${encodeURIComponent(addr)}`);
+      const net = accountType === "demo" ? "testnet" : "mainnet";
+      const res = await fetch(`/api/sui/inflow?address=${encodeURIComponent(addr)}&network=${net}`);
       const data = await res.json();
       if (data && data.success && data.metrics) {
         // Find matching inflow rule from user's active resolutions
@@ -626,10 +650,10 @@ export default function YearboundApp() {
       const activeRules = rules.filter((r) => r.title.trim().length > 0);
       const activeAccountAddress =
         accountType === "demo"
-          ? DEMO_SUI_ADDRESS
+          ? (demoAddress || DEMO_SUI_ADDRESS)
           : accountType === "real"
           ? realAddress
-          : linkedAddress || DEMO_SUI_ADDRESS;
+          : linkedAddress || (demoAddress || DEMO_SUI_ADDRESS);
 
       let data: any = null;
 
@@ -868,14 +892,14 @@ export default function YearboundApp() {
 
     const activeAccountAddress =
       accountType === "demo"
-        ? DEMO_SUI_ADDRESS
+        ? (demoAddress || DEMO_SUI_ADDRESS)
         : accountType === "real"
         ? realAddress
-        : linkedAddress || DEMO_SUI_ADDRESS;
+        : linkedAddress || (demoAddress || DEMO_SUI_ADDRESS);
 
     let txHash: string | undefined = undefined;
     let explorerUrl: string | undefined = undefined;
-    let transferProvider = "Tatum Sui Gateway";
+    let transferProvider = accountType === "demo" ? "Tatum Sui Testnet Gateway" : "Tatum Sui Gateway";
     let isUnfunded = false;
     let isRealOnChain = false;
 
@@ -896,6 +920,13 @@ export default function YearboundApp() {
     }
 
     // 2. Execute / Inscribe PTB via Tatum Sui Gateway
+    const privateKey =
+      accountType === "demo"
+        ? (exportDemoPrivateKeyHex() || undefined)
+        : accountType === "real"
+        ? (exportRealPrivateKeyHex() || undefined)
+        : undefined;
+
     try {
       const ptbRes = await fetch("/api/sui-transfer", {
         method: "POST",
@@ -906,7 +937,7 @@ export default function YearboundApp() {
           recipientAddress: sendRecipient,
           amountSui: numAmount,
           walletMode: accountType,
-          privateKeySecret: accountType === "real" ? exportRealPrivateKeyHex() : undefined,
+          privateKeySecret: privateKey,
           preExecutedDigest,
         }),
       });
@@ -1044,10 +1075,10 @@ export default function YearboundApp() {
 
     const activeAccountAddress =
       accountType === "demo"
-        ? DEMO_SUI_ADDRESS
+        ? (demoAddress || DEMO_SUI_ADDRESS)
         : accountType === "real"
         ? realAddress
-        : linkedAddress || DEMO_SUI_ADDRESS;
+        : linkedAddress || (demoAddress || DEMO_SUI_ADDRESS);
 
     try {
       const res = await fetch("/api/verify-transaction", {
@@ -1058,6 +1089,8 @@ export default function YearboundApp() {
           amount: parseFloat(sendAmount) || 0,
           memo: sendMemo,
           walletAddress: activeAccountAddress,
+          walletMode: accountType,
+          network: accountType === "demo" ? "testnet" : "mainnet",
           timestamp: new Date().toISOString(),
           rules: activeRulesList.map((r) => ({
             id: r.id,
@@ -1155,10 +1188,10 @@ export default function YearboundApp() {
       const transferAmt = parseFloat(sendAmount) || 0;
       const activeAccountAddress =
         accountType === "demo"
-          ? DEMO_SUI_ADDRESS
+          ? (demoAddress || DEMO_SUI_ADDRESS)
           : accountType === "real"
           ? realAddress
-          : linkedAddress || DEMO_SUI_ADDRESS;
+          : linkedAddress || (demoAddress || DEMO_SUI_ADDRESS);
 
       // 1. Execute Real x402 Challenge-Response Flow with Sui Move Vault
       let isRealOnChain = false;
@@ -1166,11 +1199,22 @@ export default function YearboundApp() {
       let txHash: string | undefined = undefined;
       let voucherSignature: string | undefined = undefined;
       let explorerUrl: string | undefined = undefined;
-      let vaultDestination = YEARBOUND_VAULT_ADDRESS;
-      let settlementProvider = "x402 Agent-Native Personal Signature Voucher";
+      let vaultDestination =
+        accountType === "demo"
+          ? YEARBOUND_TESTNET_VAULT_ADDRESS
+          : YEARBOUND_VAULT_ADDRESS;
+      let settlementProvider =
+        accountType === "demo"
+          ? "Tatum Sui Testnet Gateway (x402 Protocol)"
+          : "Tatum Sui Mainnet Gateway (x402 Protocol)";
       let settlementMsg = "";
 
-      const privateKeySecret = accountType === "real" ? exportRealPrivateKeyHex() : undefined;
+      const privateKeySecret =
+        accountType === "demo"
+          ? (exportDemoPrivateKeyHex() || undefined)
+          : accountType === "real"
+          ? (exportRealPrivateKeyHex() || undefined)
+          : undefined;
 
       try {
         const x402Result = await executeX402VaultDeposit({
@@ -1333,10 +1377,10 @@ export default function YearboundApp() {
   const copyAddress = () => {
     const addr =
       accountType === "demo"
-        ? DEMO_SUI_ADDRESS
+        ? (demoAddress || DEMO_SUI_ADDRESS)
         : accountType === "real"
         ? realAddress
-        : linkedAddress || DEMO_SUI_ADDRESS;
+        : linkedAddress || (demoAddress || DEMO_SUI_ADDRESS);
     if (navigator?.clipboard?.writeText) {
       navigator.clipboard.writeText(addr).catch(() => {});
     } else {
@@ -1603,9 +1647,9 @@ export default function YearboundApp() {
 
   const activeWalletDisplay =
     accountType === "demo"
-      ? `Demo · ${DEMO_SUI_ADDRESS.slice(0, 6)}...${DEMO_SUI_ADDRESS.slice(-4)}`
+      ? `Testnet · ${(demoAddress || DEMO_SUI_ADDRESS).slice(0, 6)}...${(demoAddress || DEMO_SUI_ADDRESS).slice(-4)}`
       : accountType === "real"
-      ? `Real · ${realAddress.slice(0, 6)}...${realAddress.slice(-4)}`
+      ? `Mainnet · ${realAddress.slice(0, 6)}...${realAddress.slice(-4)}`
       : `Linked · ${linkedAddress ? `${linkedAddress.slice(0, 6)}...${linkedAddress.slice(-4)}` : "Wallet"}`;
 
   return (
@@ -1794,8 +1838,9 @@ export default function YearboundApp() {
               <div
                 onClick={() => {
                   setAccountType("demo");
-                  setAvailableBalance(150);
-                  hydrateFromWalrus(DEMO_SUI_ADDRESS);
+                  const activeDemo = demoAddress || DEMO_SUI_ADDRESS;
+                  hydrateFromWalrus(activeDemo);
+                  refreshLiveBalance(activeDemo, "demo");
                   setStep(4);
                   setActiveTab("home");
                 }}
@@ -1807,7 +1852,7 @@ export default function YearboundApp() {
                       Demo sandbox
                     </div>
                     <span className="text-[10px] font-mono text-[#71717A] uppercase tracking-wider">
-                      Pre-funded 150 SUI
+                      Sui Testnet · Mainnet Walrus
                     </span>
                   </div>
                   <div className="text-xs font-mono text-[#A1A1AA] flex items-center gap-1">
@@ -1817,12 +1862,14 @@ export default function YearboundApp() {
                 </div>
 
                 <p className="text-xs text-[#71717A] leading-relaxed">
-                  Instant evaluation account for testing transaction auditing, Walrus memory roasts, and the 12-month timeline scrubber.
+                  Live Sui Testnet sandbox via Tatum Gateway with permanent Mainnet Walrus memory. Real testnet PTBs, vault locks, and memory audit.
                 </p>
 
                 <div className="pt-3 border-t border-[#18181C] flex items-center justify-between text-xs font-mono text-[#71717A]">
-                  <span>{DEMO_SUI_ADDRESS.slice(0, 6)}...{DEMO_SUI_ADDRESS.slice(-4)}</span>
-                  <span className="text-white">150.00 SUI</span>
+                  <span>{(demoAddress || DEMO_SUI_ADDRESS).slice(0, 6)}...{(demoAddress || DEMO_SUI_ADDRESS).slice(-4)}</span>
+                  <span className="text-white">
+                    {liveOnChainBalanceSui !== null && accountType === "demo" ? `${liveOnChainBalanceSui.toFixed(2)} SUI (Testnet)` : "150.00 SUI (Testnet)"}
+                  </span>
                 </div>
               </div>
             </div>
@@ -2197,7 +2244,8 @@ export default function YearboundApp() {
               <div
                 onClick={() => {
                   setAccountType("demo");
-                  setAvailableBalance(150);
+                  const activeDemo = demoAddress || DEMO_SUI_ADDRESS;
+                  refreshLiveBalance(activeDemo, "demo");
                 }}
                 className={`bg-[#0A0A0C] rounded-2xl p-5 flex flex-col gap-3 cursor-pointer transition-all duration-200 active:scale-[0.99] border ${
                   accountType === "demo"
@@ -2211,7 +2259,7 @@ export default function YearboundApp() {
                       Demo account
                     </div>
                     <span className="text-[10px] font-mono text-[#71717A] uppercase tracking-wider">
-                      Deterministic Ed25519 Keypair
+                      Sui Testnet Sandbox · Tatum Gateway
                     </span>
                   </div>
                   <div
@@ -2226,14 +2274,18 @@ export default function YearboundApp() {
                 </div>
 
                 <p className="text-xs text-[#71717A] leading-relaxed">
-                  Pre-funded with 150 SUI sandbox balance. Operates with a real deterministic Ed25519 keypair for cryptographic signatures without requiring wallet extensions.
+                  Operates on live Sui Testnet with an isolated device Ed25519 keypair. Real PTBs execute via Tatum Testnet Gateway with audit trails on Mainnet Walrus Memory.
                 </p>
 
                 <div className="pt-3 border-t border-[#18181C] flex items-center justify-between text-xs font-mono">
                   <span className="text-[#A1A1AA]">
-                    {DEMO_SUI_ADDRESS.slice(0, 6)}...{DEMO_SUI_ADDRESS.slice(-4)}
+                    {(demoAddress || DEMO_SUI_ADDRESS).slice(0, 6)}...{(demoAddress || DEMO_SUI_ADDRESS).slice(-4)}
                   </span>
-                  <span className="text-white font-medium">150.00 SUI Balance</span>
+                  <span className="text-white font-medium">
+                    {liveOnChainBalanceSui !== null && accountType === "demo"
+                      ? `${liveOnChainBalanceSui.toFixed(2)} SUI (Testnet)`
+                      : `${availableBalance.toFixed(2)} SUI (Testnet)`}
+                  </span>
                 </div>
               </div>
 
@@ -3438,7 +3490,7 @@ export default function YearboundApp() {
                           onClick={() => {
                             const addr =
                               accountType === "demo"
-                                ? DEMO_SUI_ADDRESS
+                                ? (demoAddress || DEMO_SUI_ADDRESS)
                                 : accountType === "real"
                                 ? realAddress
                                 : linkedAddress;
@@ -3453,7 +3505,9 @@ export default function YearboundApp() {
                           <span>Copy</span>
                         </button>
                         <a
-                          href={`https://suiscan.xyz/mainnet/account/${accountType === "demo" ? DEMO_SUI_ADDRESS : realAddress || linkedAddress}`}
+                          href={accountType === "demo"
+                            ? `https://suiscan.xyz/testnet/account/${demoAddress || DEMO_SUI_ADDRESS}`
+                            : `https://suiscan.xyz/mainnet/account/${realAddress || linkedAddress}`}
                           target="_blank"
                           rel="noreferrer"
                           className="text-[10px] font-mono text-[#71717A] hover:text-white flex items-center gap-1 transition-colors"
@@ -3465,7 +3519,7 @@ export default function YearboundApp() {
                     </div>
                     <span className="text-xs font-mono text-white truncate">
                       {accountType === "demo"
-                        ? DEMO_SUI_ADDRESS
+                        ? (demoAddress || DEMO_SUI_ADDRESS)
                         : accountType === "real"
                         ? realAddress
                         : linkedAddress}
@@ -3477,36 +3531,44 @@ export default function YearboundApp() {
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-mono text-white font-medium">
                         {accountType === "demo"
-                          ? `${availableBalance.toFixed(2)} SUI (Sandbox)`
+                          ? isCheckingLiveBalance
+                            ? "Querying Testnet RPC..."
+                            : `${liveOnChainBalanceSui !== null ? liveOnChainBalanceSui.toFixed(2) : availableBalance.toFixed(2)} SUI (Testnet)`
                           : isCheckingLiveBalance
                           ? "Querying RPC..."
-                          : `${liveOnChainBalanceSui !== null ? liveOnChainBalanceSui.toFixed(2) : "0.00"} SUI`}
+                          : `${liveOnChainBalanceSui !== null ? liveOnChainBalanceSui.toFixed(2) : "0.00"} SUI (Mainnet)`}
                       </span>
-                      {accountType === "real" && (
-                        <button
-                          type="button"
-                          onClick={() => refreshLiveBalance(realAddress)}
-                          disabled={isCheckingLiveBalance}
-                          className="text-[#71717A] hover:text-white text-[10px] font-mono transition-colors"
-                          title="Refresh on-chain balance"
-                        >
-                          ↻
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (accountType === "demo") {
+                            refreshLiveBalance(demoAddress || DEMO_SUI_ADDRESS, "demo");
+                          } else {
+                            refreshLiveBalance(realAddress, "real");
+                          }
+                        }}
+                        disabled={isCheckingLiveBalance}
+                        className="text-[#71717A] hover:text-white text-[10px] font-mono transition-colors"
+                        title="Refresh on-chain balance"
+                      >
+                        ↻
+                      </button>
                     </div>
                   </div>
 
                   <div className="flex items-center justify-between border-t border-[#18181C] pt-3">
                     <span className="text-xs text-[#71717A]">Network</span>
-                    <span className="text-xs text-white font-medium">Sui Mainnet</span>
+                    <span className="text-xs text-white font-medium">
+                      {accountType === "demo" ? "Sui Testnet (Tatum Gateway)" : "Sui Mainnet (Tatum Gateway)"}
+                    </span>
                   </div>
 
-                  {accountType === "real" && (
+                  {(accountType === "real" || accountType === "demo") && (
                     <div className="border-t border-[#18181C] pt-3 flex flex-col gap-2">
                       <button
                         type="button"
                         onClick={() => {
-                          const hex = exportRealPrivateKeyHex();
+                          const hex = accountType === "demo" ? exportDemoPrivateKeyHex() : exportRealPrivateKeyHex();
                           if (hex) {
                             setExportedKey(hex);
                             setShowExportPrivateKey(!showExportPrivateKey);
@@ -3514,7 +3576,7 @@ export default function YearboundApp() {
                         }}
                         className="text-xs text-left text-[#A1A1AA] hover:text-white transition-colors flex items-center justify-between font-mono"
                       >
-                        <span>Export Private Key</span>
+                        <span>Export Private Key ({accountType === "demo" ? "Testnet" : "Mainnet"})</span>
                         <span className="text-[10px] text-[#71717A]">
                           {showExportPrivateKey ? "Hide" : "Reveal"}
                         </span>
@@ -3523,11 +3585,16 @@ export default function YearboundApp() {
                       {showExportPrivateKey && exportedKey && (
                         <div className="bg-[#131316] border border-[#27272A] rounded-xl p-3 flex flex-col gap-1.5 animate-in fade-in">
                           <span className="text-[10px] font-mono text-[#A1A1AA]">
-                            Ed25519 Secret Key (Hex):
+                            {accountType === "demo" ? "Testnet" : "Mainnet"} Ed25519 Secret Key (Hex):
                           </span>
                           <div className="bg-[#0A0A0C] p-2 rounded text-[10px] font-mono text-white break-all select-all border border-[#1F1F24]">
                             {exportedKey}
                           </div>
+                          <span className="text-[10px] text-[#71717A]">
+                            {accountType === "demo"
+                              ? "Import into Sui Wallet on Testnet to inspect balance or use with testnet faucets."
+                              : "Keep this secret. Anyone with this key controls your Sui burner wallet on Mainnet."}
+                          </span>
                         </div>
                       )}
                     </div>

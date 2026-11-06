@@ -19,15 +19,18 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const metrics = await tatumService.getInflowMetrics(address, 30);
-    const velocity = await tatumService.getSpendingVelocity(address, 24);
+    const network = searchParams.get("network") === "testnet" ? "testnet" : "mainnet";
+
+    const metrics = await tatumService.getInflowMetrics(address, 30, network);
+    const velocity = await tatumService.getSpendingVelocity(address, 24, network);
 
     return NextResponse.json({
       success: true,
       address,
+      network,
       metrics,
       velocity,
-      provider: "Tatum Sui Gateway (mainnet)",
+      provider: `Tatum Sui Gateway (${network})`,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Failed to query Tatum inflows";

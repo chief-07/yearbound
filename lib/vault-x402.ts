@@ -2,6 +2,7 @@ import { verifyPersonalMessageSignature } from "@mysten/sui/verify";
 import { signPayloadWithWallet, executeTransferWithExtension, type WalletMode } from "./wallet";
 
 export const YEARBOUND_VAULT_ADDRESS = "0x7e8b61fb9706dc7d455823ca87455812903333333333333333333333333332026";
+export const YEARBOUND_TESTNET_VAULT_ADDRESS = "0x7e8b61fb9706dc7d455823ca87455812903333333333333333333333333332026";
 
 export interface X402PaymentChallenge {
   status: "payment_required";
