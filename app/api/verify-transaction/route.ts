@@ -84,18 +84,26 @@ export async function POST(req: Request) {
     const clientHistory: HistoricalRecord[] = Array.isArray(history) ? history : [];
 
     // -------------------------------------------------------------------------
-    // 1. TATUM SUI RPC: Live On-Chain Preflight & Solvency Verification
+    // 1. TATUM SUI RPC: Live On-Chain Preflight & Telemetry Verification
     // -------------------------------------------------------------------------
     let tatumBalanceSui = 150;
     let tatumVaultSui = 10;
+    let spendingVelocity = { recentTxCount: 0, isHighVelocity: false, provider: "Tatum Sui Gateway" };
+    let inflowMetrics = { totalInflowSui: 0, incomingTxCount: 0, auditedPeriodDays: 30, provider: "Tatum Sui Gateway" };
 
     try {
       if (walletAddress && walletAddress.startsWith("0x") && walletAddress.length > 10) {
-        const balances = await tatumService.getWalletBalances(walletAddress);
+        const [balances, velocity, inflows] = await Promise.all([
+          tatumService.getWalletBalances(walletAddress),
+          tatumService.getSpendingVelocity(walletAddress, 24),
+          tatumService.getInflowMetrics(walletAddress, 30),
+        ]);
         const suiCoin = balances.find((b) => b.coinType.includes("::sui::SUI") || b.coinType === "0x2::sui::SUI");
         if (suiCoin) {
           tatumBalanceSui = Number(suiCoin.totalBalance) / 1_000_000_000;
         }
+        spendingVelocity = velocity;
+        inflowMetrics = inflows;
       }
 
       if (vaultObjectId && vaultObjectId.startsWith("0x")) {
@@ -109,6 +117,31 @@ export async function POST(req: Request) {
     }
 
     const isSolvent = tatumBalanceSui >= transferAmount;
+
+    // Detect if user has a specific Inflow / Savings resolution in their Genesis Pact
+    const inflowRule = userRules.find((r) => {
+      const txt = `${r.title} ${r.condition}`.toLowerCase();
+      return (
+        txt.includes("save") ||
+        txt.includes("deposit") ||
+        txt.includes("inflow") ||
+        txt.includes("earn") ||
+        txt.includes("income") ||
+        txt.includes("accumulate")
+      );
+    });
+
+    let inflowTargetAmount: number | null = null;
+    let isInflowDeficit = false;
+    if (inflowRule) {
+      const numMatch = `${inflowRule.title} ${inflowRule.condition}`.match(/(\d+[\d,.]*)\s*(?:sui|SUI|\$)?/);
+      if (numMatch && numMatch[1]) {
+        inflowTargetAmount = parseFloat(numMatch[1].replace(/,/g, ""));
+      } else {
+        inflowTargetAmount = 500;
+      }
+      isInflowDeficit = inflowMetrics.totalInflowSui < (inflowTargetAmount || 0);
+    }
 
     // -------------------------------------------------------------------------
     // 2. WALRUS MEMORY: Deep Structured Recall of Historical Oaths & Patterns
@@ -327,6 +360,12 @@ ACCUMULATED WALRUS MEMORY & INFRACTION DOSSIER:
 - Late Night Curfew Active: ${isLateNight ? "YES (Hour " + currentHour + ":00)" : "NO"}
 - Escalated Penalty Calculated: ${escalatedPenalty} SUI (Multiplier: ${penaltyMultiplier}x)
 ${walrusPatterns.length > 0 ? "- Active Behavioral Patterns in Walrus: " + walrusPatterns.map((p) => p.pattern_title).join(", ") : ""}
+
+TATUM ON-CHAIN REALITY & TELEMETRY:
+- Verified Balance: ${tatumBalanceSui.toFixed(2)} SUI
+- Recent 24h Transaction Velocity: ${spendingVelocity.recentTxCount} transactions (${spendingVelocity.isHighVelocity ? "HIGH VELOCITY SPENDING DETECTED" : "Normal velocity"})
+- 30-Day Cumulative Inflow (Audited by Tatum): ${inflowMetrics.totalInflowSui.toFixed(2)} SUI across ${inflowMetrics.incomingTxCount} deposits
+${inflowRule ? `- User's Specific Inflow Resolution: "${inflowRule.title}" (Goal: ${inflowTargetAmount} SUI | Current On-Chain Inflow: ${inflowMetrics.totalInflowSui.toFixed(2)} SUI | Status: ${isInflowDeficit ? `DEFICIT - Still needs ${(inflowTargetAmount! - inflowMetrics.totalInflowSui).toFixed(2)} SUI` : "HONORED"})` : ""}
     `.trim();
 
     try {
@@ -377,7 +416,17 @@ Determine the verdict ('broken', 'honored', 'excused'), matched rule, escalated 
           balanceSui: tatumBalanceSui,
           vaultLockedSui: tatumVaultSui,
           isSolvent,
-          verifiedVia: "Tatum Sui RPC (mainnet)",
+          verifiedVia: "Tatum Sui Gateway (mainnet GraphQL & RPC)",
+          spendingVelocity,
+          inflowMetrics,
+          inflowRuleChecked: inflowRule
+            ? {
+                title: inflowRule.title,
+                targetSui: inflowTargetAmount,
+                currentInflowSui: inflowMetrics.totalInflowSui,
+                isMet: !isInflowDeficit,
+              }
+            : null,
         },
         walrus: {
           recalledCount: rawRecalledTexts.length + walrusEvents.length,

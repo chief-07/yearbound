@@ -469,10 +469,57 @@ export default function YearboundApp() {
     }
   };
 
-  // Run hydration when entering dashboard or switching active account
+  // Refresh on-chain inflow metrics via Tatum Sui Gateway
+  const refreshInflowMetrics = async (targetAddress?: string) => {
+    const addr =
+      targetAddress ||
+      (accountType === "demo"
+        ? DEMO_SUI_ADDRESS
+        : accountType === "real"
+        ? realAddress
+        : linkedAddress || DEMO_SUI_ADDRESS);
+    if (!addr || !addr.startsWith("0x")) return;
+
+    try {
+      const res = await fetch(`/api/sui/inflow?address=${encodeURIComponent(addr)}`);
+      const data = await res.json();
+      if (data && data.success && data.metrics) {
+        // Find matching inflow rule from user's active resolutions
+        const activeInflowRule = activeRulesList.find((r) => {
+          const t = `${r.title} ${r.condition}`.toLowerCase();
+          return (
+            t.includes("save") ||
+            t.includes("deposit") ||
+            t.includes("inflow") ||
+            t.includes("earn") ||
+            t.includes("income") ||
+            t.includes("accumulate")
+          );
+        });
+
+        let targetSui = 0;
+        if (activeInflowRule) {
+          const m = `${activeInflowRule.title} ${activeInflowRule.condition}`.match(/(\d+[\d,.]*)\s*(?:sui|SUI|\$)?/);
+          if (m && m[1]) targetSui = parseFloat(m[1].replace(/,/g, ""));
+        }
+
+        setInflowProgress({
+          current: data.metrics.totalInflowSui,
+          target: targetSui,
+          month: "Current Period",
+          isDeficit: targetSui > 0 ? data.metrics.totalInflowSui < targetSui : false,
+        });
+      }
+    } catch (err) {
+      console.warn("Failed to query Tatum inflow metrics:", err);
+    }
+  };
+
+  // Run hydration and Tatum on-chain telemetry when entering dashboard or switching active account
   useEffect(() => {
     if (step === 4) {
       hydrateFromWalrus();
+      refreshInflowMetrics();
     }
   }, [step, accountType]);
 
@@ -1037,6 +1084,15 @@ export default function YearboundApp() {
           ]);
         }
 
+        if (data.tatum?.inflowMetrics) {
+          setInflowProgress({
+            current: data.tatum.inflowMetrics.totalInflowSui,
+            target: data.tatum.inflowRuleChecked?.targetSui || 0,
+            month: "Current Period",
+            isDeficit: data.tatum.inflowRuleChecked ? !data.tatum.inflowRuleChecked.isMet : false,
+          });
+        }
+
         const matchedRuleObj = activeRulesList.find(
           (r) =>
             r.title.toLowerCase().includes((data.matchedRule || "").toLowerCase()) ||
@@ -1240,9 +1296,29 @@ export default function YearboundApp() {
       } catch {}
     }
     setCopiedAddress(true);
+
+    const activeInflowRule = activeRulesList.find((r) => {
+      const t = `${r.title} ${r.condition}`.toLowerCase();
+      return (
+        t.includes("save") ||
+        t.includes("deposit") ||
+        t.includes("inflow") ||
+        t.includes("earn") ||
+        t.includes("income") ||
+        t.includes("accumulate")
+      );
+    });
+
+    const numMatch = activeInflowRule
+      ? `${activeInflowRule.title} ${activeInflowRule.condition}`.match(/(\d+[\d,.]*)\s*(?:sui|SUI|\$)?/)
+      : null;
+    const dynamicTarget = numMatch ? `${numMatch[1]} SUI Target` : null;
+
     triggerSnackbar(
       "Address Copied · Tatum Inflow Tracking Active",
-      "Monthly Target: 1,000 SUI (Audited by Tatum Sui RPC)"
+      dynamicTarget
+        ? `Auditing "${activeInflowRule?.title}" (${dynamicTarget} via Tatum Gateway)`
+        : "Audited on-chain via Tatum Sui Gateway"
     );
     setTimeout(() => setCopiedAddress(false), 2500);
   };
@@ -3017,6 +3093,116 @@ export default function YearboundApp() {
                     <span className="text-xs font-mono text-[#A1A1AA]">x402 Agent Toll</span>
                   </div>
                 </div>
+
+                {/* TATUM INFLOW & ACCUMULATION SENTINEL CARD */}
+                {(() => {
+                  const activeInflowRule = activeRulesList.find((r) => {
+                    const t = `${r.title} ${r.condition}`.toLowerCase();
+                    return (
+                      t.includes("save") ||
+                      t.includes("deposit") ||
+                      t.includes("inflow") ||
+                      t.includes("earn") ||
+                      t.includes("income") ||
+                      t.includes("accumulate")
+                    );
+                  });
+
+                  const hasInflowGoal = Boolean(activeInflowRule && inflowProgress.target > 0);
+                  const progressPct = hasInflowGoal
+                    ? Math.min(100, (inflowProgress.current / (inflowProgress.target || 1)) * 100)
+                    : 0;
+                  const isMet = hasInflowGoal && inflowProgress.current >= inflowProgress.target;
+
+                  return (
+                    <div
+                      className={`border rounded-2xl p-5 flex flex-col gap-3.5 transition-all duration-200 ${
+                        isDegradedMode
+                          ? "bg-[#111113] border-[#222226] text-[#71717A]"
+                          : "bg-[#0A0A0C] border-[#222226] hover:border-[#3F3F46]"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Activity size={14} className={isDegradedMode ? "text-[#52525B]" : "text-[#A1A1AA]"} />
+                          <span className="text-[11px] font-mono uppercase tracking-wider text-[#71717A]">
+                            Tatum Inflow Sentinel
+                          </span>
+                        </div>
+                        <span
+                          className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                            isDegradedMode
+                              ? "text-[#71717A] bg-[#18181B] border-[#27272A]"
+                              : isMet
+                              ? "text-[#10B981] bg-[#10B981]/10 border-[#10B981]/25"
+                              : hasInflowGoal
+                              ? "text-[#F59E0B] bg-[#F59E0B]/10 border-[#F59E0B]/25"
+                              : "text-[#A1A1AA] bg-[#18181C] border-[#27272A]"
+                          }`}
+                        >
+                          {isDegradedMode
+                            ? "Offline (Web2)"
+                            : isMet
+                            ? "Goal Met"
+                            : hasInflowGoal
+                            ? "Inflow Deficit"
+                            : "No Goal Configured"}
+                        </span>
+                      </div>
+
+                      {isDegradedMode ? (
+                        <p className="text-xs text-[#71717A] leading-relaxed italic">
+                          Tatum on-chain telemetry is bypassed in legacy Web2 mode. Incoming deposits are not cross-referenced against your resolutions.
+                        </p>
+                      ) : hasInflowGoal ? (
+                        <div className="flex flex-col gap-2.5">
+                          <div className="flex items-center justify-between">
+                            <div className="flex flex-col">
+                              <span className="text-xs font-semibold text-white">
+                                {activeInflowRule?.title}
+                              </span>
+                              <span className="text-[10px] font-mono text-[#71717A]">
+                                Target: {inflowProgress.target}.00 SUI
+                              </span>
+                            </div>
+                            <span className="text-xs font-mono font-semibold text-white">
+                              {inflowProgress.current.toFixed(2)} SUI Received
+                            </span>
+                          </div>
+
+                          {/* Minimalist Progress Track */}
+                          <div className="w-full h-1.5 bg-[#18181C] rounded-full overflow-hidden border border-[#27272A]">
+                            <div
+                              className={`h-full transition-all duration-500 rounded-full ${
+                                isMet ? "bg-[#10B981]" : "bg-white"
+                              }`}
+                              style={{ width: `${progressPct}%` }}
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between text-[10px] font-mono text-[#71717A]">
+                            <span>
+                              {isMet
+                                ? "Adherence verified: on-chain deposits honor your pledge."
+                                : `${(inflowProgress.target - inflowProgress.current).toFixed(2)} SUI needed to satisfy pledge.`}
+                            </span>
+                            <span>{progressPct.toFixed(0)}%</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-1.5">
+                          <p className="text-xs text-[#71717A] leading-relaxed">
+                            No deposit target detected. Add a resolution like &quot;Save 500 SUI&quot; or &quot;Deposit 250 SUI&quot; to audit incoming wealth accumulation on-chain.
+                          </p>
+                          <div className="flex items-center justify-between text-[10px] font-mono text-[#52525B] pt-1">
+                            <span>Audited by Tatum Sui Gateway</span>
+                            <span>Current: {inflowProgress.current.toFixed(2)} SUI</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* Walrus Memory Ledger: Inscribed Events */}
                 <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-3.5">
