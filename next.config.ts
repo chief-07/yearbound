@@ -28,6 +28,7 @@ try {
 
 const nextConfig: NextConfig = {
   /* config options here */
+  serverExternalPackages: ['@mysten-incubation/memwal', '@mysten/seal'],
   cacheComponents: true,
   partialPrefetching: true,
   allowedDevOrigins: [
