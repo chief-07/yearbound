@@ -2411,7 +2411,7 @@ export default function YearboundApp() {
                 <ArrowRight size={16} />
               </button>
               <span className="text-[11px] font-mono text-white/35 text-center tracking-tight mt-2.5">
-                The penalties are executed on-chain via Tatum
+                Penalties are enforced and locked on-chain via x402 vault
               </span>
             </div>
           </div>
@@ -2586,7 +2586,7 @@ export default function YearboundApp() {
                 )}
               </button>
               <span className="text-[11px] font-mono text-white/35 text-center tracking-tight mt-2.5">
-                All resolutions are encrypted and stored on Walrus
+                Account activities and transfers are monitored on-chain via Tatum
               </span>
             </div>
           </div>
