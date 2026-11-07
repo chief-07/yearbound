@@ -2586,7 +2586,7 @@ export default function YearboundApp() {
                 )}
               </button>
               <span className="text-[11px] font-mono text-white/35 text-center tracking-tight mt-2.5">
-                Account activities and transfers are monitored on-chain via Tatum
+                Account activity is monitored on-chain via Tatum
               </span>
             </div>
           </div>
