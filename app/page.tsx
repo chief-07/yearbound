@@ -1785,26 +1785,26 @@ export default function YearboundApp() {
                 carouselIndex === 0 ? "opacity-100" : "opacity-0"
               }`}
             >
-              {/* Main Artwork pushed higher so walrus on bench sits well above the CTAs */}
-              <div className="absolute top-0 left-0 right-0 bottom-[210px] sm:bottom-[225px] overflow-hidden">
+              {/* Layer 1: Stretched blurred backdrop behind the image extending seamlessly to the very bottom */}
+              <div className="absolute -inset-4 overflow-hidden pointer-events-none">
+                <img
+                  src="/assets/onboarding/walrus_bench.png"
+                  alt=""
+                  className="w-full h-full object-cover filter blur-3xl scale-105 opacity-80 select-none"
+                  draggable={false}
+                />
+              </div>
+
+              {/* Layer 2: Crisp, sharp artwork sitting on top, brought close above the CTA buttons */}
+              <div className="absolute top-0 left-0 right-0 bottom-[165px] sm:bottom-[175px] overflow-hidden">
                 <img
                   src="/assets/onboarding/walrus_bench.png"
                   alt="Walrus holding sparkler under starry midnight sky"
                   className="w-full h-full object-cover object-bottom select-none"
                   draggable={false}
                 />
-              </div>
-
-              {/* Flipped blurred bottom extension for the lower gap behind controls */}
-              <div className="absolute bottom-0 left-0 right-0 h-[215px] sm:h-[230px] overflow-hidden">
-                <div className="absolute -inset-6 overflow-hidden">
-                  <img
-                    src="/assets/onboarding/walrus_bench.png"
-                    alt=""
-                    className="w-full h-full object-cover object-bottom scale-y-[-1] filter blur-xl brightness-125 select-none"
-                    draggable={false}
-                  />
-                </div>
+                {/* Subtle soft gradient feather only at the very bottom edge into the stretched blur */}
+                <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-b from-transparent to-black/30 pointer-events-none" />
               </div>
             </div>
 
@@ -1820,7 +1820,7 @@ export default function YearboundApp() {
             {/* Middle Space (Slide 0 has no square box; Slide 1 & 2 have subtle context cards) */}
             <div className="relative z-10 flex-1 px-7 py-3 flex flex-col justify-center min-h-0 pointer-events-none">
               {carouselIndex !== 0 && (
-                <div className="w-full h-full min-h-[240px] max-h-[340px] bg-[#0A0A0C]/90 backdrop-blur-md border border-[#222226] rounded-2xl flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in-95 duration-300">
+                <div className="w-full h-full min-h-[240px] max-h-[340px] bg-[#0A0A0C]/90 backdrop-blur-md border border-[#222226] rounded-3xl flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in-95 duration-300">
                   <div className="w-12 h-12 rounded-full bg-[#18181C] border border-[#27272A] flex items-center justify-center text-[#ebaf64] mb-3 shadow-inner">
                     {carouselIndex === 1 ? (
                       <Shield size={22} className="text-[#ebaf64]" />
@@ -1837,7 +1837,7 @@ export default function YearboundApp() {
               )}
             </div>
 
-            {/* Bottom Actions: Center Progress Ring + CTAs */}
+            {/* Bottom Actions: Center Progress Ring + Fully Rounded Liquid Glass CTAs */}
             <div className="relative z-10 p-7 pt-2 pb-8 sm:pb-9 shrink-0 flex flex-col items-center gap-3">
               {/* Progress Indicator Ring (Centered directly above Create a pact button, no numbers inside) */}
               <div
@@ -1872,30 +1872,26 @@ export default function YearboundApp() {
                 </svg>
               </div>
 
-              {/* Primary CTA: Create a pact (Background is blurred continuation of artwork bottom, black text) */}
+              {/* Primary CTA: Create a pact (Clean Clear Liquid Glass Pill: borderless, rounded-full, mostly transparent, specular rim) */}
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="relative w-full py-4 px-6 rounded-2xl overflow-hidden border border-[#ebaf64] hover:border-white transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98] shadow-lg shadow-black/60 group"
+                className="relative w-full py-4 px-6 rounded-full overflow-hidden transition-all duration-300 flex items-center justify-center gap-2 active:scale-[0.98] group shadow-[0_8px_32px_rgba(0,0,0,0.4),inset_0_1px_1px_rgba(255,255,255,0.25)] bg-white/[0.08] hover:bg-white/[0.14] backdrop-blur-2xl border-0"
               >
-                <div className="absolute -inset-4 -z-10 overflow-hidden pointer-events-none">
-                  <img
-                    src="/assets/onboarding/walrus_bench.png"
-                    alt=""
-                    className="w-full h-full object-cover object-bottom scale-y-[-1] filter blur-md brightness-135 select-none"
-                    draggable={false}
-                  />
-                  <div className="absolute inset-0 bg-[#ebaf64]/30 group-hover:bg-[#ebaf64]/40 transition-colors" />
-                </div>
-                <span className="relative z-10 text-black font-bold text-sm tracking-wide">Create a pact</span>
-                <ArrowRight size={16} className="relative z-10 text-black stroke-[2.5]" />
+                {/* Specular highlight light edge */}
+                <div className="absolute inset-x-8 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/40 to-transparent pointer-events-none" />
+
+                <span className="relative z-10 text-[#ebaf64] font-semibold text-sm tracking-wide drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                  Create a pact
+                </span>
+                <ArrowRight size={16} className="relative z-10 text-[#ebaf64] stroke-[2.2] group-hover:translate-x-0.5 transition-transform" />
               </button>
 
-              {/* Secondary CTA: Sign in to existing (#ebaf64 outline and text) */}
+              {/* Secondary CTA: Sign in to existing (Liquid Glass Pill: rounded-full, subtle outline & #ebaf64 text) */}
               <button
                 type="button"
                 onClick={() => setStep(0)}
-                className="w-full py-3.5 px-6 rounded-2xl bg-black/60 backdrop-blur-md border border-[#ebaf64] text-[#ebaf64] hover:bg-[#ebaf64]/10 font-medium text-xs transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98]"
+                className="w-full py-3.5 px-6 rounded-full bg-black/30 backdrop-blur-xl border border-[#ebaf64]/30 hover:border-[#ebaf64]/60 hover:bg-[#ebaf64]/10 text-[#ebaf64] font-medium text-xs transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98]"
               >
                 <span>Sign in to existing pact</span>
               </button>
