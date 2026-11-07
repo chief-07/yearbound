@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Plus,
   Trash2,
@@ -130,18 +130,28 @@ const AMOUNT_PRESETS = [5, 10, 15, 25];
 const QUICK_MEMO_PICKS = [
   {
     label: "Late-night food delivery",
-    text: "Late-night takeout food delivery",
+    text: "Late-night UberEats order at 1:30 AM",
     isFood: true,
   },
   {
-    label: "Morning gym & protein shake",
-    text: "Monthly gym membership and post-workout protein",
-    isFood: false,
+    label: "Pack of cigarettes at corner store",
+    text: "Pack of smokes and lighter at the 7-Eleven",
+    isCigarettes: true,
   },
   {
-    label: "Discretionary transfer to ex-partner",
-    text: "Impulse transfer to forbidden recipient 0xSarah",
+    label: "Sending money to Sarah (Ex)",
+    text: "Late-night apology transfer to Sarah (0x7a8b...9c01)",
     isEx: true,
+  },
+  {
+    label: "Weekend parlay on DraftKings",
+    text: "Deposit for Sunday NFL parlay on DraftKings",
+    isBetting: true,
+  },
+  {
+    label: "Grocery shopping (Compliant)",
+    text: "Weekly groceries, produce, and meal prep ingredients",
+    isCompliant: true,
   },
 ];
 
@@ -175,8 +185,18 @@ export default function YearboundApp() {
   }, [step]);
 
   const [activeTab, setActiveTab] = useState<NavTab>("home");
-  const [expandedRuleId, setExpandedRuleId] = useState<string | null>("1");
+  const [expandedRuleId, setExpandedRuleId] = useState<string | null>(null);
   const [scrollContainerHeight, setScrollContainerHeight] = useState<number>(680);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (expandedRuleId && titleInputRef.current) {
+      setTimeout(() => {
+        titleInputRef.current?.focus();
+        titleInputRef.current?.select();
+      }, 60);
+    }
+  }, [expandedRuleId]);
 
   const scrollContainerRef = React.useCallback((node: HTMLDivElement | null) => {
     if (node !== null) {
@@ -202,21 +222,45 @@ export default function YearboundApp() {
     );
   }, []);
 
-  // Screen 1: Rules
+  // Screen 1: Rules (Prepopulated with authentic, human New Year's resolutions, 10 SUI default penalty)
   const [rules, setRules] = useState<RuleItem[]>([
     {
       id: "1",
-      title: "No Late-Night Takeout",
-      condition: "Any food delivery ordered between 10 PM and 5 AM",
-      whyItMatters: "",
+      title: "Cut all ties with my ex",
+      condition: "Never send any money to Sarah / 0x7a8b...9c01, no matter how lonely I get late at night",
+      whyItMatters: "She moved on and I need to respect myself. Falling for late-night guilt texts always sets me back.",
       penalty: 10,
       breaches: 0,
     },
     {
       id: "2",
-      title: "Gym 4x Per Week",
-      condition: "Must log check-in before 9 AM on scheduled mornings",
-      whyItMatters: "",
+      title: "Quit smoking for good",
+      condition: "No buying cigarettes, vapes, or pods at the corner store or gas stations",
+      whyItMatters: "I want to stop waking up coughing every morning and save money for my Japan trip.",
+      penalty: 10,
+      breaches: 0,
+    },
+    {
+      id: "3",
+      title: "Keep my impulse spending in check",
+      condition: "Keep non-essential shopping, clubbing, and random purchases under 150 SUI a month",
+      whyItMatters: "I'm tired of feeling broke by the 20th of every month with nothing left for my future.",
+      penalty: 10,
+      breaches: 0,
+    },
+    {
+      id: "4",
+      title: "Stop gambling on sports",
+      condition: "Zero deposits into DraftKings, FanDuel, Stake, or online casino apps",
+      whyItMatters: "Chasing losses ruined my mental health last year. The house always wins and I hate that gut-drop feeling.",
+      penalty: 10,
+      breaches: 0,
+    },
+    {
+      id: "5",
+      title: "No more late night takeout",
+      condition: "No ordering DoorDash or UberEats past 10 PM on weeknights",
+      whyItMatters: "I wake up feeling gross, sluggish, and $40 poorer every single time.",
       penalty: 10,
       breaches: 0,
     },
@@ -605,16 +649,6 @@ export default function YearboundApp() {
   };
 
   const handleCloseActiveRule = () => {
-    if (!expandedRuleId) return;
-    const current = rules.find((r) => r.id === expandedRuleId);
-    if (!current) {
-      setExpandedRuleId(null);
-      return;
-    }
-    if (!current.title.trim() || !current.condition.trim()) {
-      triggerSnackbar("Compulsory field missing", "Both title and condition are required");
-      return;
-    }
     setExpandedRuleId(null);
   };
 
@@ -644,6 +678,12 @@ export default function YearboundApp() {
   const isStep1Valid =
     rules.length > 0 &&
     rules.every((r) => r.title.trim().length > 0 && r.condition.trim().length > 0);
+
+  const isStep2Valid =
+    rules.length > 0 &&
+    rules
+      .filter((r) => r.title.trim().length > 0)
+      .every((r) => typeof r.penalty === "number" && r.penalty > 0);
 
   const triggerSnackbar = (title: string, subtitle?: string, blobId?: string) => {
     setSnackbarTitle(title);
@@ -1687,10 +1727,23 @@ export default function YearboundApp() {
       <div className={`relative w-full max-w-[420px] h-full md:h-[860px] md:max-h-[92vh] bg-[#000000] md:border md:border-[#222226] md:rounded-[40px] flex flex-col justify-between overflow-hidden shadow-2xl transition-all duration-300 ${
         isDegradedMode ? "filter grayscale contrast-90" : ""
       }`}>
+        {/* Global App Background Image (for Sign In & the rest of the app: pure starry sky, no dark overlay) */}
+        {step >= 0 && (
+          <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden select-none">
+            <img
+              src="/assets/bg/starry_sky.png"
+              alt="Starry Night Sky"
+              className="w-full h-full object-cover object-center select-none"
+              draggable={false}
+            />
+          </div>
+        )}
+
         {/* ====================================================================
             TOP SYSTEM BAR: TOTAL RECALL vs DEGRADED LEGACY TOGGLE
+            (Visible ONLY inside the active in-app dashboard, hidden on all onboarding screens)
             ==================================================================== */}
-        {step !== -1 && (
+        {step === 4 && (
           <>
             <div
               className={`w-full px-4 py-2 border-b transition-colors duration-200 flex items-center justify-between shrink-0 z-30 ${
@@ -1781,36 +1834,43 @@ export default function YearboundApp() {
           >
             {/* Background image for slide 0 ("Keep your financial resolve all year round with Yearbound") */}
             <div
-              className={`absolute inset-0 z-0 pointer-events-none overflow-hidden transition-opacity duration-700 ease-in-out ${
+              className={`absolute inset-0 z-0 pointer-events-none overflow-hidden transition-opacity duration-300 ease-out ${
                 carouselIndex === 0 ? "opacity-100" : "opacity-0"
               }`}
             >
-              {/* Layer 1: Stretched blurred backdrop behind the image extending seamlessly to the very bottom */}
-              <div className="absolute -inset-4 overflow-hidden pointer-events-none">
+              {/* Layer 1: Ambient blurred image below continuing through the fade */}
+              <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 <img
                   src="/assets/onboarding/walrus_bench.png"
                   alt=""
-                  className="w-full h-full object-cover filter blur-3xl scale-105 opacity-80 select-none"
+                  className="w-full h-full object-cover object-bottom filter blur-2xl opacity-60 select-none"
                   draggable={false}
                 />
               </div>
 
-              {/* Layer 2: Crisp, sharp artwork sitting on top, brought close above the CTA buttons */}
-              <div className="absolute top-0 left-0 right-0 bottom-[165px] sm:bottom-[175px] overflow-hidden">
+              {/* Layer 2: Crisp artwork: kept exactly where it is, fading smoothly at the bottom into what is in the back */}
+              <div 
+                className="absolute top-0 left-0 right-0 bottom-[145px] sm:bottom-[155px] overflow-hidden pointer-events-none"
+                style={{
+                  WebkitMaskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 80%, rgba(0,0,0,0) 100%)",
+                  maskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 80%, rgba(0,0,0,0) 100%)",
+                }}
+              >
                 <img
                   src="/assets/onboarding/walrus_bench.png"
                   alt="Walrus holding sparkler under starry midnight sky"
                   className="w-full h-full object-cover object-bottom select-none"
                   draggable={false}
                 />
-                {/* Subtle soft gradient feather only at the very bottom edge into the stretched blur */}
-                <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-b from-transparent to-black/30 pointer-events-none" />
               </div>
             </div>
 
-            {/* Top Bar: Header Title (Editorial typography in #ebaf64 with wider letter spacing) */}
+            {/* Permanent Dark Atmospheric Floor: Always fully dimmed instantly, never flashes or lags */}
+            <div className="absolute inset-x-0 bottom-0 h-[190px] z-[5] pointer-events-none bg-gradient-to-b from-transparent via-black/70 to-black backdrop-blur-md" />
+
+            {/* Top Bar: Header Title (Editorial typography in #ebaf64 with wider letter spacing and relaxed line height) */}
             <div className="relative z-10 pt-10 sm:pt-12 px-7 pb-4 flex flex-col shrink-0">
-              <div className="text-[30px] sm:text-[34px] font-bold tracking-[0.02em] leading-[1.12] text-[#ebaf64] transition-all duration-300 drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)]">
+              <div className="text-[30px] sm:text-[34px] font-bold tracking-[0.02em] leading-[1.24] text-[#ebaf64] transition-all duration-300 drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)]">
                 {carouselIndex === 0 && "Keep your financial resolve all year round with Yearbound"}
                 {carouselIndex === 1 && "Wally agent uses Walrus memory to keep you to your resolutions"}
                 {carouselIndex === 2 && "Penalties are locked in a x402 vault using Tatum"}
@@ -1872,26 +1932,23 @@ export default function YearboundApp() {
                 </svg>
               </div>
 
-              {/* Primary CTA: Create a pact (Clean Clear Liquid Glass Pill: borderless, rounded-full, mostly transparent, specular rim) */}
+              {/* Primary CTA: Create a pact (Thin outline, background displays the blurred image underneath) */}
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="relative w-full py-4 px-6 rounded-full overflow-hidden transition-all duration-300 flex items-center justify-center gap-2 active:scale-[0.98] group shadow-[0_8px_32px_rgba(0,0,0,0.4),inset_0_1px_1px_rgba(255,255,255,0.25)] bg-white/[0.08] hover:bg-white/[0.14] backdrop-blur-2xl border-0"
+                className="relative w-full py-4 px-6 rounded-full overflow-hidden transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98] group bg-black/10 hover:bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 hover:border-[#ebaf64]/50 shadow-[0_8px_32px_rgba(0,0,0,0.4)]"
               >
-                {/* Specular highlight light edge */}
-                <div className="absolute inset-x-8 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/40 to-transparent pointer-events-none" />
-
-                <span className="relative z-10 text-[#ebaf64] font-semibold text-sm tracking-wide drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                <span className="relative z-10 text-[#ebaf64] font-semibold text-sm tracking-wide drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
                   Create a pact
                 </span>
                 <ArrowRight size={16} className="relative z-10 text-[#ebaf64] stroke-[2.2] group-hover:translate-x-0.5 transition-transform" />
               </button>
 
-              {/* Secondary CTA: Sign in to existing (Liquid Glass Pill: rounded-full, subtle outline & #ebaf64 text) */}
+              {/* Secondary CTA: Sign in to existing (Matching Dark Glass Pill) */}
               <button
                 type="button"
                 onClick={() => setStep(0)}
-                className="w-full py-3.5 px-6 rounded-full bg-black/30 backdrop-blur-xl border border-[#ebaf64]/30 hover:border-[#ebaf64]/60 hover:bg-[#ebaf64]/10 text-[#ebaf64] font-medium text-xs transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98]"
+                className="w-full py-3.5 px-6 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-xl border border-white/10 hover:border-[#ebaf64]/40 text-[#ebaf64]/80 hover:text-[#ebaf64] font-medium text-xs transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98]"
               >
                 <span>Sign in to existing pact</span>
               </button>
@@ -1903,97 +1960,81 @@ export default function YearboundApp() {
             SCREEN 0: SIGN IN & RESTORE MEMORY GATEWAY
             ================================================================== */}
         {step === 0 && (
-          <div className="flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-200">
-            <div className="pt-6 sm:pt-8 px-7 pb-3 flex flex-col gap-1.5 shrink-0">
+          <div className="relative z-10 flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-200">
+            {/* Header */}
+            <div className="pt-8 sm:pt-10 px-7 pb-4 flex flex-col gap-2 shrink-0">
               <button
                 type="button"
                 onClick={() => setStep(-1)}
-                className="self-start text-[#71717A] hover:text-white flex items-center gap-1.5 text-xs font-medium transition-colors active:scale-95"
+                className="self-start text-[#ebaf64]/75 hover:text-[#ebaf64] flex items-center gap-1.5 text-xs font-medium transition-colors active:scale-95"
               >
                 <ArrowLeft size={14} />
                 <span>Back</span>
               </button>
-              <div className="text-[28px] sm:text-[32px] font-semibold tracking-[-0.02em] leading-tight text-white">
+              <div className="text-[30px] sm:text-[34px] font-bold tracking-[0.02em] leading-tight text-[#ebaf64]">
                 Sign in
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-7 py-2 flex flex-col gap-3.5 pb-4 overscroll-contain">
+            {/* Main Action Cards (Dark Blur Glass, text in #ebaf64, concise & clean) */}
+            <div className="flex-1 overflow-y-auto px-7 py-2 flex flex-col gap-4 pb-4 overscroll-contain">
               {/* Option 1: Connect Sui Wallet */}
               <div
                 onClick={handleConnectExtensionAndEnter}
-                className="bg-[#0A0A0C] rounded-2xl p-5 flex flex-col gap-3 cursor-pointer transition-all duration-200 active:scale-[0.99] border border-[#222226] hover:border-[#3F3F46]"
+                className="bg-black/20 backdrop-blur-2xl rounded-3xl p-5 sm:p-6 flex flex-col gap-3 cursor-pointer transition-all duration-200 active:scale-[0.99] border border-[#ebaf64]/25 hover:border-[#ebaf64]/50 shadow-[0_8px_32px_rgba(0,0,0,0.4)] group"
               >
                 <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-base font-semibold text-white tracking-[-0.01em]">
-                      Connect wallet
-                    </div>
-                    <span className="text-[10px] font-mono text-[#71717A] uppercase tracking-wider">
-                      {detectedExtension ? detectedExtension.name : "Browser Extension"}
-                    </span>
+                  <div className="text-base font-semibold text-[#ebaf64] tracking-[-0.01em]">
+                    Connect wallet
                   </div>
-                  <div className="text-xs font-mono text-[#A1A1AA] flex items-center gap-1">
+                  <div className="text-xs font-mono text-[#ebaf64]/80 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
                     <span>{isConnectingExtension ? "Connecting..." : "Connect"}</span>
                     <ArrowRight size={14} />
                   </div>
                 </div>
 
-                <p className="text-xs text-[#71717A] leading-relaxed">
-                  Link an installed Sui extension wallet to verify your identity and restore past commitments from Walrus memory.
-                </p>
-
                 {linkedAddress && (
-                  <div className="pt-3 border-t border-[#18181C] flex items-center justify-between text-xs font-mono text-[#A1A1AA]">
+                  <div className="pt-2 border-t border-[#ebaf64]/15 flex items-center justify-between text-xs font-mono text-[#ebaf64]/80">
                     <span>Connected</span>
                     <span>{linkedAddress.slice(0, 6)}...{linkedAddress.slice(-4)}</span>
                   </div>
                 )}
               </div>
 
-              {/* Option 2: Restore from Walrus with Address or Blob ID */}
+              {/* Option 2: Restore from Walrus (Dark Blur, no divider line in extended state) */}
               <div
                 onClick={() => setShowRestoreInput((prev) => !prev)}
-                className={`bg-[#0A0A0C] rounded-2xl p-5 flex flex-col gap-3 cursor-pointer transition-all duration-200 border ${
-                  showRestoreInput ? "border-white/40" : "border-[#222226] hover:border-[#3F3F46]"
+                className={`bg-black/20 backdrop-blur-2xl rounded-3xl p-5 sm:p-6 flex flex-col gap-3.5 cursor-pointer transition-all duration-200 border shadow-[0_8px_32px_rgba(0,0,0,0.4)] ${
+                  showRestoreInput ? "border-[#ebaf64]/50" : "border-[#ebaf64]/25 hover:border-[#ebaf64]/50"
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-base font-semibold text-white tracking-[-0.01em]">
-                      Restore from Walrus
-                    </div>
-                    <span className="text-[10px] font-mono text-[#71717A] uppercase tracking-wider">
-                      Decentralized State Recall
-                    </span>
+                  <div className="text-base font-semibold text-[#ebaf64] tracking-[-0.01em]">
+                    Restore from Walrus
                   </div>
-                  <div className="text-xs font-mono text-[#A1A1AA] flex items-center gap-1">
+                  <div className="text-xs font-mono text-[#ebaf64]/80 flex items-center gap-1">
                     <span>{showRestoreInput ? "Close" : "Enter ID"}</span>
                     {showRestoreInput ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                   </div>
                 </div>
 
-                <p className="text-xs text-[#71717A] leading-relaxed">
-                  Enter your Sui address or Genesis Walrus Blob ID to reconstruct your resolutions, streaks, and infractions on this device.
-                </p>
-
                 {showRestoreInput && (
                   <div
                     onClick={(e) => e.stopPropagation()}
-                    className="flex flex-col gap-2.5 pt-3 border-t border-[#18181C]"
+                    className="flex flex-col gap-3 pt-1 animate-in fade-in"
                   >
                     <input
                       type="text"
                       placeholder="0x... or blob_..."
                       value={restoreInput}
                       onChange={(e) => setRestoreInput(e.target.value)}
-                      className="w-full bg-[#131316] border border-[#222226] rounded-xl px-3.5 py-2.5 text-xs font-mono text-white placeholder-[#52525B] focus:outline-none focus:border-[#52525B]"
+                      className="w-full bg-black/30 border border-[#ebaf64]/30 rounded-2xl px-4 py-3 text-xs font-mono text-white placeholder-white/30 focus:outline-none focus:border-[#ebaf64]"
                     />
                     <button
                       type="button"
                       onClick={handleDirectRestore}
                       disabled={isRestoring || !restoreInput.trim()}
-                      className="py-2.5 px-4 rounded-xl bg-white text-black font-semibold text-xs hover:bg-[#E4E4E7] transition-all disabled:opacity-40 flex items-center justify-center gap-1.5 active:scale-[0.98]"
+                      className="py-3 px-4 rounded-full bg-black/40 hover:bg-black/60 border border-[#ebaf64]/40 text-[#ebaf64] font-semibold text-xs transition-all disabled:opacity-40 flex items-center justify-center gap-1.5 active:scale-[0.98] shadow-md backdrop-blur-xl"
                     >
                       <span>{isRestoring ? "Recalling from Walrus..." : "Restore Memory"}</span>
                       <ArrowRight size={14} />
@@ -2001,56 +2042,17 @@ export default function YearboundApp() {
                   </div>
                 )}
               </div>
-
-              {/* Option 3: Demo Sandbox */}
-              <div
-                onClick={() => {
-                  setAccountType("demo");
-                  const activeDemo = demoAddress || DEMO_SUI_ADDRESS;
-                  hydrateFromWalrus(activeDemo);
-                  refreshLiveBalance(activeDemo, "demo");
-                  setStep(4);
-                  setActiveTab("home");
-                }}
-                className="bg-[#0A0A0C] rounded-2xl p-5 flex flex-col gap-3 cursor-pointer transition-all duration-200 active:scale-[0.99] border border-[#222226] hover:border-[#3F3F46]"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-base font-semibold text-white tracking-[-0.01em]">
-                      Demo sandbox
-                    </div>
-                    <span className="text-[10px] font-mono text-[#71717A] uppercase tracking-wider">
-                      Sui Testnet · Mainnet Walrus
-                    </span>
-                  </div>
-                  <div className="text-xs font-mono text-[#A1A1AA] flex items-center gap-1">
-                    <span>Explore</span>
-                    <ArrowRight size={14} />
-                  </div>
-                </div>
-
-                <p className="text-xs text-[#71717A] leading-relaxed">
-                  Live Sui Testnet sandbox via Tatum Gateway with permanent Mainnet Walrus memory. Real testnet PTBs, vault locks, and memory audit.
-                </p>
-
-                <div className="pt-3 border-t border-[#18181C] flex items-center justify-between text-xs font-mono text-[#71717A]">
-                  <span>{(demoAddress || DEMO_SUI_ADDRESS).slice(0, 6)}...{(demoAddress || DEMO_SUI_ADDRESS).slice(-4)}</span>
-                  <span className="text-white">
-                    {liveOnChainBalanceSui !== null && accountType === "demo" ? `${liveOnChainBalanceSui.toFixed(2)} SUI (Testnet)` : "150.00 SUI (Testnet)"}
-                  </span>
-                </div>
-              </div>
             </div>
 
-            {/* Bottom: Start New Pact Action */}
-            <div className="p-7 pt-3 pb-8 sm:pb-9 shrink-0 flex flex-col gap-3 border-t border-[#18181C]">
+            {/* Bottom: Or create a new pact */}
+            <div className="p-7 pt-2 pb-8 sm:pb-9 shrink-0 flex flex-col items-center">
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="w-full py-4 px-6 rounded-2xl bg-white text-black font-semibold text-sm hover:bg-[#E4E4E7] transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98] shadow-md"
+                className="w-full py-3.5 px-6 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-xl border border-[#ebaf64]/30 hover:border-[#ebaf64]/60 text-[#ebaf64] font-medium text-xs transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98]"
               >
-                <span>Create a new pact</span>
-                <ArrowRight size={16} />
+                <span>Or create a new pact</span>
+                <ArrowRight size={14} />
               </button>
             </div>
           </div>
@@ -2060,18 +2062,28 @@ export default function YearboundApp() {
             SCREEN 1: RESOLUTION BUILDER (Accordion - Single Expanded Rule)
             ================================================================== */}
         {step === 1 && (
-          <div className="flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-200">
-            <div className="pt-5 sm:pt-7 px-5 sm:px-7 pb-2 shrink-0 flex flex-col gap-1.5">
+          <div
+            onClick={handleCloseActiveRule}
+            className="relative z-10 flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-200 cursor-default"
+          >
+            {/* Header */}
+            <div
+              onClick={handleCloseActiveRule}
+              className="pt-8 sm:pt-10 px-7 pb-4 shrink-0 flex flex-col gap-2"
+            >
               <button
                 type="button"
-                onClick={() => setStep(-1)}
-                className="self-start text-[#71717A] hover:text-white flex items-center gap-1.5 text-xs font-medium transition-colors active:scale-95"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setStep(-1);
+                }}
+                className="self-start text-[#ebaf64]/75 hover:text-[#ebaf64] flex items-center gap-1.5 text-xs font-medium transition-colors active:scale-95"
               >
                 <ArrowLeft size={14} />
                 <span>Back</span>
               </button>
-              <div className="text-[26px] sm:text-[32px] font-semibold tracking-[-0.02em] leading-tight text-white">
-                Write your resolutions
+              <div className="text-[28px] sm:text-[32px] font-bold tracking-[0.02em] leading-tight text-[#ebaf64]">
+                My {new Date().getFullYear()} Resolutions
               </div>
             </div>
 
@@ -2081,35 +2093,29 @@ export default function YearboundApp() {
               className="flex-1 overflow-y-auto px-5 sm:px-7 py-2 flex flex-col pb-4 overscroll-contain cursor-default"
             >
               {/* STACK OF MINIMIZED RESOLUTIONS AT TOP */}
-              <div className="flex flex-col gap-2.5 transition-all duration-300 ease-out">
+              <div className="flex flex-col gap-4.5 transition-all duration-300 ease-out">
                 {rules.map((rule, index) => {
-                  if (rule.id === expandedRuleId) return null; // rendered in the active editor below
+                  const isCurrentExpanded = rule.id === expandedRuleId;
+                  if (isCurrentExpanded) return null; // rendered in the active editor below
                   return (
                     <div
                       key={rule.id}
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (expandedRuleId) {
-                          const current = rules.find((r) => r.id === expandedRuleId);
-                          if (current && (!current.title.trim() || !current.condition.trim())) {
-                            triggerSnackbar("Compulsory field missing", "Both title and condition are required");
-                            return;
-                          }
-                        }
                         setExpandedRuleId(rule.id);
                       }}
-                      className="bg-[#0A0A0C] border border-[#222226] hover:border-[#3F3F46] rounded-2xl px-4 py-3.5 flex items-center justify-between cursor-pointer transition-all duration-300 ease-out active:scale-[0.99] animate-in fade-in slide-in-from-bottom-2"
+                      className="bg-black/20 backdrop-blur-2xl border-x border-b border-t-0 border-[#ebaf64]/35 hover:border-[#ebaf64]/60 rounded-b-3xl rounded-t-none px-5 py-2.5 flex items-center justify-between cursor-pointer transition-all duration-300 ease-out active:scale-[0.99] shadow-md"
                     >
                       <div className="flex items-center gap-3.5 min-w-0">
-                        <span className="text-sm font-mono font-medium text-[#71717A] shrink-0">
+                        <span className="text-sm font-mono font-medium text-[#ebaf64] shrink-0">
                           0{index + 1}
                         </span>
-                        <span className={`text-sm truncate ${rule.title ? "text-white font-medium" : "text-[#52525B]"}`}>
+                        <span className={`text-sm truncate ${rule.title ? "text-white font-medium" : "text-[#71717A]"}`}>
                           {rule.title || "Untitled resolution"}
                         </span>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-[10px] text-[#71717A] uppercase tracking-wider">Edit</span>
+                        <span className="text-[10px] text-[#ebaf64]/80 uppercase tracking-wider font-mono">Edit</span>
                         {rules.length > 1 && (
                           <button
                             type="button"
@@ -2117,7 +2123,7 @@ export default function YearboundApp() {
                               e.stopPropagation();
                               removeRule(rule.id);
                             }}
-                            className="text-[#52525B] hover:text-[#EF4444] p-1 transition-colors"
+                            className="text-[#71717A] hover:text-[#EF4444] p-1 transition-colors"
                             title="Remove resolution"
                           >
                             <Trash2 size={12} />
@@ -2136,15 +2142,15 @@ export default function YearboundApp() {
 
                 return (
                   <div className="flex flex-col items-center transition-all duration-200 ease-out w-full mt-3">
-                    {/* Active Expanded Resolution Card */}
+                    {/* Active Expanded Resolution Card (Dark Glass) */}
                     {expandedRule && (
                       <div
                         key={expandedRule.id}
                         onClick={(e) => e.stopPropagation()}
-                        className="w-full bg-[#0A0A0C] border border-[#3F3F46] rounded-2xl p-4 flex flex-col gap-3 relative focus-within:border-white transition-all duration-300 ease-out shadow-xl mb-4 animate-in fade-in zoom-in-95 cursor-auto"
+                        className="w-full bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/35 rounded-3xl p-5 sm:p-6 flex flex-col gap-4 relative focus-within:border-[#ebaf64]/70 transition-all duration-300 ease-out shadow-[0_8px_32px_rgba(0,0,0,0.4)] mb-4 animate-in fade-in zoom-in-95 cursor-auto"
                       >
                         <div className="flex items-center justify-between">
-                          <span className="text-sm font-mono font-medium text-[#71717A] tracking-wider">
+                          <span className="text-sm font-mono font-medium text-[#ebaf64] tracking-wider">
                             0{expandedIndex + 1}
                           </span>
                           <div className="flex items-center gap-2">
@@ -2154,44 +2160,43 @@ export default function YearboundApp() {
                                 e.stopPropagation();
                                 handleCloseActiveRule();
                               }}
-                              className={`text-xs font-bold tracking-wider transition-colors duration-150 py-1 px-2.5 rounded-lg active:scale-95 ${
-                                expandedRule.title.trim() && expandedRule.condition.trim()
-                                  ? "text-white bg-[#1F1F23] hover:bg-[#27272A] cursor-pointer"
-                                  : "text-[#71717A] bg-[#141416] hover:text-white cursor-pointer"
-                              }`}
+                              className="text-[#ebaf64] bg-black/30 hover:bg-black/50 border border-[#ebaf64]/40 text-xs font-semibold tracking-wider transition-all duration-150 py-1 px-3 rounded-xl active:scale-95 cursor-pointer backdrop-blur-xl"
                             >
                               Done
                             </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                removeRule(expandedRule.id);
-                              }}
-                              className="text-[#71717A] hover:text-[#EF4444] p-1.5 transition-colors active:scale-95 rounded-lg hover:bg-[#18181B] cursor-pointer"
-                              title={rules.length > 1 ? "Remove resolution" : "Clear fields"}
-                            >
-                              <Trash2 size={13} />
-                            </button>
+                            {rules.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  removeRule(expandedRule.id);
+                                }}
+                                className="text-[#71717A] hover:text-[#EF4444] p-1.5 transition-colors active:scale-95 rounded-lg hover:bg-black/40 cursor-pointer"
+                                title="Remove resolution"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            )}
                           </div>
                         </div>
 
                         <div className="flex flex-col gap-1.5">
-                          <label className="text-[11px] font-medium text-[#A1A1AA]">
+                          <label className="text-[11px] font-medium text-[#ebaf64]/80">
                             Title
                           </label>
                           <input
+                            ref={titleInputRef}
                             type="text"
                             value={expandedRule.title}
                             onChange={(e) => updateRule(expandedRule.id, "title", e.target.value)}
-                            placeholder="e.g. No Late-Night Takeout"
-                            className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-[#52525B] outline-none focus:border-white transition-colors"
+                            placeholder="e.g. No more late night takeout"
+                            className="w-full bg-black/30 border border-[#ebaf64]/30 rounded-2xl px-4 py-2.5 text-sm text-white placeholder-white/30 outline-none focus:border-[#ebaf64] transition-colors"
                             autoFocus
                           />
                         </div>
 
                         <div className="flex flex-col gap-1.5">
-                          <label className="text-[11px] font-medium text-[#A1A1AA]">
+                          <label className="text-[11px] font-medium text-[#ebaf64]/80">
                             Condition
                           </label>
                           <textarea
@@ -2199,14 +2204,14 @@ export default function YearboundApp() {
                             onChange={(e) => updateRule(expandedRule.id, "condition", e.target.value)}
                             placeholder="e.g. Any food delivery ordered between 10 PM and 5 AM"
                             rows={2}
-                            className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-3.5 py-2 text-sm text-white placeholder-[#52525B] outline-none focus:border-white transition-colors resize-none leading-relaxed"
+                            className="w-full bg-black/30 border border-[#ebaf64]/30 rounded-2xl px-4 py-2.5 text-sm text-white placeholder-white/30 outline-none focus:border-[#ebaf64] transition-colors resize-none leading-relaxed"
                           />
                         </div>
 
                         {showMotivationIds[expandedRule.id] || Boolean(expandedRule.whyItMatters) ? (
                           <div className="flex flex-col gap-1.5 animate-in fade-in duration-200">
                             <div className="flex items-center justify-between">
-                              <label className="text-[11px] font-medium text-[#A1A1AA]">
+                              <label className="text-[11px] font-medium text-[#ebaf64]/80">
                                 Why this matters to you
                               </label>
                               <button
@@ -2225,8 +2230,7 @@ export default function YearboundApp() {
                               value={expandedRule.whyItMatters || ""}
                               onChange={(e) => updateRule(expandedRule.id, "whyItMatters", e.target.value)}
                               placeholder="e.g. Save $3,000 for Tokyo trip & fix sleep routine"
-                              className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-3.5 py-2 text-sm text-white placeholder-[#52525B] outline-none focus:border-white transition-colors"
-                              autoFocus
+                              className="w-full bg-black/30 border border-[#ebaf64]/30 rounded-2xl px-4 py-2.5 text-sm text-white placeholder-white/30 outline-none focus:border-[#ebaf64] transition-colors"
                             />
                           </div>
                         ) : (
@@ -2235,7 +2239,7 @@ export default function YearboundApp() {
                             onClick={() =>
                               setShowMotivationIds((prev) => ({ ...prev, [expandedRule.id]: true }))
                             }
-                            className="self-start text-[11px] font-mono text-[#71717A] hover:text-[#E4E4E7] flex items-center gap-1.5 transition-colors pt-0.5"
+                            className="self-start text-[11px] font-mono text-[#ebaf64]/70 hover:text-[#ebaf64] flex items-center gap-1.5 transition-colors pt-0.5"
                           >
                             <Plus size={11} />
                             <span>Add personal motivation</span>
@@ -2245,23 +2249,26 @@ export default function YearboundApp() {
                     )}
 
                     {/* Centered Add Button */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        addRule();
-                      }}
-                      className="py-3 px-6 border border-dashed border-[#2E2E33] hover:border-[#52525B] hover:bg-[#0A0A0C] text-[#A1A1AA] hover:text-white rounded-full flex items-center justify-center gap-2 text-xs font-medium transition-all duration-200 active:scale-95 shadow-sm"
-                    >
-                      <Plus size={14} />
-                      <span>Add another resolution</span>
-                    </button>
+                    <div className="w-full flex justify-center py-3">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          addRule();
+                        }}
+                        className="py-3 px-6 border border-dashed border-[#ebaf64]/35 hover:border-[#ebaf64]/60 bg-black/20 hover:bg-black/40 text-[#ebaf64] rounded-full flex items-center justify-center gap-2 text-xs font-medium backdrop-blur-2xl transition-all duration-200 active:scale-95 shadow-sm"
+                      >
+                        <Plus size={14} />
+                        <span>Add another resolution</span>
+                      </button>
+                    </div>
                   </div>
                 );
               })()}
             </div>
 
-            <div className="p-4 sm:p-6 bg-[#000000] shrink-0 border-t border-[#18181C]">
+            {/* Bottom Actions: Next Step CTA */}
+            <div className="p-5 sm:p-7 pt-2 pb-8 sm:pb-9 bg-transparent shrink-0 flex flex-col items-center">
               <button
                 type="button"
                 onClick={() => {
@@ -2273,13 +2280,16 @@ export default function YearboundApp() {
                 }}
                 className={`w-full py-4 px-6 rounded-full font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98] ${
                   isStep1Valid
-                    ? "bg-[#FFFFFF] text-[#000000] hover:bg-[#E4E4E7] cursor-pointer"
-                    : "bg-[#1C1C20] text-[#71717A] hover:bg-[#26262B] hover:text-[#A1A1AA] cursor-pointer"
+                    ? "bg-[#ebaf64] text-black hover:bg-[#f3bc75] shadow-lg shadow-black/60 cursor-pointer"
+                    : "bg-black/40 text-white/40 border border-white/10 cursor-not-allowed"
                 }`}
               >
                 <span>Next</span>
                 <ArrowRight size={16} />
               </button>
+              <span className="text-[11px] font-mono text-white/35 text-center tracking-tight mt-2.5">
+                All resolutions are encrypted and stored on Walrus
+              </span>
             </div>
           </div>
         )}
@@ -2288,31 +2298,33 @@ export default function YearboundApp() {
             SCREEN 2: PENALTY STAKES & ESCROW SETUP
             ================================================================== */}
         {step === 2 && (
-          <div className="flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-200">
-            <div className="pt-6 sm:pt-8 px-7 pb-3 flex flex-col gap-2.5">
+          <div className="relative z-10 flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-200">
+            {/* Header */}
+            <div className="pt-8 sm:pt-10 px-7 pb-4 shrink-0 flex flex-col gap-2">
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="self-start text-[#71717A] hover:text-white flex items-center gap-1.5 text-xs font-medium transition-colors active:scale-95"
+                className="self-start text-[#ebaf64]/75 hover:text-[#ebaf64] flex items-center gap-1.5 text-xs font-medium transition-colors active:scale-95"
               >
                 <ArrowLeft size={14} />
                 <span>Back</span>
               </button>
-              <div className="text-[30px] sm:text-[34px] font-semibold tracking-[-0.02em] leading-tight text-white">
+              <div className="text-[28px] sm:text-[32px] font-bold tracking-[0.02em] leading-tight text-[#ebaf64]">
                 Set your penalties
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-7 py-2 flex flex-col gap-3.5 pb-4 overscroll-contain">
+            {/* Scrollable Rules List & Vault Parameters */}
+            <div className="flex-1 min-h-0 overflow-y-auto px-5 sm:px-7 py-2 flex flex-col gap-4 pb-4 overscroll-contain">
               {rules
                 .filter((r) => r.title.trim().length > 0)
                 .map((rule, idx) => (
                   <div
                     key={rule.id}
-                    className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-3.5 transition-all duration-200"
+                    className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 flex flex-col gap-3.5 transition-all duration-200 shadow-md"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-mono font-medium text-[#71717A] tracking-wider">
+                      <span className="text-sm font-mono font-medium text-[#ebaf64] tracking-wider">
                         0{idx + 1}
                       </span>
                     </div>
@@ -2322,7 +2334,7 @@ export default function YearboundApp() {
                     </div>
 
                     <div className="flex flex-col gap-2 pt-0.5">
-                      <div className="text-[11px] font-medium text-[#71717A] uppercase tracking-wider">
+                      <div className="text-[11px] font-medium text-[#ebaf64]/70 uppercase tracking-wider">
                         Stake per breach
                       </div>
                       <div className="grid grid-cols-4 gap-2">
@@ -2332,11 +2344,11 @@ export default function YearboundApp() {
                             <button
                               key={amt}
                               type="button"
-                              onClick={() => updateRule(rule.id, "penalty", amt)}
+                              onClick={() => updateRule(rule.id, "penalty", isSelected ? 0 : amt)}
                               className={`py-2.5 text-center rounded-xl text-xs font-medium transition-all duration-150 active:scale-95 ${
                                 isSelected
-                                  ? "bg-[#FFFFFF] text-[#000000] font-semibold shadow-sm"
-                                  : "bg-[#131316] text-[#A1A1AA] border border-[#27272A] hover:border-[#52525B] hover:text-white"
+                                  ? "bg-[#ebaf64] text-black font-semibold shadow-sm"
+                                  : "bg-black/30 text-[#ebaf64]/80 border border-[#ebaf64]/25 hover:border-[#ebaf64]/60 hover:text-white"
                               }`}
                             >
                               {amt} SUI
@@ -2347,43 +2359,60 @@ export default function YearboundApp() {
                     </div>
                   </div>
                 ))}
-            </div>
 
-            {/* Fixed Bottom Section: Vault Lock & Continue */}
-            <div className="p-6 bg-[#000000] flex flex-col gap-3.5">
-              {/* x402 Vault Parameters */}
-              <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-4 flex flex-col gap-2.5">
+              {/* x402 Vault Parameters Summary Card */}
+              <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 flex flex-col gap-3 shadow-md mt-1">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-mono text-[#71717A] uppercase tracking-wider">
+                  <span className="text-[11px] font-mono text-[#ebaf64]/80 uppercase tracking-wider">
                     x402 Vault Lock
                   </span>
-                  <Lock size={12} className="text-[#71717A]" />
+                  <Lock size={12} className="text-[#ebaf64]/80" />
                 </div>
 
                 <div className="flex items-center justify-between pt-0.5">
-                  <span className="text-xs text-[#A1A1AA]">Locked Until</span>
+                  <span className="text-xs text-white/70">Locked Until</span>
                   <span className="text-xs text-white font-medium">{unlockDate}</span>
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-[#A1A1AA]">Initial x402 Deposit</span>
-                  <span className="text-xs text-white font-mono font-medium">{escrowDeposit} SUI</span>
+                  <span className="text-xs text-white/70">Initial x402 Deposit</span>
+                  <span className="text-xs text-[#ebaf64] font-mono font-medium">{escrowDeposit} SUI</span>
                 </div>
 
-                <div className="flex items-center justify-between border-t border-[#18181C] pt-2">
-                  <span className="text-xs text-[#71717A]">Memory Proof</span>
-                  <span className="text-xs text-[#A1A1AA]">Walrus Network</span>
+                <div className="flex items-center justify-between border-t border-[#ebaf64]/20 pt-2.5">
+                  <span className="text-xs text-white/50">Memory Proof</span>
+                  <span className="text-xs text-[#ebaf64]/80">Walrus Network</span>
                 </div>
               </div>
+            </div>
 
+            {/* Pinned Bottom CTA */}
+            <div className="p-5 sm:p-7 pt-2 pb-8 sm:pb-9 bg-transparent shrink-0 flex flex-col items-center w-full">
               <button
                 type="button"
-                onClick={() => setStep(3)}
-                className="w-full py-4 px-6 rounded-full font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 bg-[#FFFFFF] text-[#000000] hover:bg-[#E4E4E7] active:scale-[0.98]"
+                onClick={() => {
+                  if (!isStep2Valid) {
+                    const unassigned = rules.filter((r) => !r.penalty || r.penalty <= 0);
+                    triggerSnackbar(
+                      "Penalties required",
+                      `Please select a penalty stake for all resolutions (${unassigned.length} unset)`
+                    );
+                    return;
+                  }
+                  setStep(3);
+                }}
+                className={`w-full py-4 px-6 rounded-full font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 ${
+                  isStep2Valid
+                    ? "bg-[#ebaf64] text-black hover:bg-[#f3bc75] active:scale-[0.98] shadow-lg shadow-black/60 cursor-pointer"
+                    : "bg-black/40 text-white/40 border border-white/10 cursor-not-allowed"
+                }`}
               >
                 <span>Continue to Account</span>
                 <ArrowRight size={16} />
               </button>
+              <span className="text-[11px] font-mono text-white/35 text-center tracking-tight mt-2.5">
+                The penalties are executed on-chain via Tatum
+              </span>
             </div>
           </div>
         )}
@@ -2392,22 +2421,23 @@ export default function YearboundApp() {
             SCREEN 3: ACCOUNT & WALLET SETUP
             ================================================================== */}
         {step === 3 && (
-          <div className="flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-200">
-            <div className="pt-6 sm:pt-8 px-7 pb-3 flex flex-col gap-2.5">
+          <div className="relative z-10 flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-200">
+            {/* Header */}
+            <div className="pt-8 sm:pt-10 px-7 pb-3 shrink-0 flex flex-col gap-2">
               <button
                 type="button"
                 onClick={() => setStep(2)}
-                className="self-start text-[#71717A] hover:text-white flex items-center gap-1.5 text-xs font-medium transition-colors active:scale-95"
+                className="self-start text-[#ebaf64]/75 hover:text-[#ebaf64] flex items-center gap-1.5 text-xs font-medium transition-colors active:scale-95"
               >
                 <ArrowLeft size={14} />
                 <span>Back</span>
               </button>
-              <div className="text-[30px] sm:text-[34px] font-semibold tracking-[-0.02em] leading-tight text-white">
+              <div className="text-[28px] sm:text-[32px] font-bold tracking-[0.02em] leading-tight text-[#ebaf64]">
                 Choose an account
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-7 py-2 flex flex-col gap-3.5 pb-4 overscroll-contain">
+            <div className="flex-1 min-h-0 overflow-y-auto px-5 sm:px-7 py-2 flex flex-col gap-3.5 pb-4 overscroll-contain">
               {/* Option 1: Demo Account */}
               <div
                 onClick={() => {
@@ -2415,46 +2445,30 @@ export default function YearboundApp() {
                   const activeDemo = demoAddress || DEMO_SUI_ADDRESS;
                   refreshLiveBalance(activeDemo, "demo");
                 }}
-                className={`bg-[#0A0A0C] rounded-2xl p-5 flex flex-col gap-3 cursor-pointer transition-all duration-200 active:scale-[0.99] border ${
+                className={`bg-black/20 backdrop-blur-2xl rounded-3xl p-5 sm:p-6 flex flex-col gap-2.5 cursor-pointer transition-all duration-200 active:scale-[0.99] border shadow-md ${
                   accountType === "demo"
-                    ? "border-white shadow-sm"
-                    : "border-[#222226] hover:border-[#3F3F46]"
+                    ? "border-[#ebaf64]"
+                    : "border-[#ebaf64]/25 hover:border-[#ebaf64]/50"
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-base font-semibold text-white tracking-[-0.01em]">
-                      Demo account
-                    </div>
-                    <span className="text-[10px] font-mono text-[#71717A] uppercase tracking-wider">
-                      Sui Testnet Sandbox · Tatum Gateway
-                    </span>
+                  <div className="text-base font-semibold text-white tracking-[-0.01em]">
+                    Demo account
                   </div>
                   <div
-                    className={`w-4 h-4 rounded-full flex items-center justify-center transition-all duration-200 ${
+                    className={`w-5 h-5 rounded-full flex items-center justify-center transition-all duration-200 ${
                       accountType === "demo"
-                        ? "bg-white text-black scale-100"
-                        : "border border-[#3F3F46] scale-90"
+                        ? "bg-[#ebaf64] text-black scale-100"
+                        : "border border-[#ebaf64]/30 scale-90"
                     }`}
                   >
-                    {accountType === "demo" && <Check size={10} strokeWidth={3} />}
+                    {accountType === "demo" && <Check size={12} strokeWidth={3} />}
                   </div>
                 </div>
 
-                <p className="text-xs text-[#71717A] leading-relaxed">
-                  Operates on live Sui Testnet with an isolated device Ed25519 keypair. Real PTBs execute via Tatum Testnet Gateway with audit trails on Mainnet Walrus Memory.
+                <p className="text-xs text-white/70 leading-relaxed">
+                  Sandbox environment preloaded with testnet SUI to try out pacts risk-free.
                 </p>
-
-                <div className="pt-3 border-t border-[#18181C] flex items-center justify-between text-xs font-mono">
-                  <span className="text-[#A1A1AA]">
-                    {(demoAddress || DEMO_SUI_ADDRESS).slice(0, 6)}...{(demoAddress || DEMO_SUI_ADDRESS).slice(-4)}
-                  </span>
-                  <span className="text-white font-medium">
-                    {liveOnChainBalanceSui !== null && accountType === "demo"
-                      ? `${liveOnChainBalanceSui.toFixed(2)} SUI (Testnet)`
-                      : `${availableBalance.toFixed(2)} SUI (Testnet)`}
-                  </span>
-                </div>
               </div>
 
               {/* Option 2: Real Account */}
@@ -2463,119 +2477,42 @@ export default function YearboundApp() {
                   setAccountType("real");
                   if (realAddress) refreshLiveBalance(realAddress);
                 }}
-                className={`bg-[#0A0A0C] rounded-2xl p-5 flex flex-col gap-3 cursor-pointer transition-all duration-200 active:scale-[0.99] border ${
+                className={`bg-black/20 backdrop-blur-2xl rounded-3xl p-5 sm:p-6 flex flex-col gap-2.5 cursor-pointer transition-all duration-200 active:scale-[0.99] border shadow-md ${
                   accountType === "real"
-                    ? "border-white shadow-sm"
-                    : "border-[#222226] hover:border-[#3F3F46]"
+                    ? "border-[#ebaf64]"
+                    : "border-[#ebaf64]/25 hover:border-[#ebaf64]/50"
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-base font-semibold text-white tracking-[-0.01em]">
-                      Real account
-                    </div>
-                    <span className="text-[10px] font-mono text-[#71717A] uppercase tracking-wider">
-                      Self-Custodial Sui Burner
-                    </span>
+                  <div className="text-base font-semibold text-white tracking-[-0.01em]">
+                    Real account
                   </div>
                   <div
-                    className={`w-4 h-4 rounded-full flex items-center justify-center transition-all duration-200 ${
+                    className={`w-5 h-5 rounded-full flex items-center justify-center transition-all duration-200 ${
                       accountType === "real"
-                        ? "bg-white text-black scale-100"
-                        : "border border-[#3F3F46] scale-90"
+                        ? "bg-[#ebaf64] text-black scale-100"
+                        : "border border-[#ebaf64]/30 scale-90"
                     }`}
                   >
-                    {accountType === "real" && <Check size={10} strokeWidth={3} />}
+                    {accountType === "real" && <Check size={12} strokeWidth={3} />}
                   </div>
                 </div>
 
-                <p className="text-xs text-[#71717A] leading-relaxed">
-                  Generates an actual Ed25519 Sui Keypair persisted in your browser's encrypted storage. Can be exported or funded directly on Sui Mainnet.
+                <p className="text-xs text-white/70 leading-relaxed">
+                  Self-custodial Sui wallet with real funds and cryptographic enforcement.
                 </p>
-
-                <div className="pt-3 border-t border-[#18181C] flex items-center justify-between text-xs font-mono">
-                  <span className="text-[#A1A1AA] truncate max-w-[190px]">
-                    {realAddress
-                      ? `${realAddress.slice(0, 6)}...${realAddress.slice(-4)}`
-                      : "Loading keypair..."}
-                  </span>
-                  <span className="text-white font-medium">
-                    {isCheckingLiveBalance
-                      ? "Querying RPC..."
-                      : `${liveOnChainBalanceSui !== null ? liveOnChainBalanceSui.toFixed(2) : "0.00"} SUI (Live)`}
-                  </span>
-                </div>
-
-                {accountType === "real" && realAddress && (
-                  <div
-                    className="pt-2 flex items-center justify-between gap-2 border-t border-[#18181C]"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (navigator?.clipboard?.writeText) {
-                          navigator.clipboard.writeText(realAddress).catch(() => {});
-                        }
-                        triggerSnackbar("Address Copied", `${realAddress.slice(0, 10)}...`);
-                      }}
-                      className="text-[10px] font-mono text-[#71717A] hover:text-white flex items-center gap-1 transition-colors"
-                    >
-                      <Copy size={11} />
-                      <span>Copy Address</span>
-                    </button>
-
-                    <a
-                      href={`https://suiscan.xyz/mainnet/account/${realAddress}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-[10px] font-mono text-[#71717A] hover:text-white flex items-center gap-1 transition-colors"
-                    >
-                      <span>SuiScan</span>
-                      <ExternalLink size={11} />
-                    </a>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const hex = exportRealPrivateKeyHex();
-                        if (hex) {
-                          setExportedKey(hex);
-                          setShowExportPrivateKey(!showExportPrivateKey);
-                        }
-                      }}
-                      className="text-[10px] font-mono text-[#71717A] hover:text-white transition-colors"
-                    >
-                      {showExportPrivateKey ? "Hide Key" : "Export Key"}
-                    </button>
-                  </div>
-                )}
-
-                {showExportPrivateKey && exportedKey && (
-                  <div
-                    className="bg-[#131316] border border-[#27272A] rounded-xl p-3 flex flex-col gap-1.5 animate-in fade-in"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <span className="text-[10px] font-mono text-[#A1A1AA]">
-                      Ed25519 Secret Key (Hex):
-                    </span>
-                    <div className="bg-[#0A0A0C] p-2 rounded text-[10px] font-mono text-white break-all select-all border border-[#1F1F24]">
-                      {exportedKey}
-                    </div>
-                  </div>
-                )}
               </div>
 
-              {/* Option 3: Link Wallet (Extension or Manual Paste) */}
-              <div className="pt-2 flex flex-col items-center gap-2">
+              {/* Option 3: Link Wallet */}
+              <div className="pt-1 flex flex-col items-center gap-2">
                 {detectedExtension ? (
                   <button
                     type="button"
                     onClick={handleConnectExtension}
                     disabled={isConnectingExtension}
-                    className="w-full py-3.5 px-4 rounded-2xl bg-[#0A0A0C] border border-[#27272A] hover:border-white text-xs font-medium text-white transition-all flex items-center justify-center gap-2 active:scale-[0.99]"
+                    className="w-full py-3 px-4 rounded-full bg-black/20 backdrop-blur-xl border border-[#ebaf64]/25 hover:border-[#ebaf64]/50 text-xs font-medium text-[#ebaf64] transition-all flex items-center justify-center gap-2 active:scale-[0.99]"
                   >
-                    <Wallet size={14} className="text-[#A1A1AA]" />
+                    <Wallet size={14} />
                     <span>
                       {isConnectingExtension
                         ? `Connecting ${detectedExtension.name}...`
@@ -2589,23 +2526,10 @@ export default function YearboundApp() {
                       setShowLinkInput(!showLinkInput);
                       if (!showLinkInput) setAccountType("linked");
                     }}
-                    className="text-xs font-medium text-[#71717A] hover:text-white transition-colors py-1.5 flex items-center gap-1.5 active:scale-95"
+                    className="text-xs font-medium text-[#ebaf64]/70 hover:text-[#ebaf64] transition-colors py-1 flex items-center gap-1.5 active:scale-95"
                   >
                     <Plus size={13} />
-                    <span>Link an existing Sui address manually</span>
-                  </button>
-                )}
-
-                {detectedExtension && !showLinkInput && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowLinkInput(true);
-                      setAccountType("linked");
-                    }}
-                    className="text-[11px] text-[#71717A] hover:text-white transition-colors"
-                  >
-                    or enter address manually
+                    <span>Link an existing Sui address</span>
                   </button>
                 )}
 
@@ -2623,32 +2547,14 @@ export default function YearboundApp() {
                         }
                       }}
                       placeholder="Enter Sui address (0x...)"
-                      className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-4 py-3 text-xs font-mono text-white placeholder-[#52525B] outline-none focus:border-white transition-colors"
+                      className="w-full bg-black/30 border border-[#ebaf64]/30 rounded-2xl px-4 py-2.5 text-xs font-mono text-white placeholder-white/30 outline-none focus:border-[#ebaf64] transition-colors"
                     />
-                    {linkedAddress && (
-                      <div className="flex items-center justify-between text-[10px] font-mono text-[#71717A] px-1">
-                        <span>
-                          {isCheckingLiveBalance
-                            ? "Querying RPC..."
-                            : `${liveOnChainBalanceSui !== null ? liveOnChainBalanceSui.toFixed(2) : "0.00"} SUI on Mainnet`}
-                        </span>
-                        <a
-                          href={`https://suiscan.xyz/mainnet/account/${linkedAddress}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="hover:text-white transition-colors flex items-center gap-1"
-                        >
-                          <span>SuiScan</span>
-                          <ExternalLink size={10} />
-                        </a>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
             </div>
 
-            <div className="p-6 bg-[#000000]">
+            <div className="p-5 sm:p-7 pt-2 pb-8 sm:pb-9 bg-transparent shrink-0 flex flex-col items-center w-full">
               <button
                 type="button"
                 onClick={handleLockVault}
@@ -2656,7 +2562,7 @@ export default function YearboundApp() {
                 className={`relative overflow-hidden w-full py-4 px-6 rounded-full font-semibold text-sm transition-all duration-300 flex items-center justify-center gap-2 ${
                   isSubmitting
                     ? "bg-[#18181C] text-white border border-[#27272A] cursor-wait"
-                    : "bg-[#FFFFFF] text-[#000000] hover:bg-[#E4E4E7] active:scale-[0.98]"
+                    : "bg-[#ebaf64] text-black hover:bg-[#f3bc75] active:scale-[0.98] shadow-lg shadow-black/60 cursor-pointer"
                 }`}
               >
                 {isSubmitting ? (
@@ -2679,6 +2585,9 @@ export default function YearboundApp() {
                   </>
                 )}
               </button>
+              <span className="text-[11px] font-mono text-white/35 text-center tracking-tight mt-2.5">
+                All resolutions are encrypted and stored on Walrus
+              </span>
             </div>
           </div>
         )}
