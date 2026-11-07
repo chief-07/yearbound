@@ -1832,41 +1832,47 @@ export default function YearboundApp() {
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
           >
-            {/* Background image for slide 0 ("Keep your financial resolve all year round with Yearbound") */}
+            {/* Background artwork for slide 0 ("Keep your financial resolve all year round with Yearbound") */}
             <div
               className={`absolute inset-0 z-0 pointer-events-none overflow-hidden transition-opacity duration-300 ease-out ${
                 carouselIndex === 0 ? "opacity-100" : "opacity-0"
               }`}
             >
-              {/* Layer 1: Ambient blurred image below continuing through the fade */}
-              <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <img
-                  src="/assets/onboarding/walrus_bench.png"
-                  alt=""
-                  className="w-full h-full object-cover object-bottom filter blur-2xl opacity-60 select-none"
-                  draggable={false}
-                />
-              </div>
-
-              {/* Layer 2: Crisp artwork: kept exactly where it is, fading smoothly at the bottom into what is in the back */}
-              <div 
-                className="absolute top-0 left-0 right-0 bottom-[145px] sm:bottom-[155px] overflow-hidden pointer-events-none"
-                style={{
-                  WebkitMaskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 80%, rgba(0,0,0,0) 100%)",
-                  maskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 80%, rgba(0,0,0,0) 100%)",
-                }}
-              >
-                <img
-                  src="/assets/onboarding/walrus_bench.png"
-                  alt="Walrus holding sparkler under starry midnight sky"
-                  className="w-full h-full object-cover object-bottom select-none"
-                  draggable={false}
-                />
-              </div>
+              <img
+                src="/assets/onboarding/walrus_bench.png"
+                alt="Walrus holding sparkler under starry midnight sky"
+                className="w-full h-full object-cover object-center select-none"
+                draggable={false}
+              />
             </div>
 
-            {/* Permanent Dark Atmospheric Floor: Always fully dimmed instantly, never flashes or lags */}
-            <div className="absolute inset-x-0 bottom-0 h-[190px] z-[5] pointer-events-none bg-gradient-to-b from-transparent via-black/70 to-black backdrop-blur-md" />
+            {/* Background artwork for slide 1 ("Wally agent uses Walrus memory to keep you to your resolutions") */}
+            <div
+              className={`absolute inset-0 z-0 pointer-events-none overflow-hidden transition-opacity duration-300 ease-out ${
+                carouselIndex === 1 ? "opacity-100" : "opacity-0"
+              }`}
+            >
+              <img
+                src="/assets/onboarding/walrus_memory.png"
+                alt="Walrus reading Memory book under autumn night sky"
+                className="w-full h-full object-cover object-center select-none"
+                draggable={false}
+              />
+            </div>
+
+            {/* Background artwork for slide 2 ("Penalties are locked in a x402 vault using Tatum") */}
+            <div
+              className={`absolute inset-0 z-0 pointer-events-none overflow-hidden transition-opacity duration-300 ease-out ${
+                carouselIndex === 2 ? "opacity-100" : "opacity-0"
+              }`}
+            >
+              <img
+                src="/assets/onboarding/walrus_vault.png"
+                alt="Walrus with locked on-chain vault in winter snow"
+                className="w-full h-full object-cover object-center select-none"
+                draggable={false}
+              />
+            </div>
 
             {/* Top Bar: Header Title (Editorial typography in #ebaf64 with wider letter spacing and relaxed line height) */}
             <div className="relative z-10 pt-10 sm:pt-12 px-7 pb-4 flex flex-col shrink-0">
@@ -1877,25 +1883,8 @@ export default function YearboundApp() {
               </div>
             </div>
 
-            {/* Middle Space (Slide 0 has no square box; Slide 1 & 2 have subtle context cards) */}
-            <div className="relative z-10 flex-1 px-7 py-3 flex flex-col justify-center min-h-0 pointer-events-none">
-              {carouselIndex !== 0 && (
-                <div className="w-full h-full min-h-[240px] max-h-[340px] bg-[#0A0A0C]/90 backdrop-blur-md border border-[#222226] rounded-3xl flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in-95 duration-300">
-                  <div className="w-12 h-12 rounded-full bg-[#18181C] border border-[#27272A] flex items-center justify-center text-[#ebaf64] mb-3 shadow-inner">
-                    {carouselIndex === 1 ? (
-                      <Shield size={22} className="text-[#ebaf64]" />
-                    ) : (
-                      <Lock size={22} className="text-[#ebaf64]" />
-                    )}
-                  </div>
-                  <p className="text-xs font-mono text-[#A1A1AA] max-w-[240px] leading-relaxed">
-                    {carouselIndex === 1
-                      ? "Walrus epoch storage commits unbreakable memories and transaction penalties."
-                      : "Sui smart contract locks collateral with automated penalty execution via Tatum."}
-                  </p>
-                </div>
-              )}
-            </div>
+            {/* Middle Space (Pure centered artwork across all 3 carousel slides) */}
+            <div className="relative z-10 flex-1 px-7 py-3 min-h-0 pointer-events-none" />
 
             {/* Bottom Actions: Center Progress Ring + Fully Rounded Liquid Glass CTAs */}
             <div className="relative z-10 p-7 pt-2 pb-8 sm:pb-9 shrink-0 flex flex-col items-center gap-3">
