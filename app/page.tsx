@@ -1779,28 +1779,39 @@ export default function YearboundApp() {
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
           >
-            {/* Background image for slide 0 ("Keep your financial resolve all year round") */}
+            {/* Background image for slide 0 ("Keep your financial resolve all year round with Yearbound") */}
             <div
               className={`absolute inset-0 z-0 pointer-events-none overflow-hidden transition-opacity duration-700 ease-in-out ${
                 carouselIndex === 0 ? "opacity-100" : "opacity-0"
               }`}
             >
-              <img
-                src="/assets/onboarding/walrus_bench.png"
-                alt="Walrus holding sparkler under starry midnight sky"
-                className="w-full h-full object-cover object-bottom select-none"
-                draggable={false}
-              />
-              {/* Gradient overlays for crisp contrast & readability */}
-              <div className="absolute inset-0 bg-gradient-to-b from-black/85 via-black/10 to-black/95 pointer-events-none" />
+              {/* Main Artwork pushed higher so walrus on bench sits well above the CTAs */}
+              <div className="absolute top-0 left-0 right-0 bottom-[200px] sm:bottom-[215px] overflow-hidden">
+                <img
+                  src="/assets/onboarding/walrus_bench.png"
+                  alt="Walrus holding sparkler under starry midnight sky"
+                  className="w-full h-full object-cover object-bottom select-none"
+                  draggable={false}
+                />
+              </div>
+
+              {/* Flipped blurred bottom extension for the lower gap behind controls */}
+              <div className="absolute bottom-0 left-0 right-0 h-[205px] sm:h-[220px] overflow-hidden">
+                <img
+                  src="/assets/onboarding/walrus_bench.png"
+                  alt=""
+                  className="w-full h-[320px] object-cover object-bottom scale-y-[-1] filter blur-xl opacity-90 select-none transform origin-bottom"
+                  draggable={false}
+                />
+              </div>
             </div>
 
-            {/* Top Bar: Header Title (Prominent, large editorial typography) */}
+            {/* Top Bar: Header Title (Editorial typography in #ebaf64 with subtle drop shadow for crisp legibility) */}
             <div className="relative z-10 pt-10 sm:pt-12 px-7 pb-4 flex flex-col shrink-0">
-              <div className="text-[34px] sm:text-[38px] font-bold tracking-[-0.035em] leading-[1.08] text-white transition-all duration-300">
-                {carouselIndex === 0 && "Keep your financial resolve all year round"}
-                {carouselIndex === 1 && "An agent that uses Walrus memory to keep you to your resolutions"}
-                {carouselIndex === 2 && "Time-locked x402 collateral vaults on Sui enforced via Tatum Gateway"}
+              <div className="text-[32px] sm:text-[36px] font-bold tracking-[-0.035em] leading-[1.08] text-[#ebaf64] transition-all duration-300 drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)]">
+                {carouselIndex === 0 && "Keep your financial resolve all year round with Yearbound"}
+                {carouselIndex === 1 && "Wally agent uses Walrus memory to keep you to your resolutions"}
+                {carouselIndex === 2 && "Penalties are locked in a x402 vault using Tatum"}
               </div>
             </div>
 
@@ -1808,17 +1819,17 @@ export default function YearboundApp() {
             <div className="relative z-10 flex-1 px-7 py-3 flex flex-col justify-center min-h-0 pointer-events-none">
               {carouselIndex !== 0 && (
                 <div className="w-full h-full min-h-[240px] max-h-[340px] bg-[#0A0A0C]/90 backdrop-blur-md border border-[#222226] rounded-2xl flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in-95 duration-300">
-                  <div className="w-12 h-12 rounded-full bg-[#18181C] border border-[#27272A] flex items-center justify-center text-white/70 mb-3 shadow-inner">
+                  <div className="w-12 h-12 rounded-full bg-[#18181C] border border-[#27272A] flex items-center justify-center text-[#ebaf64] mb-3 shadow-inner">
                     {carouselIndex === 1 ? (
-                      <Shield size={22} className="text-[#E5A93C]" />
+                      <Shield size={22} className="text-[#ebaf64]" />
                     ) : (
-                      <Lock size={22} className="text-[#38BDF8]" />
+                      <Lock size={22} className="text-[#ebaf64]" />
                     )}
                   </div>
                   <p className="text-xs font-mono text-[#A1A1AA] max-w-[240px] leading-relaxed">
                     {carouselIndex === 1
                       ? "Walrus epoch storage commits unbreakable memories and transaction penalties."
-                      : "Sui smart contract locks collateral until resolution maturity date."}
+                      : "Sui smart contract locks collateral with automated penalty execution via Tatum."}
                   </p>
                 </div>
               )}
@@ -1837,7 +1848,7 @@ export default function YearboundApp() {
                     cx={16}
                     cy={16}
                     r={13}
-                    stroke="rgba(255, 255, 255, 0.2)"
+                    stroke="rgba(235, 175, 100, 0.25)"
                     strokeWidth={2.5}
                     fill="none"
                   />
@@ -1845,7 +1856,7 @@ export default function YearboundApp() {
                     cx={16}
                     cy={16}
                     r={13}
-                    stroke="#FFFFFF"
+                    stroke="#ebaf64"
                     strokeWidth={2.5}
                     strokeLinecap="round"
                     fill="none"
@@ -1859,21 +1870,29 @@ export default function YearboundApp() {
                 </svg>
               </div>
 
-              {/* Primary CTA: Create a pact */}
+              {/* Primary CTA: Create a pact (Background is blurred bottom of artwork, #ebaf64 text & border) */}
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="w-full py-4 px-6 rounded-2xl bg-white text-black font-semibold text-sm hover:bg-[#E4E4E7] transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98] shadow-lg shadow-black/40"
+                className="relative w-full py-4 px-6 rounded-2xl overflow-hidden border border-[#ebaf64]/50 hover:border-[#ebaf64] transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98] shadow-lg shadow-black/60 group"
               >
-                <span>Create a pact</span>
-                <ArrowRight size={16} />
+                <div className="absolute inset-0 -z-10 overflow-hidden pointer-events-none">
+                  <img
+                    src="/assets/onboarding/walrus_bench.png"
+                    alt=""
+                    className="w-full h-[320px] object-cover object-bottom scale-y-[-1] filter blur-md select-none opacity-80"
+                  />
+                  <div className="absolute inset-0 bg-black/40 group-hover:bg-black/30 transition-colors" />
+                </div>
+                <span className="relative z-10 text-[#ebaf64] font-semibold text-sm">Create a pact</span>
+                <ArrowRight size={16} className="relative z-10 text-[#ebaf64]" />
               </button>
 
-              {/* Secondary CTA: Sign in to existing */}
+              {/* Secondary CTA: Sign in to existing (#ebaf64 outline and text) */}
               <button
                 type="button"
                 onClick={() => setStep(0)}
-                className="w-full py-3.5 px-6 rounded-2xl bg-[#0A0A0C]/80 backdrop-blur-md border border-[#27272A] text-white hover:border-[#3F3F46] hover:bg-[#18181B] font-medium text-xs transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98]"
+                className="w-full py-3.5 px-6 rounded-2xl bg-black/40 backdrop-blur-md border border-[#ebaf64] text-[#ebaf64] hover:bg-[#ebaf64]/10 font-medium text-xs transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98]"
               >
                 <span>Sign in to existing pact</span>
               </button>
