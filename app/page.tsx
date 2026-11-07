@@ -1690,60 +1690,64 @@ export default function YearboundApp() {
         {/* ====================================================================
             TOP SYSTEM BAR: TOTAL RECALL vs DEGRADED LEGACY TOGGLE
             ==================================================================== */}
-        <div
-          className={`w-full px-4 py-2 border-b transition-colors duration-200 flex items-center justify-between shrink-0 z-30 ${
-            isDegradedMode
-              ? "bg-[#18181B] border-[#27272A]"
-              : "bg-[#0A0A0C] border-[#18181C]"
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <span
-              className={`w-2 h-2 rounded-full ${
+        {step !== -1 && (
+          <>
+            <div
+              className={`w-full px-4 py-2 border-b transition-colors duration-200 flex items-center justify-between shrink-0 z-30 ${
                 isDegradedMode
-                  ? "bg-[#71717A]"
-                  : "bg-[#10B981] shadow-[0_0_8px_#10B981]"
-              }`}
-            />
-            <span
-              className={`text-[10px] font-mono tracking-wider uppercase font-semibold ${
-                isDegradedMode ? "text-[#A1A1AA]" : "text-white"
+                  ? "bg-[#18181B] border-[#27272A]"
+                  : "bg-[#0A0A0C] border-[#18181C]"
               }`}
             >
-              {isDegradedMode ? "Legacy Banking (Degraded)" : "Walrus Recall · Tatum"}
-            </span>
-          </div>
+              <div className="flex items-center gap-2">
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    isDegradedMode
+                      ? "bg-[#71717A]"
+                      : "bg-[#10B981] shadow-[0_0_8px_#10B981]"
+                  }`}
+                />
+                <span
+                  className={`text-[10px] font-mono tracking-wider uppercase font-semibold ${
+                    isDegradedMode ? "text-[#A1A1AA]" : "text-white"
+                  }`}
+                >
+                  {isDegradedMode ? "Legacy Banking (Degraded)" : "Walrus Recall · Tatum"}
+                </span>
+              </div>
 
-          <div className="flex items-center gap-2">
-            {isHydrating && (
-              <span className="text-[9px] font-mono text-[#E5A93C] animate-pulse">
-                Hydrating...
-              </span>
+              <div className="flex items-center gap-2">
+                {isHydrating && (
+                  <span className="text-[9px] font-mono text-[#E5A93C] animate-pulse">
+                    Hydrating...
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsDegradedMode((prev) => !prev)}
+                  className={`text-[10px] font-mono px-2.5 py-1 rounded-full border transition-all duration-150 active:scale-95 flex items-center gap-1 ${
+                    isDegradedMode
+                      ? "bg-[#27272A] text-white border-[#3F3F46] hover:bg-[#3F3F46]"
+                      : "bg-[#131316] text-[#A1A1AA] border-[#27272A] hover:text-white hover:border-[#3F3F46]"
+                  }`}
+                  title={
+                    isDegradedMode
+                      ? "Restore Walrus Total Recall & Tatum Gateway"
+                      : "Simulate stateless Web2 legacy banking without memory"
+                  }
+                >
+                  <span>{isDegradedMode ? "⚡ Restore Recall" : "Simulate Degraded"}</span>
+                </button>
+              </div>
+            </div>
+
+            {isDegradedMode && (
+              <div className="w-full bg-[#1C1917] border-b border-[#292524] px-4 py-1.5 flex items-center justify-between text-[10px] font-mono text-[#FCA5A5] animate-in slide-in-from-top-1 shrink-0 z-20">
+                <span>⚠️ Web2 Mode: Walrus Memory bypassed · Flat fines · Stateless</span>
+                <span className="text-[#A8A29E]">No Recall</span>
+              </div>
             )}
-            <button
-              type="button"
-              onClick={() => setIsDegradedMode((prev) => !prev)}
-              className={`text-[10px] font-mono px-2.5 py-1 rounded-full border transition-all duration-150 active:scale-95 flex items-center gap-1 ${
-                isDegradedMode
-                  ? "bg-[#27272A] text-white border-[#3F3F46] hover:bg-[#3F3F46]"
-                  : "bg-[#131316] text-[#A1A1AA] border-[#27272A] hover:text-white hover:border-[#3F3F46]"
-              }`}
-              title={
-                isDegradedMode
-                  ? "Restore Walrus Total Recall & Tatum Gateway"
-                  : "Simulate stateless Web2 legacy banking without memory"
-              }
-            >
-              <span>{isDegradedMode ? "⚡ Restore Recall" : "Simulate Degraded"}</span>
-            </button>
-          </div>
-        </div>
-
-        {isDegradedMode && (
-          <div className="w-full bg-[#1C1917] border-b border-[#292524] px-4 py-1.5 flex items-center justify-between text-[10px] font-mono text-[#FCA5A5] animate-in slide-in-from-top-1 shrink-0 z-20">
-            <span>⚠️ Web2 Mode: Walrus Memory bypassed · Flat fines · Stateless</span>
-            <span className="text-[#A8A29E]">No Recall</span>
-          </div>
+          </>
         )}
 
         {/* Existing Genesis Pact Banner (if hydrated from Walrus on Steps 1-3) */}
@@ -1771,69 +1775,95 @@ export default function YearboundApp() {
             ================================================================== */}
         {step === -1 && (
           <div
-            className="flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-200 select-none"
+            className="relative flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-200 select-none"
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
           >
-            {/* Top Bar: Header Title on Left, Circular Progress Indicator on Right */}
-            <div className="pt-7 sm:pt-9 px-7 pb-3 flex items-start justify-between gap-4 shrink-0">
-              <div className="flex-1 min-w-0 pr-1">
-                <div className="text-[24px] sm:text-[28px] font-semibold tracking-[-0.02em] leading-[1.18] text-white">
-                  {carouselIndex === 0 && "Keep your financial resolve all year round"}
-                  {carouselIndex === 1 && "An agent that uses Walrus memory to keep you to your resolutions"}
-                  {carouselIndex === 2 && "Time-locked x402 collateral vaults on Sui enforced via Tatum Gateway"}
-                </div>
-              </div>
+            {/* Background image for slide 0 ("Keep your financial resolve all year round") */}
+            <div
+              className={`absolute inset-0 z-0 pointer-events-none overflow-hidden transition-opacity duration-700 ease-in-out ${
+                carouselIndex === 0 ? "opacity-100" : "opacity-0"
+              }`}
+            >
+              <img
+                src="/assets/onboarding/walrus_bench.png"
+                alt="Walrus holding sparkler under starry midnight sky"
+                className="w-full h-full object-cover object-bottom select-none"
+                draggable={false}
+              />
+              {/* Gradient overlays for crisp contrast & readability */}
+              <div className="absolute inset-0 bg-gradient-to-b from-black/85 via-black/10 to-black/95 pointer-events-none" />
+            </div>
 
-              {/* Circular Progress Indicator */}
+            {/* Top Bar: Header Title (Prominent, large editorial typography) */}
+            <div className="relative z-10 pt-10 sm:pt-12 px-7 pb-4 flex flex-col shrink-0">
+              <div className="text-[34px] sm:text-[38px] font-bold tracking-[-0.035em] leading-[1.08] text-white transition-all duration-300">
+                {carouselIndex === 0 && "Keep your financial resolve all year round"}
+                {carouselIndex === 1 && "An agent that uses Walrus memory to keep you to your resolutions"}
+                {carouselIndex === 2 && "Time-locked x402 collateral vaults on Sui enforced via Tatum Gateway"}
+              </div>
+            </div>
+
+            {/* Middle Space (Slide 0 has no square box; Slide 1 & 2 have subtle context cards) */}
+            <div className="relative z-10 flex-1 px-7 py-3 flex flex-col justify-center min-h-0 pointer-events-none">
+              {carouselIndex !== 0 && (
+                <div className="w-full h-full min-h-[240px] max-h-[340px] bg-[#0A0A0C]/90 backdrop-blur-md border border-[#222226] rounded-2xl flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in-95 duration-300">
+                  <div className="w-12 h-12 rounded-full bg-[#18181C] border border-[#27272A] flex items-center justify-center text-white/70 mb-3 shadow-inner">
+                    {carouselIndex === 1 ? (
+                      <Shield size={22} className="text-[#E5A93C]" />
+                    ) : (
+                      <Lock size={22} className="text-[#38BDF8]" />
+                    )}
+                  </div>
+                  <p className="text-xs font-mono text-[#A1A1AA] max-w-[240px] leading-relaxed">
+                    {carouselIndex === 1
+                      ? "Walrus epoch storage commits unbreakable memories and transaction penalties."
+                      : "Sui smart contract locks collateral until resolution maturity date."}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Bottom Actions: Center Progress Ring + CTAs */}
+            <div className="relative z-10 p-7 pt-2 pb-8 sm:pb-9 shrink-0 flex flex-col items-center gap-3">
+              {/* Progress Indicator Ring (Centered directly above Create a pact button, no numbers inside) */}
               <div
-                className="relative inline-flex items-center justify-center shrink-0 mt-1"
-                title={`Slide ${carouselIndex + 1} of 3`}
+                onClick={() => setCarouselIndex((prev) => (prev < 2 ? prev + 1 : 0))}
+                className="relative inline-flex items-center justify-center shrink-0 cursor-pointer active:scale-95 transition-transform duration-150 py-1"
+                title={`Slide ${carouselIndex + 1} of 3 · Tap to advance`}
               >
-                <svg width={38} height={38} className="transform -rotate-90">
+                <svg width={32} height={32} className="transform -rotate-90">
                   <circle
-                    cx={19}
-                    cy={19}
-                    r={16}
-                    stroke="#222226"
+                    cx={16}
+                    cy={16}
+                    r={13}
+                    stroke="rgba(255, 255, 255, 0.2)"
                     strokeWidth={2.5}
                     fill="none"
                   />
                   <circle
-                    cx={19}
-                    cy={19}
-                    r={16}
+                    cx={16}
+                    cy={16}
+                    r={13}
                     stroke="#FFFFFF"
                     strokeWidth={2.5}
                     strokeLinecap="round"
                     fill="none"
-                    strokeDasharray={2 * Math.PI * 16}
-                    strokeDashoffset={2 * Math.PI * 16 - (((carouselIndex + 1) / 3) * (2 * Math.PI * 16))}
+                    strokeDasharray={2 * Math.PI * 13}
+                    strokeDashoffset={
+                      2 * Math.PI * 13 -
+                      ((carouselIndex + 1) / 3) * (2 * Math.PI * 13)
+                    }
                     className="transition-all duration-500 ease-out"
                   />
                 </svg>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-[10px] font-mono font-medium text-white">
-                    {carouselIndex + 1}/3
-                  </span>
-                </div>
               </div>
-            </div>
 
-            {/* Middle Space for Illustration */}
-            <div className="flex-1 px-7 py-3 flex flex-col justify-center min-h-0">
-              <div className="w-full h-full min-h-[260px] bg-[#0A0A0C] border border-[#222226] rounded-2xl flex items-center justify-center relative overflow-hidden transition-all duration-300">
-                {/* Reserved space for illustration */}
-              </div>
-            </div>
-
-            {/* Bottom Actions: CTAs */}
-            <div className="p-7 pt-3 pb-8 sm:pb-9 shrink-0 flex flex-col gap-3 border-t border-[#18181C]">
-              {/* Primary CTA: Create a pact (first) */}
+              {/* Primary CTA: Create a pact */}
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="w-full py-4 px-6 rounded-2xl bg-white text-black font-semibold text-sm hover:bg-[#E4E4E7] transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98] shadow-md"
+                className="w-full py-4 px-6 rounded-2xl bg-white text-black font-semibold text-sm hover:bg-[#E4E4E7] transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98] shadow-lg shadow-black/40"
               >
                 <span>Create a pact</span>
                 <ArrowRight size={16} />
@@ -1843,7 +1873,7 @@ export default function YearboundApp() {
               <button
                 type="button"
                 onClick={() => setStep(0)}
-                className="w-full py-3.5 px-6 rounded-2xl bg-[#0A0A0C] border border-[#222226] text-white hover:border-[#3F3F46] font-medium text-xs transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98]"
+                className="w-full py-3.5 px-6 rounded-2xl bg-[#0A0A0C]/80 backdrop-blur-md border border-[#27272A] text-white hover:border-[#3F3F46] hover:bg-[#18181B] font-medium text-xs transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98]"
               >
                 <span>Sign in to existing pact</span>
               </button>
