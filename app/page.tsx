@@ -1786,7 +1786,7 @@ export default function YearboundApp() {
               }`}
             >
               {/* Main Artwork pushed higher so walrus on bench sits well above the CTAs */}
-              <div className="absolute top-0 left-0 right-0 bottom-[200px] sm:bottom-[215px] overflow-hidden">
+              <div className="absolute top-0 left-0 right-0 bottom-[210px] sm:bottom-[225px] overflow-hidden">
                 <img
                   src="/assets/onboarding/walrus_bench.png"
                   alt="Walrus holding sparkler under starry midnight sky"
@@ -1796,19 +1796,21 @@ export default function YearboundApp() {
               </div>
 
               {/* Flipped blurred bottom extension for the lower gap behind controls */}
-              <div className="absolute bottom-0 left-0 right-0 h-[205px] sm:h-[220px] overflow-hidden">
-                <img
-                  src="/assets/onboarding/walrus_bench.png"
-                  alt=""
-                  className="w-full h-[320px] object-cover object-bottom scale-y-[-1] filter blur-xl opacity-90 select-none transform origin-bottom"
-                  draggable={false}
-                />
+              <div className="absolute bottom-0 left-0 right-0 h-[215px] sm:h-[230px] overflow-hidden">
+                <div className="absolute -inset-6 overflow-hidden">
+                  <img
+                    src="/assets/onboarding/walrus_bench.png"
+                    alt=""
+                    className="w-full h-full object-cover object-bottom scale-y-[-1] filter blur-xl brightness-125 select-none"
+                    draggable={false}
+                  />
+                </div>
               </div>
             </div>
 
-            {/* Top Bar: Header Title (Editorial typography in #ebaf64 with subtle drop shadow for crisp legibility) */}
+            {/* Top Bar: Header Title (Editorial typography in #ebaf64 with wider letter spacing) */}
             <div className="relative z-10 pt-10 sm:pt-12 px-7 pb-4 flex flex-col shrink-0">
-              <div className="text-[32px] sm:text-[36px] font-bold tracking-[-0.035em] leading-[1.08] text-[#ebaf64] transition-all duration-300 drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)]">
+              <div className="text-[30px] sm:text-[34px] font-bold tracking-[0.02em] leading-[1.12] text-[#ebaf64] transition-all duration-300 drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)]">
                 {carouselIndex === 0 && "Keep your financial resolve all year round with Yearbound"}
                 {carouselIndex === 1 && "Wally agent uses Walrus memory to keep you to your resolutions"}
                 {carouselIndex === 2 && "Penalties are locked in a x402 vault using Tatum"}
@@ -1870,29 +1872,30 @@ export default function YearboundApp() {
                 </svg>
               </div>
 
-              {/* Primary CTA: Create a pact (Background is blurred bottom of artwork, #ebaf64 text & border) */}
+              {/* Primary CTA: Create a pact (Background is blurred continuation of artwork bottom, black text) */}
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="relative w-full py-4 px-6 rounded-2xl overflow-hidden border border-[#ebaf64]/50 hover:border-[#ebaf64] transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98] shadow-lg shadow-black/60 group"
+                className="relative w-full py-4 px-6 rounded-2xl overflow-hidden border border-[#ebaf64] hover:border-white transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98] shadow-lg shadow-black/60 group"
               >
-                <div className="absolute inset-0 -z-10 overflow-hidden pointer-events-none">
+                <div className="absolute -inset-4 -z-10 overflow-hidden pointer-events-none">
                   <img
                     src="/assets/onboarding/walrus_bench.png"
                     alt=""
-                    className="w-full h-[320px] object-cover object-bottom scale-y-[-1] filter blur-md select-none opacity-80"
+                    className="w-full h-full object-cover object-bottom scale-y-[-1] filter blur-md brightness-135 select-none"
+                    draggable={false}
                   />
-                  <div className="absolute inset-0 bg-black/40 group-hover:bg-black/30 transition-colors" />
+                  <div className="absolute inset-0 bg-[#ebaf64]/30 group-hover:bg-[#ebaf64]/40 transition-colors" />
                 </div>
-                <span className="relative z-10 text-[#ebaf64] font-semibold text-sm">Create a pact</span>
-                <ArrowRight size={16} className="relative z-10 text-[#ebaf64]" />
+                <span className="relative z-10 text-black font-bold text-sm tracking-wide">Create a pact</span>
+                <ArrowRight size={16} className="relative z-10 text-black stroke-[2.5]" />
               </button>
 
               {/* Secondary CTA: Sign in to existing (#ebaf64 outline and text) */}
               <button
                 type="button"
                 onClick={() => setStep(0)}
-                className="w-full py-3.5 px-6 rounded-2xl bg-black/40 backdrop-blur-md border border-[#ebaf64] text-[#ebaf64] hover:bg-[#ebaf64]/10 font-medium text-xs transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98]"
+                className="w-full py-3.5 px-6 rounded-2xl bg-black/60 backdrop-blur-md border border-[#ebaf64] text-[#ebaf64] hover:bg-[#ebaf64]/10 font-medium text-xs transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98]"
               >
                 <span>Sign in to existing pact</span>
               </button>
