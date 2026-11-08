@@ -130,7 +130,8 @@ export async function POST(req: Request) {
           status: "active",
         };
 
-        const rememberResult = await walrusService.remember(payload);
+        // Rapid timeout (4000ms) ensures prompt UI progression while registering on Walrus
+        const rememberResult = await walrusService.remember(payload, 4000);
         return {
           ruleId: analyzed.ruleId,
           blobId: rememberResult.blobId,
@@ -164,7 +165,7 @@ export async function POST(req: Request) {
       status: "locked",
     };
 
-    const genesisRememberResult = await walrusService.remember(genesisManifest);
+    const genesisRememberResult = await walrusService.remember(genesisManifest, 4000);
 
     console.log(
       `[Walrus API] Genesis Pact committed! Manifest Blob ID: ${genesisRememberResult.blobId}`

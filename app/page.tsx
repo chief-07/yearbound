@@ -698,20 +698,16 @@ export default function YearboundApp() {
   // Step 3 Submission to Walrus
   const handleLockVault = async () => {
     setIsSubmitting(true);
-    setSealingProgress(18);
-    setSealingStage("Analyzing resolutions...");
+    setSealingProgress(20);
+    setSealingStage("Analyzing resolutions with Gemini...");
     const t1 = setTimeout(() => {
-      setSealingProgress(45);
-      setSealingStage("Securing commitments...");
-    }, 1800);
+      setSealingProgress(55);
+      setSealingStage("Committing to Walrus Memory...");
+    }, 900);
     const t2 = setTimeout(() => {
-      setSealingProgress(75);
-      setSealingStage("Recording to Walrus memory...");
-    }, 4500);
-    const t3 = setTimeout(() => {
-      setSealingProgress(92);
+      setSealingProgress(85);
       setSealingStage("Locking x402 vault...");
-    }, 12000);
+    }, 2200);
 
     try {
       const activeRules = rules.filter((r) => r.title.trim().length > 0);
@@ -724,36 +720,26 @@ export default function YearboundApp() {
 
       let data: any = null;
 
-      // Resilient retry loop: try up to 3 times before failing
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        try {
-          if (attempt > 1) {
-            setSealingStage(`Reconnecting to Walrus memory...`);
-          }
+      try {
+        const res = await fetch("/api/walrus", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: AbortSignal.timeout(12000),
+          body: JSON.stringify({
+            rules: activeRules,
+            initialDepositSui: escrowDeposit,
+            unlockDate: "2026-12-25",
+            walletAddress: activeAccountAddress,
+            accountType,
+          }),
+        });
 
-          const res = await fetch("/api/walrus", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              rules: activeRules,
-              initialDepositSui: escrowDeposit,
-              unlockDate: "2026-12-25",
-              walletAddress: activeAccountAddress,
-              accountType,
-            }),
-          });
-
-          const resData = await res.json();
-          if (resData && (resData.success || resData.genesisBlobId || resData.primaryBlobId)) {
-            data = resData;
-            break;
-          }
-        } catch (fetchErr) {
-          console.warn(`[Vault] Submission attempt ${attempt} notice:`, fetchErr);
-          if (attempt < 3) {
-            await new Promise((r) => setTimeout(r, 2000));
-          }
+        const resData = await res.json();
+        if (resData && (resData.success || resData.genesisBlobId || resData.primaryBlobId)) {
+          data = resData;
         }
+      } catch (fetchErr) {
+        console.warn(`[Vault] Submission notice:`, fetchErr);
       }
 
       if (data && (data.genesisBlobId || data.primaryBlobId)) {
@@ -2589,27 +2575,27 @@ export default function YearboundApp() {
                   </div>
                 )}
 
-                {/* 2. UNIFIED HERO CARD: BALANCE + ACTIONS + WALLY'S VOICE (Gold Accent Experiment) */}
-                <div className="relative bg-[#ebaf64] text-black rounded-3xl p-5 sm:p-6 pt-7 sm:pt-8 flex flex-col gap-4 shadow-[0_12px_36px_rgba(235,175,100,0.22)] border border-[#f5be74] transition-all duration-200 mt-8">
+                {/* 2. UNIFIED HERO CARD: BALANCE + ACTIONS + WALLY'S VOICE (Zero Slop, No Divider Line) */}
+                <div className="relative bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 sm:p-6 pt-7 sm:pt-8 flex flex-col gap-4 shadow-md transition-all duration-200 mt-8">
                   {/* Wally Mascot with Memories Book: Small, above the card, on the left top edge */}
                   <div className="absolute -top-7 sm:-top-8 left-5 sm:left-6 z-20 pointer-events-none select-none">
                     <img
                       src="/assets/mascot/wally_memories.png"
                       alt="Wally with Memories book"
-                      className="w-16 h-auto sm:w-18 drop-shadow-[0_8px_16px_rgba(0,0,0,0.35)] filter"
+                      className="w-16 h-auto sm:w-18 drop-shadow-[0_8px_16px_rgba(0,0,0,0.8)] filter"
                       draggable={false}
                     />
                   </div>
 
                   <div className="flex items-center justify-between gap-3">
-                    <span className="text-3xl sm:text-4xl font-bold font-mono text-black tracking-tight">
+                    <span className="text-3xl sm:text-4xl font-bold font-mono text-white tracking-tight">
                       {availableBalance.toFixed(2)} SUI
                     </span>
                     <div className="flex items-center gap-2 shrink-0">
                       <button
                         type="button"
                         onClick={openSendFlow}
-                        className="py-2.5 px-4 rounded-full bg-black hover:bg-neutral-900 text-white font-semibold text-xs transition-all duration-150 flex items-center justify-center gap-1.5 active:scale-95 shadow-md cursor-pointer"
+                        className="py-2.5 px-4 rounded-full bg-[#ebaf64] hover:bg-[#f3ba6f] text-black font-semibold text-xs transition-all duration-150 flex items-center justify-center gap-1.5 active:scale-95 shadow-sm"
                       >
                         <ArrowUpRight size={14} className="stroke-[2.5]" />
                         <span>Send</span>
@@ -2617,19 +2603,19 @@ export default function YearboundApp() {
                       <button
                         type="button"
                         onClick={copyAddress}
-                        className="py-2.5 px-4 rounded-full bg-black/10 hover:bg-black/20 text-black border border-black/20 font-medium text-xs transition-all duration-150 flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
+                        className="py-2.5 px-4 rounded-full bg-black/40 hover:bg-black/60 text-[#ebaf64] border border-[#ebaf64]/30 hover:border-[#ebaf64]/60 font-medium text-xs transition-all duration-150 flex items-center justify-center gap-1.5 active:scale-95"
                       >
-                        {copiedAddress ? <Check size={14} className="text-black" /> : <ArrowDownLeft size={14} />}
+                        {copiedAddress ? <Check size={14} className="text-[#ebaf64]" /> : <ArrowDownLeft size={14} />}
                         <span>{copiedAddress ? "Copied" : "Receive"}</span>
                       </button>
                     </div>
                   </div>
 
                   <div className="flex flex-col gap-1.5 pt-1">
-                    <span className="text-[11px] font-mono text-black/70 uppercase tracking-wider font-bold">
+                    <span className="text-[11px] font-mono text-[#ebaf64]/80 uppercase tracking-wider font-semibold">
                       {!isDegradedMode ? "Wally · Walrus Memory" : "Wally · Memory Offline"}
                     </span>
-                    <p className="text-sm text-black/90 leading-relaxed font-normal">
+                    <p className="text-sm text-white/90 leading-relaxed font-normal">
                       {isDegradedMode
                         ? "Stateless Session: Walrus memory is disconnected. Outgoing transfers are not cross-referenced against your resolutions and past infractions are forgotten."
                         : isVaultUnlocked && !isVaultClaimed
@@ -2728,6 +2714,21 @@ export default function YearboundApp() {
                 <div className="flex flex-col gap-3">
                   {activeRulesList.map((rule, idx) => {
                     const isExpanded = selectedMemoryRuleId === rule.id;
+                    const matchingBlob = walrusBlobs.find(
+                      (b) => b.payload?.ruleId === rule.id || b.blobId === rule.blobId
+                    );
+                    const rulePayload = matchingBlob?.payload || {
+                      protocol: "Yearbound v1",
+                      storage: "Walrus Memory (MemWal)",
+                      type: "commitment_rule",
+                      ruleId: rule.id,
+                      title: rule.title,
+                      condition: rule.condition,
+                      penaltySui: rule.penalty,
+                      status: "active",
+                      keywords: rule.keywords || [],
+                    };
+
                     return (
                       <div
                         key={rule.id}
@@ -2742,88 +2743,79 @@ export default function YearboundApp() {
                           <span className="text-xs font-mono font-medium text-[#ebaf64] tracking-wider">
                             0{idx + 1}
                           </span>
-                          <span className="text-xs font-mono text-black font-semibold bg-[#ebaf64] px-2.5 py-0.5 rounded-full shadow-sm">
-                            {rule.penalty} SUI Penalty
-                          </span>
+                          <div className="flex items-center gap-2">
+                            {rule.breaches ? (
+                              <span className="text-[10px] font-mono text-red-400 font-semibold bg-red-500/10 border border-red-500/25 px-2 py-0.5 rounded-full">
+                                {rule.breaches} {rule.breaches === 1 ? "Breach" : "Breaches"}
+                              </span>
+                            ) : null}
+                            <span className="text-xs font-mono text-black font-semibold bg-[#ebaf64] px-2.5 py-0.5 rounded-full shadow-sm">
+                              {rule.penalty} SUI Penalty
+                            </span>
+                          </div>
                         </div>
+
                         <div className="text-base font-semibold text-white">
                           {rule.title}
                         </div>
+
                         {rule.condition && (
-                          <p className="text-xs text-[#D4D4D8] leading-relaxed">
+                          <p className="text-xs text-white/70 leading-relaxed">
                             {rule.condition}
                           </p>
                         )}
-                        <div className="flex items-center justify-between border-t border-white/10 pt-2.5 mt-1">
-                          <span className="text-[10px] font-mono text-white/50">
-                            Walrus Inscribed · Enforced by Wally
-                          </span>
-                          <span className="text-[10px] font-mono text-[#ebaf64] font-semibold">
-                            {rule.breaches || 0} Breaches
-                          </span>
-                        </div>
 
-                        {/* Expandable Exact Walrus Memory Proof */}
+                        {/* Expandable Exact Walrus Memory Proof & Inscribed Payload */}
                         {isExpanded && (
                           <div
                             onClick={(e) => e.stopPropagation()}
-                            className="bg-black/40 border border-[#ebaf64]/25 rounded-2xl p-4 flex flex-col gap-2.5 mt-2 animate-in fade-in duration-200"
+                            className="bg-black/30 border border-[#ebaf64]/20 rounded-2xl p-4 flex flex-col gap-3 mt-1 animate-in fade-in duration-200"
                           >
-                            <div className="flex items-center justify-between">
-                              <span className="text-[10px] font-mono text-[#ebaf64]/80 uppercase tracking-wider">
-                                Walrus Memory Record
-                              </span>
-                              {rule.category ? (
-                                <span className="text-[10px] font-mono text-white bg-black/50 px-2 py-0.5 rounded-full uppercase border border-[#ebaf64]/20">
-                                  {rule.category}
-                                </span>
-                              ) : (
-                                <span className="text-[10px] font-mono text-white">
-                                  Verified
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="flex items-center justify-between bg-black/60 border border-[#ebaf64]/20 rounded-xl px-3 py-2">
-                              <span className="text-[11px] font-mono text-white truncate mr-2">
+                            <div className="flex items-center justify-between bg-black/40 border border-[#ebaf64]/20 rounded-xl px-3 py-2">
+                              <span className="text-[11px] font-mono text-white/90 truncate mr-2">
                                 Blob #{rule.blobId ? `${rule.blobId.slice(0, 16)}...` : walrusBlobId ? `${walrusBlobId.slice(0, 16)}...` : "d4a97f2e8c9b4e11..."}
                               </span>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const bid = rule.blobId || walrusBlobId || "d4a97f2e8c9b4e11a2f6";
-                                  if (navigator?.clipboard?.writeText) {
-                                    navigator.clipboard.writeText(bid).catch(() => {});
-                                  }
-                                  triggerSnackbar("Copied Blob ID to clipboard", `Blob #${bid.slice(0, 12)}...`);
-                                }}
-                                className="text-white/60 hover:text-white p-1 transition-colors shrink-0"
-                                title="Copy Blob ID"
-                              >
-                                <Copy size={12} />
-                              </button>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const bid = rule.blobId || walrusBlobId || "d4a97f2e8c9b4e11a2f6";
+                                    if (navigator?.clipboard?.writeText) {
+                                      navigator.clipboard.writeText(bid).catch(() => {});
+                                    }
+                                    triggerSnackbar("Copied Blob ID to clipboard", `Blob #${bid.slice(0, 12)}...`);
+                                  }}
+                                  className="text-white/60 hover:text-white p-1 transition-colors"
+                                  title="Copy Blob ID"
+                                >
+                                  <Copy size={12} />
+                                </button>
+                                {(rule.blobId || walrusBlobId) && (
+                                  <a
+                                    href={`https://aggregator.walrus-testnet.walrus.space/v1/blobs/${rule.blobId || walrusBlobId}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-white/60 hover:text-white p-1 transition-colors"
+                                    title="View on Walrus Aggregator"
+                                  >
+                                    <ExternalLink size={12} />
+                                  </a>
+                                )}
+                              </div>
                             </div>
 
-                            {rule.keywords && rule.keywords.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mt-0.5">
-                                {rule.keywords.slice(0, 4).map((kw, kIdx) => (
-                                  <span key={kIdx} className="text-[9px] font-mono text-[#ebaf64]/80 bg-black/40 px-2 py-0.5 rounded-full border border-[#ebaf64]/20">
-                                    #{kw}
-                                  </span>
-                                ))}
+                            {/* Exact Walrus Inscription Payload Display */}
+                            <div className="flex flex-col gap-1.5">
+                              <span className="text-[10px] font-mono uppercase tracking-wider text-[#ebaf64]/80">
+                                Walrus Inscription Payload
+                              </span>
+                              <div className="bg-black/60 border border-white/10 rounded-xl p-3 overflow-x-auto max-h-48 overscroll-contain">
+                                <pre className="text-[10px] font-mono text-white/80 whitespace-pre-wrap leading-relaxed select-all">
+                                  {JSON.stringify(rulePayload, null, 2)}
+                                </pre>
                               </div>
-                            )}
-
-                            <div className="text-[11px] font-mono text-white/70 leading-relaxed">
-                              Boundary: &ldquo;{rule.condition || rule.title}&rdquo;
                             </div>
-
-                            {rule.wallyRoastAngle && (
-                              <div className="text-[11px] text-white/90 italic bg-black/50 p-2.5 rounded-xl border border-[#ebaf64]/20">
-                                Wally Angle: &ldquo;{rule.wallyRoastAngle}&rdquo;
-                              </div>
-                            )}
                           </div>
                         )}
                       </div>
@@ -3177,110 +3169,105 @@ export default function YearboundApp() {
 
             {/* TAB: SETTINGS */}
             {activeTab === "settings" && (
-              <div className="flex-1 overflow-y-auto px-7 pt-6 sm:pt-8 pb-28 flex flex-col gap-4 animate-in fade-in duration-200 overscroll-contain">
-                <div className="text-[30px] sm:text-[34px] font-semibold tracking-[-0.02em] leading-tight text-white">
+              <div className="flex-1 overflow-y-auto px-5 sm:px-7 pt-6 sm:pt-8 pb-36 flex flex-col gap-4 animate-in fade-in duration-200 overscroll-contain">
+                <div className="text-[26px] sm:text-[30px] font-bold tracking-[0.02em] leading-tight text-[#ebaf64]">
                   Settings & Proofs
                 </div>
 
-                {/* Walrus Memory Proof */}
-                <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-3">
+                {/* Walrus Memory Proof Card */}
+                <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 flex flex-col gap-3 shadow-md">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-mono text-[#71717A] uppercase">
-                      Walrus Memory Service
+                    <span className="text-xs font-semibold text-white">
+                      Walrus Memory Proof
                     </span>
                     <button
                       type="button"
                       onClick={() => setIsMemoryInspectorOpen(true)}
-                      className="text-[11px] font-medium text-white flex items-center gap-1 px-2 py-0.5 rounded bg-[#18181C] border border-[#27272A] hover:border-[#52525B] transition-colors"
+                      className="text-xs font-mono text-[#ebaf64] hover:underline flex items-center gap-1 active:scale-95"
                     >
-                      <span>View Memory Proofs</span>
-                      <ExternalLink size={11} />
+                      <span>Inspect Memory</span>
+                      <ExternalLink size={12} />
                     </button>
                   </div>
-                  <div className="bg-[#131316] border border-[#27272A] rounded-xl p-3 flex items-center justify-between gap-2">
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-[10px] text-[#71717A] uppercase">Primary Blob ID</span>
-                      <span className="text-xs font-mono text-white truncate">
-                        {walrusBlobId || "blob_simulated_proof"}
-                      </span>
-                    </div>
+                  <div className="flex items-center justify-between bg-black/30 border border-[#ebaf64]/20 rounded-2xl px-4 py-3">
+                    <span className="text-xs font-mono text-white/80 truncate mr-2">
+                      Blob #{walrusBlobId ? `${walrusBlobId.slice(0, 16)}...` : "pact_genesis_manifest"}
+                    </span>
                     <button
                       type="button"
                       onClick={copyBlobId}
-                      className="text-[#A1A1AA] hover:text-white p-1.5 transition-colors active:scale-95"
+                      className="text-[#ebaf64]/80 hover:text-[#ebaf64] p-1 transition-colors active:scale-95"
+                      title="Copy Blob ID"
                     >
-                      {copiedBlob ? <Check size={14} className="text-white" /> : <Copy size={14} />}
+                      {copiedBlob ? <Check size={14} className="text-[#ebaf64]" /> : <Copy size={14} />}
                     </button>
                   </div>
                 </div>
 
-                {/* Wallet Settings */}
-                <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-3">
+                {/* Wallet Details Card */}
+                <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 flex flex-col gap-3.5 shadow-md">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-mono text-[#71717A] uppercase">
-                      Wallet Configuration
+                    <span className="text-xs font-semibold text-white">
+                      Account & Network
                     </span>
-                    <span className="text-xs font-mono text-white capitalize">
-                      {accountType === "demo" ? "Demo Keypair" : "Real Burner"}
+                    <span className="text-xs font-mono text-[#ebaf64]">
+                      {accountType === "demo" ? "Testnet" : "Mainnet"}
                     </span>
                   </div>
 
-                  <div className="flex flex-col gap-1 border-t border-[#18181C] pt-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-[#71717A]">Active Address</span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const addr =
-                              accountType === "demo"
-                                ? (demoAddress || DEMO_SUI_ADDRESS)
-                                : accountType === "real"
-                                ? realAddress
-                                : linkedAddress;
-                            if (navigator?.clipboard?.writeText) {
-                              navigator.clipboard.writeText(addr).catch(() => {});
-                            }
-                            triggerSnackbar("Address Copied", `${addr.slice(0, 10)}...`);
-                          }}
-                          className="text-[10px] font-mono text-[#71717A] hover:text-white flex items-center gap-1 transition-colors"
-                        >
-                          <Copy size={11} />
-                          <span>Copy</span>
-                        </button>
-                        <a
-                          href={accountType === "demo"
-                            ? `https://suiscan.xyz/testnet/account/${demoAddress || DEMO_SUI_ADDRESS}`
-                            : `https://suiscan.xyz/mainnet/account/${realAddress || linkedAddress}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[10px] font-mono text-[#71717A] hover:text-white flex items-center gap-1 transition-colors"
-                        >
-                          <span>SuiScan</span>
-                          <ExternalLink size={11} />
-                        </a>
-                      </div>
-                    </div>
-                    <span className="text-xs font-mono text-white truncate">
+                  <div className="flex items-center justify-between bg-black/30 border border-[#ebaf64]/20 rounded-2xl px-4 py-3">
+                    <span className="text-xs font-mono text-white/80 truncate mr-2">
                       {accountType === "demo"
                         ? (demoAddress || DEMO_SUI_ADDRESS)
                         : accountType === "real"
                         ? realAddress
                         : linkedAddress}
                     </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const addr =
+                            accountType === "demo"
+                              ? (demoAddress || DEMO_SUI_ADDRESS)
+                              : accountType === "real"
+                              ? realAddress
+                              : linkedAddress;
+                          if (navigator?.clipboard?.writeText) {
+                            navigator.clipboard.writeText(addr).catch(() => {});
+                          }
+                          triggerSnackbar("Address Copied", `${addr.slice(0, 10)}...`);
+                        }}
+                        className="text-[#ebaf64]/80 hover:text-[#ebaf64] p-1 transition-colors"
+                        title="Copy address"
+                      >
+                        <Copy size={13} />
+                      </button>
+                      <a
+                        href={accountType === "demo"
+                          ? `https://suiscan.xyz/testnet/account/${demoAddress || DEMO_SUI_ADDRESS}`
+                          : `https://suiscan.xyz/mainnet/account/${realAddress || linkedAddress}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[#ebaf64]/80 hover:text-[#ebaf64] p-1 transition-colors"
+                        title="View on SuiScan"
+                      >
+                        <ExternalLink size={13} />
+                      </a>
+                    </div>
                   </div>
 
-                  <div className="flex items-center justify-between border-t border-[#18181C] pt-3">
-                    <span className="text-xs text-[#71717A]">On-Chain Balance</span>
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-xs text-white/60">Live Balance</span>
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-mono text-white font-medium">
                         {accountType === "demo"
                           ? isCheckingLiveBalance
-                            ? "Querying Testnet RPC..."
-                            : `${liveOnChainBalanceSui !== null ? liveOnChainBalanceSui.toFixed(2) : availableBalance.toFixed(2)} SUI (Testnet)`
+                            ? "Querying..."
+                            : `${liveOnChainBalanceSui !== null ? liveOnChainBalanceSui.toFixed(2) : availableBalance.toFixed(2)} SUI`
                           : isCheckingLiveBalance
-                          ? "Querying RPC..."
-                          : `${liveOnChainBalanceSui !== null ? liveOnChainBalanceSui.toFixed(2) : "0.00"} SUI (Mainnet)`}
+                          ? "Querying..."
+                          : `${liveOnChainBalanceSui !== null ? liveOnChainBalanceSui.toFixed(2) : "0.00"} SUI`}
                       </span>
                       <button
                         type="button"
@@ -3292,7 +3279,7 @@ export default function YearboundApp() {
                           }
                         }}
                         disabled={isCheckingLiveBalance}
-                        className="text-[#71717A] hover:text-white text-[10px] font-mono transition-colors"
+                        className="text-[#ebaf64]/80 hover:text-[#ebaf64] text-xs transition-colors"
                         title="Refresh on-chain balance"
                       >
                         ↻
@@ -3300,15 +3287,8 @@ export default function YearboundApp() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between border-t border-[#18181C] pt-3">
-                    <span className="text-xs text-[#71717A]">Network</span>
-                    <span className="text-xs text-white font-medium">
-                      {accountType === "demo" ? "Sui Testnet (Tatum Gateway)" : "Sui Mainnet (Tatum Gateway)"}
-                    </span>
-                  </div>
-
                   {(accountType === "real" || accountType === "demo") && (
-                    <div className="border-t border-[#18181C] pt-3 flex flex-col gap-2">
+                    <div className="flex flex-col gap-2 pt-1">
                       <button
                         type="button"
                         onClick={() => {
@@ -3318,40 +3298,36 @@ export default function YearboundApp() {
                             setShowExportPrivateKey(!showExportPrivateKey);
                           }
                         }}
-                        className="text-xs text-left text-[#A1A1AA] hover:text-white transition-colors flex items-center justify-between font-mono"
+                        className="text-xs text-left text-white/70 hover:text-white transition-colors flex items-center justify-between px-1"
                       >
-                        <span>Export Private Key ({accountType === "demo" ? "Testnet" : "Mainnet"})</span>
-                        <span className="text-[10px] text-[#71717A]">
+                        <span>Export Private Key</span>
+                        <span className="text-[11px] font-mono text-[#ebaf64]">
                           {showExportPrivateKey ? "Hide" : "Reveal"}
                         </span>
                       </button>
 
                       {showExportPrivateKey && exportedKey && (
-                        <div className="bg-[#131316] border border-[#27272A] rounded-xl p-3 flex flex-col gap-1.5 animate-in fade-in">
-                          <span className="text-[10px] font-mono text-[#A1A1AA]">
-                            {accountType === "demo" ? "Testnet" : "Mainnet"} Ed25519 Secret Key (Hex):
+                        <div className="bg-black/40 border border-[#ebaf64]/20 rounded-2xl p-3 flex flex-col gap-1.5 animate-in fade-in">
+                          <span className="text-[10px] font-mono text-white/50">
+                            {accountType === "demo" ? "Testnet" : "Mainnet"} Secret Key (Hex):
                           </span>
-                          <div className="bg-[#0A0A0C] p-2 rounded text-[10px] font-mono text-white break-all select-all border border-[#1F1F24]">
+                          <div className="bg-black/60 p-2.5 rounded-xl text-[10px] font-mono text-[#ebaf64] break-all select-all border border-[#ebaf64]/20">
                             {exportedKey}
                           </div>
-                          <span className="text-[10px] text-[#71717A]">
-                            {accountType === "demo"
-                              ? "Import into Sui Wallet on Testnet to inspect balance or use with testnet faucets."
-                              : "Keep this secret. Anyone with this key controls your Sui burner wallet on Mainnet."}
-                          </span>
                         </div>
                       )}
                     </div>
                   )}
                 </div>
 
+                {/* Reset Pact Button */}
                 <button
                   type="button"
                   onClick={() => {
                     setStep(1);
                     setActiveTab("home");
                   }}
-                  className="w-full py-3.5 px-4 rounded-xl bg-[#131316] border border-[#27272A] hover:border-[#52525B] text-xs font-medium text-[#A1A1AA] hover:text-white transition-all text-center active:scale-[0.99]"
+                  className="w-full py-3.5 px-4 rounded-full bg-black/20 hover:bg-black/40 border border-[#ebaf64]/25 hover:border-[#ebaf64]/50 text-xs font-medium text-white/70 hover:text-white transition-all text-center active:scale-[0.99] shadow-sm"
                 >
                   Reset & Create New Pact
                 </button>
@@ -3485,9 +3461,9 @@ export default function YearboundApp() {
                     </div>
                   </div>
 
-                  {/* Recipient Address Card */}
-                  <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 flex flex-col gap-2 shadow-md">
-                    <label className="text-xs font-medium text-[#ebaf64]/80">
+                  {/* Recipient Address */}
+                  <div className="flex flex-col gap-1.5 pt-1">
+                    <label className="text-xs font-medium text-[#ebaf64]/80 px-1">
                       Recipient Address
                     </label>
                     <input
@@ -3495,7 +3471,7 @@ export default function YearboundApp() {
                       value={sendRecipient}
                       onChange={(e) => setSendRecipient(e.target.value)}
                       placeholder="Enter Sui address (0x...)"
-                      className="w-full bg-black/30 border border-[#ebaf64]/30 rounded-2xl px-4 py-3 text-xs font-mono text-white placeholder-white/30 outline-none focus:border-[#ebaf64] transition-colors"
+                      className="w-full bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 hover:border-[#ebaf64]/50 focus:border-[#ebaf64] rounded-2xl px-4 py-3.5 text-xs font-mono text-white placeholder-white/30 outline-none transition-colors shadow-sm"
                     />
                   </div>
                 </div>
@@ -3542,16 +3518,14 @@ export default function YearboundApp() {
                 </div>
 
                 <div className="flex-1 overflow-y-auto px-5 sm:px-7 py-3 flex flex-col gap-4 pb-4 overscroll-contain">
-                  {/* Guilt Prompt & Compulsory Textarea Card */}
-                  <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 flex flex-col gap-3 shadow-md">
-                    <textarea
-                      value={sendMemo}
-                      onChange={(e) => setSendMemo(e.target.value)}
-                      placeholder="e.g. Late-night food delivery..."
-                      rows={3}
-                      className="w-full bg-black/30 border border-[#ebaf64]/30 rounded-2xl p-4 text-xs sm:text-sm text-white placeholder-white/30 outline-none focus:border-[#ebaf64] transition-colors leading-relaxed resize-none"
-                    />
-                  </div>
+                  {/* Compulsory Memo Input */}
+                  <textarea
+                    value={sendMemo}
+                    onChange={(e) => setSendMemo(e.target.value)}
+                    placeholder="e.g. Late-night food delivery..."
+                    rows={3}
+                    className="w-full bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 hover:border-[#ebaf64]/50 focus:border-[#ebaf64] rounded-2xl p-4 text-xs sm:text-sm text-white placeholder-white/30 outline-none transition-colors leading-relaxed resize-none shadow-sm"
+                  />
 
                   {/* Quick Pick Testing Chips for Judges */}
                   <div className="flex flex-col gap-2">

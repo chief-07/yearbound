@@ -145,15 +145,15 @@ export class WalrusMemoryService {
    */
   public async remember(
     payload: YearboundMemoryPayload,
-    timeoutMs: number = 45000,
+    timeoutMs: number = 2500,
     namespace?: string
   ): Promise<{ jobId: string; blobId: string }> {
     const serialized = JSON.stringify(payload);
 
-    // Automatic resilient retry loop for client.remember
+    // Fast, resilient dispatch: up to 2 attempts with short 600ms backoff
     let accepted: { job_id: string } | null = null;
     let lastErr: unknown = null;
-    for (let attempt = 1; attempt <= 4; attempt++) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         accepted = namespace
           ? await (this.client as any).remember(serialized, namespace)
@@ -163,10 +163,10 @@ export class WalrusMemoryService {
         lastErr = err;
         const msg = err instanceof Error ? err.message : String(err);
         console.warn(
-          `[Walrus] Remember dispatch attempt ${attempt} notice: ${msg}. Retrying in ${attempt * 1200}ms...`
+          `[Walrus] Remember dispatch attempt ${attempt} notice: ${msg}.`
         );
-        if (attempt < 4) {
-          await new Promise((r) => setTimeout(r, attempt * 1200));
+        if (attempt < 2) {
+          await new Promise((r) => setTimeout(r, 600));
         }
       }
     }
