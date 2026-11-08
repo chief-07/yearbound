@@ -2522,7 +2522,7 @@ export default function YearboundApp() {
             SCREEN 4: ACTIVE HOMESCREEN & NAVIGATION
             ================================================================== */}
         {step === 4 && !isSendOpen && (
-          <div className="relative flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-300">
+          <div className="relative z-10 flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-300">
             {/* TAB: HOME */}
             {activeTab === "home" && (
               <div className="flex-1 overflow-y-auto px-5 sm:px-7 pt-6 sm:pt-8 pb-36 flex flex-col gap-4 overscroll-contain">
@@ -2592,7 +2592,7 @@ export default function YearboundApp() {
                 {/* 2. UNIFIED HERO CARD: BALANCE + ACTIONS + WALLY'S VOICE (Zero Slop, No Divider Line) */}
                 <div className="relative bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 sm:p-6 pt-7 sm:pt-8 flex flex-col gap-4 shadow-md transition-all duration-200 mt-8">
                   {/* Wally Mascot with Memories Book: Small, above the card, on the left top edge */}
-                  <div className="absolute -top-11 sm:-top-13 left-5 sm:left-6 z-20 pointer-events-none select-none">
+                  <div className="absolute -top-7 sm:-top-8 left-5 sm:left-6 z-20 pointer-events-none select-none">
                     <img
                       src="/assets/mascot/wally_memories.png"
                       alt="Wally with Memories book"
@@ -3428,28 +3428,28 @@ export default function YearboundApp() {
             SEND FLOW OVERLAY SCREENS
             ================================================================== */}
         {isSendOpen && (
-          <div className="flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-200">
+          <div className="relative z-10 flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-200">
             
             {/* SUB-STEP 1: AMOUNT & RECIPIENT */}
             {sendSubStep === "amount" && (
               <>
-                <div className="pt-6 sm:pt-8 px-7 pb-3 flex flex-col gap-2.5">
+                <div className="pt-8 sm:pt-10 px-7 pb-3 flex flex-col gap-2 shrink-0">
                   <button
                     type="button"
                     onClick={closeSendFlow}
-                    className="self-start text-[#71717A] hover:text-white flex items-center gap-1.5 text-xs font-medium transition-colors active:scale-95"
+                    className="self-start text-[#ebaf64]/75 hover:text-[#ebaf64] flex items-center gap-1.5 text-xs font-medium transition-colors active:scale-95"
                   >
                     <ArrowLeft size={14} />
                     <span>Back</span>
                   </button>
-                  <div className="text-[30px] sm:text-[34px] font-semibold tracking-[-0.02em] leading-tight text-white">
+                  <div className="text-[28px] sm:text-[32px] font-bold tracking-[0.02em] leading-tight text-[#ebaf64]">
                     Send SUI
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto px-7 py-4 flex flex-col gap-7 pb-4 overscroll-contain">
-                  {/* Big Centered Amount Display */}
-                  <div className="flex flex-col items-center justify-center pt-2">
+                <div className="flex-1 overflow-y-auto px-5 sm:px-7 py-2 flex flex-col gap-4 pb-4 overscroll-contain">
+                  {/* Big Centered Amount Display Card */}
+                  <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-6 flex flex-col items-center justify-center gap-3 shadow-md">
                     <div className="flex items-baseline justify-center gap-2">
                       <input
                         type="text"
@@ -3460,23 +3460,23 @@ export default function YearboundApp() {
                           setSendAmount(val);
                         }}
                         style={{ width: `${Math.max(1, (sendAmount || "0").length)}ch` }}
-                        className="bg-transparent text-[54px] font-semibold font-mono text-center text-white outline-none tracking-tight p-0"
+                        className="bg-transparent text-[52px] sm:text-[56px] font-semibold font-mono text-center text-white outline-none tracking-tight p-0"
                         placeholder="0"
                       />
-                      <span className="text-xl font-mono text-[#71717A]">SUI</span>
+                      <span className="text-xl font-mono text-[#ebaf64]">SUI</span>
                     </div>
 
                     {/* Quick Amount Preset Chips */}
-                    <div className="flex items-center gap-2 mt-3">
+                    <div className="flex items-center gap-2 mt-1">
                       {AMOUNT_PRESETS.map((amt) => (
                         <button
                           key={amt}
                           type="button"
                           onClick={() => setSendAmount(amt.toString())}
-                          className={`py-1 px-3 rounded-full text-xs font-mono transition-all duration-150 active:scale-95 ${
+                          className={`py-1.5 px-3.5 rounded-full text-xs font-mono transition-all duration-150 active:scale-95 ${
                             sendAmount === amt.toString()
-                              ? "bg-white text-black font-semibold"
-                              : "bg-[#131316] text-[#A1A1AA] border border-[#27272A] hover:border-[#52525B]"
+                              ? "bg-[#ebaf64] text-black font-semibold shadow-sm"
+                              : "bg-black/40 text-white/70 border border-[#ebaf64]/30 hover:border-[#ebaf64]/60"
                           }`}
                         >
                           {amt} SUI
@@ -3485,9 +3485,9 @@ export default function YearboundApp() {
                     </div>
                   </div>
 
-                  {/* Recipient Address Well */}
-                  <div className="flex flex-col gap-2 pt-2">
-                    <label className="text-[12px] font-medium text-[#A1A1AA]">
+                  {/* Recipient Address Card */}
+                  <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 flex flex-col gap-2 shadow-md">
+                    <label className="text-xs font-medium text-[#ebaf64]/80">
                       Recipient Address
                     </label>
                     <input
@@ -3495,28 +3495,28 @@ export default function YearboundApp() {
                       value={sendRecipient}
                       onChange={(e) => setSendRecipient(e.target.value)}
                       placeholder="Enter Sui address (0x...)"
-                      className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-4 py-3 text-xs font-mono text-white placeholder-[#52525B] outline-none focus:border-white transition-colors"
+                      className="w-full bg-black/30 border border-[#ebaf64]/30 rounded-2xl px-4 py-3 text-xs font-mono text-white placeholder-white/30 outline-none focus:border-[#ebaf64] transition-colors"
                     />
                   </div>
                 </div>
 
-                <div className="p-6 bg-[#000000] flex flex-col items-center gap-3">
+                <div className="p-5 sm:p-7 pt-2 pb-8 sm:pb-9 bg-transparent shrink-0 flex flex-col items-center">
                   <button
                     type="button"
                     onClick={() => setSendSubStep("memo")}
                     disabled={!sendAmount || parseFloat(sendAmount) <= 0 || !sendRecipient}
-                    className={`w-full py-4 px-6 rounded-full font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 ${
+                    className={`w-full py-4 px-6 rounded-full font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98] ${
                       sendAmount && parseFloat(sendAmount) > 0 && sendRecipient
-                        ? "bg-[#FFFFFF] text-[#000000] hover:bg-[#E4E4E7] active:scale-[0.98]"
-                        : "bg-[#222226] text-[#52525B] cursor-not-allowed"
+                        ? "bg-[#ebaf64] text-black hover:bg-[#f3bc75] shadow-lg shadow-black/60 cursor-pointer"
+                        : "bg-black/40 text-white/40 border border-white/10 cursor-not-allowed"
                     }`}
                   >
                     <span>Continue</span>
                     <ArrowRight size={16} />
                   </button>
-                  <div className="text-[11px] font-mono text-[#52525B] text-center tracking-tight">
+                  <span className="text-[11px] font-mono text-white/35 text-center tracking-tight mt-2.5">
                     Walrus Memory validated · Tatum Sui RPC resolved
-                  </div>
+                  </span>
                 </div>
               </>
             )}
@@ -3524,34 +3524,34 @@ export default function YearboundApp() {
             {/* SUB-STEP 2: COMPULSORY TRUTHFUL MEMO */}
             {sendSubStep === "memo" && (
               <>
-                <div className="pt-6 sm:pt-8 px-7 pb-2 flex flex-col gap-2.5">
+                <div className="pt-8 sm:pt-10 px-7 pb-2 shrink-0 flex flex-col gap-2">
                   <button
                     type="button"
                     onClick={() => setSendSubStep("amount")}
-                    className="self-start text-[#71717A] hover:text-white flex items-center gap-1.5 text-xs font-medium transition-colors active:scale-95"
+                    className="self-start text-[#ebaf64]/75 hover:text-[#ebaf64] flex items-center gap-1.5 text-xs font-medium transition-colors active:scale-95"
                   >
                     <ArrowLeft size={14} />
                     <span>Back</span>
                   </button>
-                  <div className="flex flex-col gap-1">
-                    <div className="text-[30px] sm:text-[34px] font-semibold tracking-[-0.02em] leading-tight text-white">
-                      What is this for?
-                    </div>
-                    <p className="text-xs text-[#71717A] leading-relaxed">
-                      Be honest with future you. What are you purchasing or sending?
-                    </p>
+                  <div className="text-[28px] sm:text-[32px] font-bold tracking-[0.02em] leading-tight text-[#ebaf64]">
+                    What is this for?
                   </div>
+                  <p className="text-xs text-white/70 leading-relaxed">
+                    Be honest with future you. What are you purchasing or sending?
+                  </p>
                 </div>
 
-                <div className="flex-1 overflow-y-auto px-7 py-3 flex flex-col gap-5 pb-4 overscroll-contain">
-                  {/* Guilt Prompt & Compulsory Textarea */}
-                  <textarea
-                    value={sendMemo}
-                    onChange={(e) => setSendMemo(e.target.value)}
-                    placeholder="e.g. Late-night food delivery..."
-                    rows={3}
-                    className="w-full bg-[#131316] border border-[#27272A] rounded-2xl p-4 text-sm text-white placeholder-[#52525B] outline-none focus:border-white transition-colors leading-relaxed resize-none"
-                  />
+                <div className="flex-1 overflow-y-auto px-5 sm:px-7 py-3 flex flex-col gap-4 pb-4 overscroll-contain">
+                  {/* Guilt Prompt & Compulsory Textarea Card */}
+                  <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 flex flex-col gap-3 shadow-md">
+                    <textarea
+                      value={sendMemo}
+                      onChange={(e) => setSendMemo(e.target.value)}
+                      placeholder="e.g. Late-night food delivery..."
+                      rows={3}
+                      className="w-full bg-black/30 border border-[#ebaf64]/30 rounded-2xl p-4 text-xs sm:text-sm text-white placeholder-white/30 outline-none focus:border-[#ebaf64] transition-colors leading-relaxed resize-none"
+                    />
+                  </div>
 
                   {/* Quick Pick Testing Chips for Judges */}
                   <div className="flex flex-col gap-2">
@@ -3560,25 +3560,26 @@ export default function YearboundApp() {
                         key={idx}
                         type="button"
                         onClick={() => setSendMemo(item.text)}
-                        className="bg-[#0A0A0C] border border-[#222226] hover:border-[#52525B] text-left px-4 py-3 rounded-xl transition-all duration-150 active:scale-[0.99] flex items-center justify-between"
+                        className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/20 hover:border-[#ebaf64]/50 text-left px-4 py-3 rounded-2xl transition-all duration-150 active:scale-[0.99] flex items-center justify-between"
                       >
-                        <span className="text-xs font-medium text-white">
+                        <span className="text-xs font-medium text-white/90">
                           {item.label}
                         </span>
+                        <ArrowRight size={13} className="text-[#ebaf64]/70" />
                       </button>
                     ))}
                   </div>
                 </div>
 
-                <div className="p-6 bg-[#000000]">
+                <div className="p-5 sm:p-7 pt-2 pb-8 sm:pb-9 bg-transparent shrink-0 flex flex-col items-center">
                   <button
                     type="button"
                     onClick={handleReviewAndCheck}
                     disabled={!sendMemo.trim()}
-                    className={`w-full py-4 px-6 rounded-full font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 ${
+                    className={`w-full py-4 px-6 rounded-full font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98] ${
                       sendMemo.trim()
-                        ? "bg-[#FFFFFF] text-[#000000] hover:bg-[#E4E4E7] active:scale-[0.98]"
-                        : "bg-[#222226] text-[#52525B] cursor-not-allowed"
+                        ? "bg-[#ebaf64] text-black hover:bg-[#f3bc75] shadow-lg shadow-black/60 cursor-pointer"
+                        : "bg-black/40 text-white/40 border border-white/10 cursor-not-allowed"
                     }`}
                   >
                     <span>Review & Check</span>
@@ -3592,13 +3593,13 @@ export default function YearboundApp() {
             {sendSubStep === "checking" && (
               <div className="flex-1 flex flex-col items-center justify-center px-7 text-center animate-in fade-in duration-300">
                 <div className="relative w-16 h-16 flex items-center justify-center mb-6">
-                  <svg className="w-16 h-16 animate-spin text-white" viewBox="0 0 64 64">
+                  <svg className="w-16 h-16 animate-spin text-[#ebaf64]" viewBox="0 0 64 64">
                     <circle
                       cx="32"
                       cy="32"
                       r="26"
                       fill="none"
-                      stroke="#222226"
+                      stroke="rgba(235,175,100,0.15)"
                       strokeWidth="3.5"
                     />
                     <circle
@@ -3606,7 +3607,7 @@ export default function YearboundApp() {
                       cy="32"
                       r="26"
                       fill="none"
-                      stroke="#FFFFFF"
+                      stroke="#ebaf64"
                       strokeWidth="3.5"
                       strokeDasharray={163.36}
                       strokeDashoffset={110}
@@ -3615,30 +3616,30 @@ export default function YearboundApp() {
                   </svg>
                 </div>
 
-                <div className="text-lg font-semibold text-white tracking-tight">
+                <div className="text-lg font-bold text-[#ebaf64] tracking-tight">
                   Auditing Transaction
                 </div>
                 
                 {/* Live Split Status Cards: Tatum RPC + Walrus Memory */}
-                <div className="mt-4 w-full flex flex-col gap-2">
-                  <div className="bg-[#0A0A0C] border border-[#222226] rounded-xl px-4 py-2.5 flex items-center justify-between text-left">
+                <div className="mt-4 w-full flex flex-col gap-2.5">
+                  <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-2xl px-4 py-3 flex items-center justify-between text-left">
                     <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                      <span className="text-xs text-[#A1A1AA]">Tatum Sui RPC</span>
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      <span className="text-xs text-white/80">Tatum Sui RPC</span>
                     </div>
-                    <span className="text-[10px] font-mono text-[#71717A]">Verifying Solvency</span>
+                    <span className="text-[10px] font-mono text-[#ebaf64]/80">Verifying Solvency</span>
                   </div>
 
-                  <div className="bg-[#0A0A0C] border border-[#222226] rounded-xl px-4 py-2.5 flex items-center justify-between text-left">
+                  <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-2xl px-4 py-3 flex items-center justify-between text-left">
                     <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
-                      <span className="text-xs text-[#A1A1AA]">Walrus Memory</span>
+                      <span className="text-xs text-white/80">Walrus Memory</span>
                     </div>
-                    <span className="text-[10px] font-mono text-[#71717A]">Recalling Oaths</span>
+                    <span className="text-[10px] font-mono text-[#ebaf64]/80">Recalling Oaths</span>
                   </div>
                 </div>
 
-                <div className="text-xs font-mono text-[#71717A] mt-4 truncate max-w-full">
+                <div className="text-xs font-mono text-white/50 mt-4 truncate max-w-full">
                   {checkingProgressStage}
                 </div>
               </div>
@@ -3647,13 +3648,13 @@ export default function YearboundApp() {
             {/* SUB-STEP: APPROVED MORPH STATE */}
             {sendSubStep === "approved" && (
               <div className="flex-1 flex flex-col items-center justify-center px-7 text-center animate-in zoom-in-95 duration-200">
-                <div className="w-16 h-16 rounded-full bg-white text-black flex items-center justify-center mb-6 shadow-2xl">
+                <div className="w-16 h-16 rounded-full bg-[#ebaf64] text-black flex items-center justify-center mb-6 shadow-2xl">
                   <Check size={32} strokeWidth={3} />
                 </div>
-                <div className="text-xl font-semibold text-white tracking-tight">
+                <div className="text-xl font-bold text-white tracking-tight">
                   Transfer Approved
                 </div>
-                <div className="text-xs font-mono text-[#71717A] mt-2">
+                <div className="text-xs font-mono text-[#ebaf64]/80 mt-2">
                   Resolution adherence verified · 0 penalties applied
                 </div>
               </div>
@@ -3662,26 +3663,26 @@ export default function YearboundApp() {
             {/* SUB-STEP 4: WALLY MEMORY INTERVENTION / ROAST */}
             {sendSubStep === "breach" && (
               <>
-                <div className="pt-6 sm:pt-8 px-7 pb-3 flex flex-col gap-2.5">
+                <div className="pt-8 sm:pt-10 px-7 pb-3 flex flex-col gap-2 shrink-0">
                   <button
                     type="button"
                     onClick={closeSendFlow}
-                    className="self-start text-[#71717A] hover:text-white flex items-center gap-1.5 text-xs font-medium transition-colors active:scale-95"
+                    className="self-start text-[#ebaf64]/75 hover:text-[#ebaf64] flex items-center gap-1.5 text-xs font-medium transition-colors active:scale-95"
                   >
                     <ArrowLeft size={14} />
                     <span>Back</span>
                   </button>
-                  <div className="text-[30px] sm:text-[34px] font-semibold tracking-[-0.02em] leading-tight text-white">
+                  <div className="text-[28px] sm:text-[32px] font-bold tracking-[0.02em] leading-tight text-[#ebaf64]">
                     Hold on.
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto px-7 py-2 flex flex-col gap-4 pb-4 overscroll-contain">
+                <div className="flex-1 overflow-y-auto px-5 sm:px-7 py-2 flex flex-col gap-3.5 pb-4 overscroll-contain">
                   {/* Wally Memory Quote Card */}
-                  <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-3.5">
+                  <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 flex flex-col gap-3.5 shadow-md">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="text-[11px] font-mono uppercase tracking-wider text-[#71717A]">
+                        <span className="text-[11px] font-mono uppercase tracking-wider text-[#ebaf64]">
                           Wally · Walrus Memory
                         </span>
                         {repeatInfractionCount > 1 && (
@@ -3701,14 +3702,14 @@ export default function YearboundApp() {
                       )}
                     </p>
 
-                    <p className="text-xs text-[#71717A] leading-relaxed">
+                    <p className="text-xs text-white/60 leading-relaxed">
                       {breachReason || "This transaction violates your active yearly resolution. You committed to financial discipline."}
                     </p>
 
                     {/* Sacred Vow Card from Walrus Memory */}
                     {matchedRuleMotivation && (
-                      <div className="bg-[#100F17] border border-[#2D2245] rounded-xl p-3.5 flex flex-col gap-1 mt-1">
-                        <span className="text-[10px] font-mono text-[#A78BFA] uppercase tracking-wider flex items-center gap-1.5">
+                      <div className="bg-[#ebaf64]/10 border border-[#ebaf64]/30 rounded-2xl p-3.5 flex flex-col gap-1 mt-1">
+                        <span className="text-[10px] font-mono text-[#ebaf64] uppercase tracking-wider flex items-center gap-1.5">
                           <Sparkles size={11} />
                           <span>Your Inscribed Vow (Walrus Memory)</span>
                         </span>
@@ -3720,7 +3721,7 @@ export default function YearboundApp() {
 
                     {/* Behavioral Pattern Insight if recurring */}
                     {behavioralInsight && (
-                      <div className="bg-[#14110C] border border-[#3E2812] rounded-xl p-3 flex flex-col gap-1 mt-1">
+                      <div className="bg-black/30 border border-[#ebaf64]/20 rounded-2xl p-3 flex flex-col gap-1 mt-1">
                         <span className="text-[10px] font-mono text-[#F59E0B] uppercase tracking-wider flex items-center gap-1.5">
                           <Activity size={11} />
                           <span>Habit Pattern Detected</span>
@@ -3733,30 +3734,30 @@ export default function YearboundApp() {
                   </div>
 
                   {/* Penalty Breakdown Card */}
-                  <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-3">
+                  <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 flex flex-col gap-3 shadow-md">
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-mono uppercase tracking-wider text-[#71717A]">
+                      <span className="text-[11px] font-mono uppercase tracking-wider text-[#ebaf64]">
                         Enforced Penalty Toll
                       </span>
-                      <span className="text-[10px] font-mono text-[#71717A]">
+                      <span className="text-[10px] font-mono text-white/40">
                         Audited by Tatum RPC
                       </span>
                     </div>
 
                     <div className="flex items-center justify-between pt-1">
-                      <span className="text-xs text-[#A1A1AA]">Transfer Amount</span>
+                      <span className="text-xs text-white/70">Transfer Amount</span>
                       <span className="text-xs font-mono text-white">{sendAmount} SUI</span>
                     </div>
 
                     {streakBroken && (
-                      <div className="flex items-center justify-between border-t border-[#18181C] pt-2.5 text-amber-400">
+                      <div className="flex items-center justify-between border-t border-white/10 pt-2.5 text-amber-400">
                         <span className="text-xs">Streak Status</span>
                         <span className="text-xs font-mono font-medium">Shattered by Infraction</span>
                       </div>
                     )}
 
-                    <div className="flex items-center justify-between border-t border-[#18181C] pt-2.5">
-                      <span className="text-xs text-[#A1A1AA]">
+                    <div className="flex items-center justify-between border-t border-white/10 pt-2.5">
+                      <span className="text-xs text-white/70">
                         {repeatInfractionCount > 1 ? "Escalated x402 Penalty" : "x402 Vault Penalty"}
                       </span>
                       <div className="flex items-center gap-2">
@@ -3769,19 +3770,19 @@ export default function YearboundApp() {
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between border-t border-[#18181C] pt-2.5">
-                      <span className="text-xs text-[#71717A]">Destination</span>
-                      <span className="text-xs text-[#A1A1AA]">x402 Vault (Locked until Dec 25, 2026)</span>
+                    <div className="flex items-center justify-between border-t border-white/10 pt-2.5">
+                      <span className="text-xs text-white/50">Destination</span>
+                      <span className="text-xs text-[#ebaf64]/80">x402 Vault (Locked until Dec 25, 2026)</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Actions: Cancel vs Pay Fine */}
-                <div className="p-6 bg-[#000000] flex flex-col gap-2.5">
+                <div className="p-5 sm:p-7 pt-2 pb-8 sm:pb-9 bg-transparent shrink-0 flex flex-col gap-2.5 items-center">
                   <button
                     type="button"
                     onClick={() => setSendSubStep("honored")}
-                    className="w-full py-4 px-6 rounded-full font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 bg-[#FFFFFF] text-[#000000] hover:bg-[#E4E4E7] active:scale-[0.98]"
+                    className="w-full py-4 px-6 rounded-full font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 bg-[#ebaf64] text-black hover:bg-[#f3bc75] active:scale-[0.98] shadow-lg shadow-black/60 cursor-pointer"
                   >
                     <span>Cancel & Honor Resolution</span>
                   </button>
@@ -3790,11 +3791,11 @@ export default function YearboundApp() {
                     type="button"
                     onClick={handlePayFineAndProceed}
                     disabled={isSubmitting}
-                    className="w-full py-2.5 text-center text-xs font-medium text-[#71717A] hover:text-white transition-colors flex items-center justify-center gap-2"
+                    className="w-full py-2.5 text-center text-xs font-medium text-white/60 hover:text-white transition-colors flex items-center justify-center gap-2"
                   >
                     {isSubmitting ? (
                       <>
-                        <span className="w-3 h-3 border-2 border-[#71717A] border-t-white rounded-full animate-spin inline-block shrink-0" />
+                        <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin inline-block shrink-0" />
                         <span>{payFineStage || "Settling penalty..."}</span>
                       </>
                     ) : (
@@ -3808,46 +3809,46 @@ export default function YearboundApp() {
             {/* SUB-STEP: RESOLUTION HONORED (CONGRATULATIONS / DISCIPLINE) */}
             {sendSubStep === "honored" && (
               <div className="flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-200">
-                <div className="pt-6 sm:pt-8 px-7 pb-3 flex flex-col gap-2.5">
-                  <div className="text-[30px] sm:text-[34px] font-semibold tracking-[-0.02em] leading-tight text-white">
+                <div className="pt-8 sm:pt-10 px-7 pb-3 flex flex-col gap-2 shrink-0">
+                  <div className="text-[28px] sm:text-[32px] font-bold tracking-[0.02em] leading-tight text-[#ebaf64]">
                     Resolution Honored
                   </div>
-                  <p className="text-xs text-[#71717A] leading-relaxed">
+                  <p className="text-xs text-white/70 leading-relaxed">
                     You chose discipline over impulse. Your streak stays intact and 0 SUI was forfeited.
                   </p>
                 </div>
 
-                <div className="flex-1 overflow-y-auto px-7 py-2 flex flex-col gap-4 pb-4 overscroll-contain">
-                  <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-3.5">
+                <div className="flex-1 overflow-y-auto px-5 sm:px-7 py-2 flex flex-col gap-4 pb-4 overscroll-contain">
+                  <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 flex flex-col gap-3.5 shadow-md">
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-mono uppercase tracking-wider text-[#71717A]">
+                      <span className="text-[11px] font-mono uppercase tracking-wider text-[#ebaf64]">
                         Discipline Report
                       </span>
-                      <span className="text-xs font-mono text-white">Streak Intact</span>
+                      <span className="text-xs font-mono text-emerald-400">Streak Intact</span>
                     </div>
 
-                    <div className="flex items-center justify-between border-t border-[#18181C] pt-3">
-                      <span className="text-xs text-[#A1A1AA]">Transfer Status</span>
+                    <div className="flex items-center justify-between border-t border-white/10 pt-3">
+                      <span className="text-xs text-white/70">Transfer Status</span>
                       <span className="text-xs text-white font-medium">Cancelled by User</span>
                     </div>
 
-                    <div className="flex items-center justify-between border-t border-[#18181C] pt-2.5">
-                      <span className="text-xs text-[#A1A1AA]">Penalty Avoided</span>
-                      <span className="text-xs font-mono font-semibold text-white">10 SUI</span>
+                    <div className="flex items-center justify-between border-t border-white/10 pt-2.5">
+                      <span className="text-xs text-white/70">Penalty Avoided</span>
+                      <span className="text-xs font-mono font-semibold text-[#ebaf64]">10 SUI</span>
                     </div>
 
-                    <div className="flex items-center justify-between border-t border-[#18181C] pt-2.5">
-                      <span className="text-xs text-[#71717A]">Memory Ledger</span>
-                      <span className="text-xs font-mono text-[#A1A1AA]">No Infraction Committed</span>
+                    <div className="flex items-center justify-between border-t border-white/10 pt-2.5">
+                      <span className="text-xs text-white/50">Memory Ledger</span>
+                      <span className="text-xs font-mono text-white/70">No Infraction Committed</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="p-6 bg-[#000000]">
+                <div className="p-5 sm:p-7 pt-2 pb-8 sm:pb-9 bg-transparent shrink-0 flex flex-col items-center">
                   <button
                     type="button"
                     onClick={closeSendFlow}
-                    className="w-full py-4 px-6 rounded-full font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 bg-[#FFFFFF] text-[#000000] hover:bg-[#E4E4E7] active:scale-[0.98]"
+                    className="w-full py-4 px-6 rounded-full font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 bg-[#ebaf64] text-black hover:bg-[#f3bc75] active:scale-[0.98] shadow-lg shadow-black/60 cursor-pointer"
                   >
                     <span>Back to Dashboard</span>
                   </button>
@@ -3858,34 +3859,34 @@ export default function YearboundApp() {
             {/* SUB-STEP: INFRACTION RECORDED (ANTI-CONGRATULATIONS / SOBERING REALITY) */}
             {sendSubStep === "penalty_recorded" && (
               <div className="flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-200">
-                <div className="pt-6 sm:pt-8 px-7 pb-3 flex flex-col gap-2.5">
-                  <div className="text-[30px] sm:text-[34px] font-semibold tracking-[-0.02em] leading-tight text-white">
+                <div className="pt-8 sm:pt-10 px-7 pb-3 flex flex-col gap-2 shrink-0">
+                  <div className="text-[28px] sm:text-[32px] font-bold tracking-[0.02em] leading-tight text-[#ebaf64]">
                     Penalty Recorded
                   </div>
-                  <p className="text-xs text-[#71717A] leading-relaxed">
+                  <p className="text-xs text-white/70 leading-relaxed">
                     {breachPenaltySui || 10} SUI penalty has been processed via x402 and inscribed to Walrus memory.
                   </p>
                 </div>
 
-                <div className="flex-1 overflow-y-auto px-7 py-2 flex flex-col gap-4 pb-4 overscroll-contain">
-                  <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-3.5">
+                <div className="flex-1 overflow-y-auto px-5 sm:px-7 py-2 flex flex-col gap-4 pb-4 overscroll-contain">
+                  <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 flex flex-col gap-3.5 shadow-md">
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-mono uppercase tracking-wider text-[#71717A]">
+                      <span className="text-[11px] font-mono uppercase tracking-wider text-[#ebaf64]">
                         Infraction Log
                       </span>
-                      <span className="text-xs font-mono text-white">Breach Enforced</span>
+                      <span className="text-xs font-mono text-red-400">Breach Enforced</span>
                     </div>
 
-                    <div className="flex items-center justify-between border-t border-[#18181C] pt-3">
-                      <span className="text-xs text-[#A1A1AA]">Penalty Deposit</span>
+                    <div className="flex items-center justify-between border-t border-white/10 pt-3">
+                      <span className="text-xs text-white/70">Penalty Deposit</span>
                       <span className="text-xs font-mono font-semibold text-white">
                         {breachPenaltySui || 10} SUI → x402 Vault
                       </span>
                     </div>
 
-                    <div className="flex items-center justify-between border-t border-[#18181C] pt-2.5">
-                      <span className="text-xs text-[#A1A1AA]">Settlement Engine</span>
-                      <span className="text-xs font-mono text-[#A1A1AA]">
+                    <div className="flex items-center justify-between border-t border-white/10 pt-2.5">
+                      <span className="text-xs text-white/70">Settlement Engine</span>
+                      <span className="text-xs font-mono text-white/80">
                         {latestSettlement?.isRealOnChain
                           ? "Sui Mainnet PTB (Tatum Gateway)"
                           : "Agent Cryptographic Debt Voucher"}
@@ -3893,13 +3894,13 @@ export default function YearboundApp() {
                     </div>
 
                     {latestSettlement?.isRealOnChain && latestSettlement?.txHash && (
-                      <div className="flex items-center justify-between border-t border-[#18181C] pt-2.5">
-                        <span className="text-xs text-[#A1A1AA]">On-Chain Digest</span>
+                      <div className="flex items-center justify-between border-t border-white/10 pt-2.5">
+                        <span className="text-xs text-white/70">On-Chain Digest</span>
                         <a
                           href={latestSettlement.explorerUrl || `https://suiscan.xyz/mainnet/tx/${latestSettlement.txHash}`}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-xs font-mono text-[#E5A93C] hover:underline flex items-center gap-1"
+                          className="text-xs font-mono text-[#ebaf64] hover:underline flex items-center gap-1"
                         >
                           <span>{latestSettlement.txHash.slice(0, 10)}...</span>
                           <ExternalLink size={10} />
@@ -3908,10 +3909,10 @@ export default function YearboundApp() {
                     )}
 
                     {!latestSettlement?.isRealOnChain && latestSettlement?.voucherSignature && (
-                      <div className="flex items-center justify-between border-t border-[#18181C] pt-2.5">
-                        <span className="text-xs text-[#A1A1AA]">x402 Signature</span>
+                      <div className="flex items-center justify-between border-t border-white/10 pt-2.5">
+                        <span className="text-xs text-white/70">x402 Signature</span>
                         <span
-                          className="text-[11px] font-mono text-[#71717A] truncate max-w-[180px]"
+                          className="text-[11px] font-mono text-white/50 truncate max-w-[180px]"
                           title={latestSettlement.voucherSignature}
                         >
                           ed25519_{latestSettlement.voucherSignature.slice(0, 12)}...
@@ -3919,13 +3920,13 @@ export default function YearboundApp() {
                       </div>
                     )}
 
-                    <div className="flex items-center justify-between border-t border-[#18181C] pt-2.5">
-                      <span className="text-xs text-[#A1A1AA]">Lock Expiry</span>
-                      <span className="text-xs text-[#A1A1AA]">{unlockDate}</span>
+                    <div className="flex items-center justify-between border-t border-white/10 pt-2.5">
+                      <span className="text-xs text-white/70">Lock Expiry</span>
+                      <span className="text-xs text-white/80">{unlockDate}</span>
                     </div>
 
-                    <div className="flex items-center justify-between bg-[#131316] border border-[#1E1E22] rounded-xl px-3 py-2 mt-1">
-                      <span className="text-[11px] font-mono text-[#A1A1AA] truncate mr-2">
+                    <div className="flex items-center justify-between bg-black/30 border border-[#ebaf64]/30 rounded-2xl px-3.5 py-2.5 mt-1">
+                      <span className="text-[11px] font-mono text-white/70 truncate mr-2">
                         Blob #{latestFineBlobId ? `${latestFineBlobId.slice(0, 16)}...` : "blob_infr..."}
                       </span>
                       <button
@@ -3937,7 +3938,7 @@ export default function YearboundApp() {
                           }
                           triggerSnackbar("Copied Penalty Blob ID", bid);
                         }}
-                        className="text-[#71717A] hover:text-white p-1 transition-colors shrink-0"
+                        className="text-[#ebaf64]/75 hover:text-[#ebaf64] p-1 transition-colors shrink-0"
                         title="Copy Blob ID"
                       >
                         <Copy size={12} />
@@ -3949,7 +3950,7 @@ export default function YearboundApp() {
                         href={`https://aggregator.walrus-testnet.walrus.space/v1/blobs/${latestFineBlobId}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-[11px] text-white hover:underline flex items-center gap-1 font-mono pt-0.5"
+                        className="text-[11px] text-[#ebaf64] hover:underline flex items-center gap-1 font-mono pt-0.5"
                       >
                         <span>Inspect on Walrus Aggregator</span>
                         <ExternalLink size={11} />
@@ -3958,11 +3959,11 @@ export default function YearboundApp() {
                   </div>
                 </div>
 
-                <div className="p-6 bg-[#000000]">
+                <div className="p-5 sm:p-7 pt-2 pb-8 sm:pb-9 bg-transparent shrink-0 flex flex-col items-center">
                   <button
                     type="button"
                     onClick={closeSendFlow}
-                    className="w-full py-4 px-6 rounded-full font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 bg-[#FFFFFF] text-[#000000] hover:bg-[#E4E4E7] active:scale-[0.98]"
+                    className="w-full py-4 px-6 rounded-full font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 bg-[#ebaf64] text-black hover:bg-[#f3bc75] active:scale-[0.98] shadow-lg shadow-black/60 cursor-pointer"
                   >
                     <span>Back to Dashboard</span>
                   </button>
@@ -3977,20 +3978,20 @@ export default function YearboundApp() {
             ================================================================== */}
         {isAddResolutionOpen && (
           <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
-            <div className="w-full max-w-[420px] bg-[#0A0A0C] border border-[#222226] rounded-t-[32px] sm:rounded-[32px] p-6 flex flex-col gap-5 shadow-2xl animate-in slide-in-from-bottom-6 duration-300">
+            <div className="w-full max-w-[420px] bg-black/40 backdrop-blur-3xl border border-[#ebaf64]/30 rounded-t-[32px] sm:rounded-[32px] p-6 flex flex-col gap-5 shadow-2xl animate-in slide-in-from-bottom-6 duration-300">
               <div className="flex items-center justify-between">
                 <div className="flex flex-col">
-                  <span className="text-lg font-semibold text-white">
+                  <span className="text-lg font-bold text-[#ebaf64]">
                     Add Resolution
                   </span>
-                  <span className="text-[11px] font-mono text-[#71717A]">
+                  <span className="text-[11px] font-mono text-white/50">
                     Commits directly to Walrus Memory
                   </span>
                 </div>
                 <button
                   type="button"
                   onClick={() => setIsAddResolutionOpen(false)}
-                  className="p-1.5 text-[#71717A] hover:text-white rounded-lg transition-colors"
+                  className="p-1.5 text-white/50 hover:text-white rounded-lg transition-colors"
                 >
                   <X size={18} />
                 </button>
@@ -3998,7 +3999,7 @@ export default function YearboundApp() {
 
               <div className="flex flex-col gap-3.5">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-[#A1A1AA]">
+                  <label className="text-xs font-medium text-[#ebaf64]/80">
                     Resolution Title
                   </label>
                   <input
@@ -4006,12 +4007,12 @@ export default function YearboundApp() {
                     value={newRuleTitle}
                     onChange={(e) => setNewRuleTitle(e.target.value)}
                     placeholder="e.g. No Late-Night Uber Eats"
-                    className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-[#52525B] outline-none focus:border-white transition-colors"
+                    className="w-full bg-black/30 border border-[#ebaf64]/30 rounded-2xl px-3.5 py-2.5 text-xs text-white placeholder-white/30 outline-none focus:border-[#ebaf64] transition-colors"
                   />
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-[#A1A1AA]">
+                  <label className="text-xs font-medium text-[#ebaf64]/80">
                     Enforced Boundary Condition
                   </label>
                   <textarea
@@ -4019,12 +4020,12 @@ export default function YearboundApp() {
                     value={newRuleCondition}
                     onChange={(e) => setNewRuleCondition(e.target.value)}
                     placeholder="e.g. Reject any takeout food orders after 10 PM on weekdays"
-                    className="w-full bg-[#131316] border border-[#27272A] rounded-xl px-3.5 py-2 text-xs text-white placeholder-[#52525B] outline-none focus:border-white transition-colors resize-none"
+                    className="w-full bg-black/30 border border-[#ebaf64]/30 rounded-2xl px-3.5 py-2 text-xs text-white placeholder-white/30 outline-none focus:border-[#ebaf64] transition-colors resize-none"
                   />
                 </div>
 
                 <div className="flex flex-col gap-2">
-                  <label className="text-xs font-medium text-[#A1A1AA]">
+                  <label className="text-xs font-medium text-[#ebaf64]/80">
                     Penalty Stake Per Infraction
                   </label>
                   <div className="grid grid-cols-4 gap-2">
@@ -4035,10 +4036,10 @@ export default function YearboundApp() {
                           key={amt}
                           type="button"
                           onClick={() => setNewRulePenalty(amt)}
-                          className={`py-2 text-center rounded-xl text-xs font-medium transition-all duration-150 active:scale-95 ${
+                          className={`py-2 text-center rounded-2xl text-xs font-mono transition-all duration-150 active:scale-95 ${
                             isSelected
-                              ? "bg-white text-black font-semibold"
-                              : "bg-[#131316] text-[#A1A1AA] border border-[#27272A] hover:border-[#52525B] hover:text-white"
+                              ? "bg-[#ebaf64] text-black font-semibold shadow-sm"
+                              : "bg-black/40 text-white/70 border border-[#ebaf64]/30 hover:border-[#ebaf64]/60 hover:text-white"
                           }`}
                         >
                           {amt} SUI
@@ -4056,8 +4057,8 @@ export default function YearboundApp() {
                   disabled={!newRuleTitle.trim() || isCommittingNewRule}
                   className={`w-full py-3.5 rounded-full font-semibold text-xs transition-all duration-200 flex items-center justify-center gap-2 ${
                     newRuleTitle.trim() && !isCommittingNewRule
-                      ? "bg-white text-black hover:bg-[#E4E4E7] active:scale-[0.98]"
-                      : "bg-[#222226] text-[#52525B] cursor-not-allowed"
+                      ? "bg-[#ebaf64] text-black hover:bg-[#f3bc75] active:scale-[0.98] shadow-md cursor-pointer"
+                      : "bg-black/40 text-white/30 border border-white/10 cursor-not-allowed"
                   }`}
                 >
                   <span>
