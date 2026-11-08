@@ -1120,11 +1120,15 @@ export default function YearboundApp() {
     }
 
     setSendSubStep("checking");
-    setCheckingProgressStage("Auditing wallet & vault via Tatum Sui RPC...");
+    setCheckingProgressStage("Auditing transaction...");
 
     const stageTimer1 = setTimeout(() => {
-      setCheckingProgressStage("Cross-referencing oaths on Walrus Mainnet...");
-    }, 1200);
+      setCheckingProgressStage("Checking Tatum Sui RPC...");
+    }, 800);
+
+    const stageTimer2 = setTimeout(() => {
+      setCheckingProgressStage("Checking Walrus Memory...");
+    }, 1600);
 
     const activeAccountAddress =
       accountType === "demo"
@@ -1164,6 +1168,7 @@ export default function YearboundApp() {
 
       const data = await res.json();
       clearTimeout(stageTimer1);
+      clearTimeout(stageTimer2);
 
       if (data && data.success) {
         setBreachReason(data.reason || "");
@@ -3595,31 +3600,15 @@ export default function YearboundApp() {
                   </svg>
                 </div>
 
-                <div className="text-lg font-bold text-[#ebaf64] tracking-tight">
-                  Auditing Transaction
-                </div>
-                
-                {/* Live Split Status Cards: Tatum RPC + Walrus Memory */}
-                <div className="mt-4 w-full flex flex-col gap-2.5">
-                  <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-2xl px-4 py-3 flex items-center justify-between text-left">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                      <span className="text-xs text-white/80">Tatum Sui RPC</span>
-                    </div>
-                    <span className="text-[10px] font-mono text-[#ebaf64]/80">Verifying Solvency</span>
-                  </div>
-
-                  <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-2xl px-4 py-3 flex items-center justify-between text-left">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
-                      <span className="text-xs text-white/80">Walrus Memory</span>
-                    </div>
-                    <span className="text-[10px] font-mono text-[#ebaf64]/80">Recalling Oaths</span>
-                  </div>
+                <div
+                  key={checkingProgressStage}
+                  className="text-xl sm:text-2xl font-bold text-[#ebaf64] tracking-tight animate-in fade-in zoom-in-95 duration-200 min-h-[36px] flex items-center justify-center px-4"
+                >
+                  {checkingProgressStage || "Auditing transaction..."}
                 </div>
 
-                <div className="text-xs font-mono text-white/50 mt-4 truncate max-w-full">
-                  {checkingProgressStage}
+                <div className="text-xs font-mono text-white/50 mt-2">
+                  Verifying resolution adherence & solvency
                 </div>
               </div>
             )}
