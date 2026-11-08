@@ -509,7 +509,7 @@ export default function YearboundApp() {
             data.rules.map((r: any, idx: number) => ({
               id: r.rule_id || String(idx + 1),
               title: r.title,
-              condition: r.behavioral_rule || r.condition || "Commitment boundary",
+              condition: r.behavioral_rule || r.condition || "",
               whyItMatters: r.why_it_matters || "",
               penalty: r.penalty_amount_sui || 10,
               breaches: 0,
@@ -2759,11 +2759,16 @@ export default function YearboundApp() {
                           {rule.title}
                         </div>
 
-                        {rule.condition && (
+                        {rule.condition && rule.condition !== "Commitment boundary" && (
                           <p className="text-xs text-white/70 leading-relaxed">
                             {rule.condition}
                           </p>
                         )}
+
+                        <div className="flex items-center justify-between pt-1 text-[11px] font-mono text-[#ebaf64]/80 group-hover:text-[#ebaf64] transition-colors select-none">
+                          <span>{isExpanded ? "Hide Walrus payload" : "Tap to show Walrus payload"}</span>
+                          <ChevronDown size={13} className={`transform transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} />
+                        </div>
 
                         {/* Expandable Exact Walrus Memory Proof & Inscribed Payload */}
                         {isExpanded && (
