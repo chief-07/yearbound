@@ -2589,27 +2589,27 @@ export default function YearboundApp() {
                   </div>
                 )}
 
-                {/* 2. UNIFIED HERO CARD: BALANCE + ACTIONS + WALLY'S VOICE (Zero Slop, No Divider Line) */}
-                <div className="relative bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 sm:p-6 pt-7 sm:pt-8 flex flex-col gap-4 shadow-md transition-all duration-200 mt-8">
+                {/* 2. UNIFIED HERO CARD: BALANCE + ACTIONS + WALLY'S VOICE (Gold Accent Experiment) */}
+                <div className="relative bg-[#ebaf64] text-black rounded-3xl p-5 sm:p-6 pt-7 sm:pt-8 flex flex-col gap-4 shadow-[0_12px_36px_rgba(235,175,100,0.22)] border border-[#f5be74] transition-all duration-200 mt-8">
                   {/* Wally Mascot with Memories Book: Small, above the card, on the left top edge */}
                   <div className="absolute -top-7 sm:-top-8 left-5 sm:left-6 z-20 pointer-events-none select-none">
                     <img
                       src="/assets/mascot/wally_memories.png"
                       alt="Wally with Memories book"
-                      className="w-16 h-auto sm:w-18 drop-shadow-[0_8px_16px_rgba(0,0,0,0.8)] filter"
+                      className="w-16 h-auto sm:w-18 drop-shadow-[0_8px_16px_rgba(0,0,0,0.35)] filter"
                       draggable={false}
                     />
                   </div>
 
                   <div className="flex items-center justify-between gap-3">
-                    <span className="text-3xl sm:text-4xl font-bold font-mono text-white tracking-tight">
+                    <span className="text-3xl sm:text-4xl font-bold font-mono text-black tracking-tight">
                       {availableBalance.toFixed(2)} SUI
                     </span>
                     <div className="flex items-center gap-2 shrink-0">
                       <button
                         type="button"
                         onClick={openSendFlow}
-                        className="py-2.5 px-4 rounded-full bg-[#ebaf64] hover:bg-[#f3ba6f] text-black font-semibold text-xs transition-all duration-150 flex items-center justify-center gap-1.5 active:scale-95 shadow-sm"
+                        className="py-2.5 px-4 rounded-full bg-black hover:bg-neutral-900 text-white font-semibold text-xs transition-all duration-150 flex items-center justify-center gap-1.5 active:scale-95 shadow-md cursor-pointer"
                       >
                         <ArrowUpRight size={14} className="stroke-[2.5]" />
                         <span>Send</span>
@@ -2617,19 +2617,19 @@ export default function YearboundApp() {
                       <button
                         type="button"
                         onClick={copyAddress}
-                        className="py-2.5 px-4 rounded-full bg-black/40 hover:bg-black/60 text-[#ebaf64] border border-[#ebaf64]/30 hover:border-[#ebaf64]/60 font-medium text-xs transition-all duration-150 flex items-center justify-center gap-1.5 active:scale-95"
+                        className="py-2.5 px-4 rounded-full bg-black/10 hover:bg-black/20 text-black border border-black/20 font-medium text-xs transition-all duration-150 flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
                       >
-                        {copiedAddress ? <Check size={14} className="text-[#ebaf64]" /> : <ArrowDownLeft size={14} />}
+                        {copiedAddress ? <Check size={14} className="text-black" /> : <ArrowDownLeft size={14} />}
                         <span>{copiedAddress ? "Copied" : "Receive"}</span>
                       </button>
                     </div>
                   </div>
 
                   <div className="flex flex-col gap-1.5 pt-1">
-                    <span className="text-[11px] font-mono text-[#ebaf64]/80 uppercase tracking-wider font-semibold">
+                    <span className="text-[11px] font-mono text-black/70 uppercase tracking-wider font-bold">
                       {!isDegradedMode ? "Wally · Walrus Memory" : "Wally · Memory Offline"}
                     </span>
-                    <p className="text-sm text-white/90 leading-relaxed font-normal">
+                    <p className="text-sm text-black/90 leading-relaxed font-normal">
                       {isDegradedMode
                         ? "Stateless Session: Walrus memory is disconnected. Outgoing transfers are not cross-referenced against your resolutions and past infractions are forgotten."
                         : isVaultUnlocked && !isVaultClaimed
