@@ -379,17 +379,14 @@ ${inflowRule ? `- User's Specific Inflow Resolution: "${inflowRule.title}" (Goal
         }),
         abortSignal: AbortSignal.timeout(5000),
         system:
-          "You are Wally the Concierge, the discerning autonomous judicial engine for Yearbound on Sui. " +
-          "You have TOTAL RECALL of the user's commitments, oaths, and every past infraction stored in Walrus Memory. " +
-          "JUDICIAL CITATION DIRECTIVES: " +
-          "1. If BROKEN: " +
-          "   - Explicitly cite the repeat attempt count (e.g. 'Attempt #2' or 'Third breach'). " +
-          "   - QUOTE their personal motivation verbatim back to them with gravitas (e.g. 'Remember your vow: \"...\"'). " +
-          "   - If they had a clean streak, dramatically note that their streak has been shattered. " +
-          "   - Announce the exact escalated penalty in SUI (${escalatedPenalty} SUI) being locked into the Christmas vault. " +
-          "2. If HONORED: " +
-          "   - Deliver a warm, polished compliment acknowledging their ongoing streak and fidelity to their Walrus Memory oaths. " +
-          "3. Common sense semantics: betting/sports memos violate gambling rules; burger/takeout/pizza memos violate dining/delivery rules.",
+          "You are Wally for Yearbound on Sui. " +
+          "When stopping a user from a transfer that breaches their resolution, write a SINGLE concise, punchy sentence. " +
+          "CRITICAL RULES: " +
+          "1. NEVER describe character physical actions or third-person gestures (NO 'Wally peers over his chronometer', NO 'adjusts his collar'). Zero roleplay. " +
+          "2. Tell them directly why the transfer violates their commitment. " +
+          "3. If repeat violation, state it naturally (e.g. 'You have done this twice in a row' or 'You have done this three times now'). " +
+          "4. Remind them of their personal motivation verbatim (e.g. 'remember, you are doing this for: \"...\"'). " +
+          "5. Keep the entire output to 1-2 direct, natural sentences max.",
         prompt: `Evaluate this transfer against the user's active resolutions and Walrus Memory:
 
 TRANSACTION DETAILS:
@@ -400,7 +397,7 @@ TRANSACTION DETAILS:
 
 ${promptMemoryDossier}
 
-Determine the verdict ('broken', 'honored', 'excused'), matched rule, escalated penalty, repeat infraction count (${repeatCount}), streak broken status, and Wally's discerning roast.`,
+Determine the verdict ('broken', 'honored', 'excused'), matched rule, escalated penalty, repeat infraction count (${repeatCount}), streak broken status, and Wally's single-sentence direct intervention.`,
       });
 
       return NextResponse.json({
@@ -446,15 +443,19 @@ Determine the verdict ('broken', 'honored', 'excused'), matched rule, escalated 
       // Deterministic dynamic verdict derived strictly from accumulated Walrus memory
       let dynamicRoast = "";
       if (isBreached) {
-        if (repeatCount === 1) {
-          dynamicRoast = `Wally peers over his chronometer: 'Your first recorded lapse against "${targetRuleTitle}". You swore this because: "${motivation}". That will be ${escalatedPenalty} SUI locked into your Christmas vault until Dec 25.'`;
-        } else if (repeatCount === 2) {
-          dynamicRoast = `Wally narrows his eyes: 'Attempt #2 against "${targetRuleTitle}". Your ${cleanStreakDays}-day clean streak ends here. As recorded in Walrus Memory, you previously slipped with ${pastBreachSummaries || "a past infraction"}. Penalty escalated to ${escalatedPenalty} SUI.'`;
-        } else {
-          dynamicRoast = `Wally taps his chronometer with cold precision: '${repeatCount} breaches of "${targetRuleTitle}" permanently inscribed to Walrus Memory. You specifically swore: "${motivation}". This recurring habit pattern is now locked in. Maximum penalty of ${escalatedPenalty} SUI routed to the vault.'`;
-        }
+        const repeatPhrase =
+          repeatCount === 2
+            ? "You've done this twice in a row — "
+            : repeatCount > 2
+            ? `You've done this ${repeatCount} times now — `
+            : "";
+        const oathPhrase = motivation
+          ? `remember, you are doing this for: "${motivation}".`
+          : "remember your commitment to financial discipline.";
+
+        dynamicRoast = `This transfer violates your commitment against ${targetRuleTitle.toLowerCase()}. ${repeatPhrase}${oathPhrase}`;
       } else {
-        dynamicRoast = `Wally approves with a subtle tip of his chronometer: 'A disciplined expenditure. ${cleanStreakCount > 0 ? `${cleanStreakCount} consecutive transfers honoring your oaths.` : "Your resolutions in Walrus Memory remain completely honored."}'`;
+        dynamicRoast = `Transaction verified. Completely honors your active commitments in Walrus Memory.`;
       }
 
       return NextResponse.json({

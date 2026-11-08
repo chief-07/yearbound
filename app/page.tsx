@@ -26,6 +26,7 @@ import {
   Sparkles,
   TrendingUp,
   Activity,
+  Database,
 } from "lucide-react";
 import {
   DEMO_SUI_ADDRESS,
@@ -372,6 +373,8 @@ export default function YearboundApp() {
   const [streakBroken, setStreakBroken] = useState<boolean>(false);
   const [behavioralInsight, setBehavioralInsight] = useState<string>("");
   const [matchedRuleMotivation, setMatchedRuleMotivation] = useState<string>("");
+  const [matchedRuleBlobId, setMatchedRuleBlobId] = useState<string>("");
+  const [matchedRuleCondition, setMatchedRuleCondition] = useState<string>("");
 
   // Initialize real persistent self-custodial Sui keypair and detect extensions
   useEffect(() => {
@@ -1209,6 +1212,8 @@ export default function YearboundApp() {
             (data.matchedRule || "").toLowerCase().includes(r.title.toLowerCase())
         );
         setMatchedRuleMotivation(matchedRuleObj?.whyItMatters || "");
+        setMatchedRuleCondition(matchedRuleObj?.condition || "");
+        setMatchedRuleBlobId(matchedRuleObj?.blobId || walrusBlobId || "");
 
         if (data.verdict === "broken") {
           setTimeout(() => {
@@ -3437,102 +3442,39 @@ export default function YearboundApp() {
                 </div>
 
                 <div className="flex-1 overflow-y-auto px-5 sm:px-7 py-2 flex flex-col gap-3.5 pb-4 overscroll-contain">
-                  {/* Wally Memory Quote Card */}
-                  <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 flex flex-col gap-3.5 shadow-md">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] font-mono uppercase tracking-wider text-[#ebaf64]">
-                          Wally · Walrus Memory
-                        </span>
-                        {repeatInfractionCount > 1 && (
-                          <span className="text-[10px] font-mono text-red-400 bg-red-500/10 border border-red-500/25 px-2 py-0.5 rounded-full font-semibold">
-                            Attempt #{repeatInfractionCount}
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-[10px] font-mono text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full">
-                        {walrusRecalledCount > 0 ? `${walrusRecalledCount} Memories Recalled` : "Memory Verified"}
-                      </span>
-                    </div>
-
-                    <p className="text-sm text-[#E4E4E7] leading-relaxed font-normal">
+                  <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-6 flex flex-col gap-4 shadow-md">
+                    <p className="text-base sm:text-lg text-white font-normal leading-relaxed">
                       {wallyRoast || (
-                        <>You swore in Walrus memory: <span className="text-white font-medium">"{activeRulesList[0]?.condition || "No food delivery between 10 PM and 5 AM"}"</span>.</>
+                        <>
+                          This transfer violates your commitment against{" "}
+                          <span className="text-[#ebaf64] font-medium">{matchedRuleTitle}</span>.{" "}
+                          {repeatInfractionCount > 1 && (
+                            <span>
+                              You&apos;ve done this {repeatInfractionCount === 2 ? "twice in a row" : `${repeatInfractionCount} times now`} &mdash;{" "}
+                            </span>
+                          )}
+                          {matchedRuleMotivation ? (
+                            <span>remember, you are doing this for: &ldquo;{matchedRuleMotivation}&rdquo;.</span>
+                          ) : (
+                            <span>remember your New Year&apos;s commitment to financial discipline.</span>
+                          )}
+                        </>
                       )}
                     </p>
 
-                    <p className="text-xs text-white/60 leading-relaxed">
-                      {breachReason || "This transaction violates your active yearly resolution. You committed to financial discipline."}
-                    </p>
-
-                    {/* Sacred Vow Card from Walrus Memory */}
-                    {matchedRuleMotivation && (
-                      <div className="bg-[#ebaf64]/10 border border-[#ebaf64]/30 rounded-2xl p-3.5 flex flex-col gap-1 mt-1">
-                        <span className="text-[10px] font-mono text-[#ebaf64] uppercase tracking-wider flex items-center gap-1.5">
-                          <Sparkles size={11} />
-                          <span>Your Inscribed Vow (Walrus Memory)</span>
-                        </span>
-                        <p className="text-xs text-white/90 font-serif italic leading-relaxed">
-                          "{matchedRuleMotivation}"
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Behavioral Pattern Insight if recurring */}
-                    {behavioralInsight && (
-                      <div className="bg-black/30 border border-[#ebaf64]/20 rounded-2xl p-3 flex flex-col gap-1 mt-1">
-                        <span className="text-[10px] font-mono text-[#F59E0B] uppercase tracking-wider flex items-center gap-1.5">
-                          <Activity size={11} />
-                          <span>Habit Pattern Detected</span>
-                        </span>
-                        <p className="text-xs text-[#D4D4D8] leading-relaxed">
-                          {behavioralInsight}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Penalty Breakdown Card */}
-                  <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 flex flex-col gap-3 shadow-md">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-mono uppercase tracking-wider text-[#ebaf64]">
-                        Enforced Penalty Toll
-                      </span>
-                      <span className="text-[10px] font-mono text-white/40">
-                        Audited by Tatum RPC
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between pt-1">
-                      <span className="text-xs text-white/70">Transfer Amount</span>
-                      <span className="text-xs font-mono text-white">{sendAmount} SUI</span>
-                    </div>
-
-                    {streakBroken && (
-                      <div className="flex items-center justify-between border-t border-white/10 pt-2.5 text-amber-400">
-                        <span className="text-xs">Streak Status</span>
-                        <span className="text-xs font-mono font-medium">Shattered by Infraction</span>
-                      </div>
-                    )}
-
-                    <div className="flex items-center justify-between border-t border-white/10 pt-2.5">
-                      <span className="text-xs text-white/70">
-                        {repeatInfractionCount > 1 ? "Escalated x402 Penalty" : "x402 Vault Penalty"}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        {repeatInfractionCount > 1 && (
-                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/25">
-                            Repeat #{repeatInfractionCount} Fine
-                          </span>
-                        )}
-                        <span className="text-xs font-mono font-semibold text-white">{breachPenaltySui} SUI</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between border-t border-white/10 pt-2.5">
-                      <span className="text-xs text-white/50">Destination</span>
-                      <span className="text-xs text-[#ebaf64]/80">x402 Vault (Locked until Dec 25, 2026)</span>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const targetBlob = matchedRuleBlobId || walrusBlobId || "d4a97f2e8c9b4e11a2f6";
+                        setExpandedJsonBlobId(targetBlob);
+                        setIsMemoryInspectorOpen(true);
+                      }}
+                      className="flex items-center gap-1.5 text-xs font-mono text-[#ebaf64] hover:text-[#f3bc75] transition-colors pt-3 border-t border-white/10 self-start"
+                    >
+                      <Database size={13} />
+                      <span>View Walrus memory payload</span>
+                      <ExternalLink size={11} className="text-[#ebaf64]/70" />
+                    </button>
                   </div>
                 </div>
 
