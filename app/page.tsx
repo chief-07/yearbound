@@ -2910,12 +2910,12 @@ export default function YearboundApp() {
                 />
 
                 {/* Primary Vault Balance Card */}
-                <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-4">
+                <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-6 flex flex-col gap-4 shadow-md">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-mono text-[#71717A] uppercase">
-                      Lock Status
+                    <span className="text-xs font-mono text-[#ebaf64]">
+                      Locked until {unlockDate}
                     </span>
-                    <span className="text-xs font-mono text-white flex items-center gap-1.5">
+                    <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#ebaf64]/10 border border-[#ebaf64]/20 text-[#ebaf64] text-xs font-mono">
                       {isVaultUnlocked ? (
                         <>
                           <Check size={12} className="text-[#10B981]" />
@@ -2924,256 +2924,47 @@ export default function YearboundApp() {
                       ) : (
                         <>
                           <Lock size={12} />
-                          <span>Locked</span>
+                          <span>Time-Locked</span>
                         </>
                       )}
                     </span>
                   </div>
-                  <div className="flex flex-col gap-1 border-t border-[#18181C] pt-3">
-                    <span className="text-xs text-[#71717A]">Total Locked in Vault</span>
-                    <span className="text-2xl font-mono font-semibold text-white">
+
+                  <div className="flex flex-col gap-1">
+                    <span className="text-3xl sm:text-4xl font-bold font-mono text-white tracking-tight">
                       {escrowDeposit}.00 SUI
                     </span>
-                  </div>
-                  <div className="flex items-center justify-between border-t border-[#18181C] pt-3">
-                    <span className="text-xs text-[#71717A]">Base Commitment Deposit</span>
-                    <span className="text-xs font-mono text-white">10.00 SUI</span>
-                  </div>
-                  <div className="flex items-center justify-between border-t border-[#18181C] pt-3">
-                    <span className="text-xs text-[#71717A]">Infraction Fines Collected</span>
-                    <span className="text-xs font-mono text-white">
-                      {Math.max(0, escrowDeposit - 10)}.00 SUI
+                    <span className="text-xs text-white/50 font-mono">
+                      10.00 SUI initial pledge + {Math.max(0, escrowDeposit - 10)}.00 SUI penalty toll
                     </span>
                   </div>
-                  <div className="flex items-center justify-between border-t border-[#18181C] pt-3">
-                    <span className="text-xs text-[#71717A]">Time-Lock Date</span>
-                    <span className="text-xs text-white font-medium">{unlockDate}</span>
-                  </div>
-                  <div className="flex items-center justify-between border-t border-[#18181C] pt-3">
-                    <span className="text-xs text-[#71717A]">Protocol Standard</span>
-                    <span className="text-xs font-mono text-[#A1A1AA]">x402 Agent Toll</span>
-                  </div>
-                  <div className="flex items-center justify-between border-t border-[#18181C] pt-3">
-                    <span className="text-xs text-[#71717A]">Escrow Destination</span>
-                    <span className="text-xs font-mono text-[#A1A1AA]" title={YEARBOUND_VAULT_ADDRESS}>
-                      {YEARBOUND_VAULT_ADDRESS.slice(0, 8)}...{YEARBOUND_VAULT_ADDRESS.slice(-6)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between border-t border-[#18181C] pt-3">
-                    <span className="text-xs text-[#71717A]">Settlement Mode</span>
-                    <span className="text-xs font-mono text-white">
-                      {accountType === "real"
-                        ? "Tatum Mainnet Gateway"
-                        : accountType === "linked"
-                        ? "Sui Wallet Standard"
-                        : "Ed25519 Cryptographic Voucher"}
-                    </span>
+
+                  <div className="flex flex-col gap-2 pt-2 border-t border-white/10 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-white/60">Escrow Contract</span>
+                      <span className="font-mono text-[#ebaf64]/90" title={YEARBOUND_VAULT_ADDRESS}>
+                        x402 Move Vault ({YEARBOUND_VAULT_ADDRESS.slice(0, 6)}...{YEARBOUND_VAULT_ADDRESS.slice(-4)})
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-white/60">Release Trigger</span>
+                      <span className="font-mono text-white/80">
+                        Sui Network Epoch Clock (Dec 25)
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-white/60">Settlement Mode</span>
+                      <span className="font-mono text-white/80">
+                        {accountType === "real"
+                          ? "Tatum Mainnet Gateway"
+                          : accountType === "linked"
+                          ? "Sui Wallet Standard"
+                          : "Ed25519 Cryptographic Voucher"}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                {/* TATUM INFLOW & ACCUMULATION SENTINEL CARD */}
-                {(() => {
-                  const activeInflowRule = activeRulesList.find((r) => {
-                    const t = `${r.title} ${r.condition}`.toLowerCase();
-                    return (
-                      t.includes("save") ||
-                      t.includes("deposit") ||
-                      t.includes("inflow") ||
-                      t.includes("earn") ||
-                      t.includes("income") ||
-                      t.includes("accumulate")
-                    );
-                  });
-
-                  const hasInflowGoal = Boolean(activeInflowRule && inflowProgress.target > 0);
-                  const progressPct = hasInflowGoal
-                    ? Math.min(100, (inflowProgress.current / (inflowProgress.target || 1)) * 100)
-                    : 0;
-                  const isMet = hasInflowGoal && inflowProgress.current >= inflowProgress.target;
-
-                  return (
-                    <div
-                      className={`border rounded-2xl p-5 flex flex-col gap-3.5 transition-all duration-200 ${
-                        isDegradedMode
-                          ? "bg-[#111113] border-[#222226] text-[#71717A]"
-                          : "bg-[#0A0A0C] border-[#222226] hover:border-[#3F3F46]"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Activity size={14} className={isDegradedMode ? "text-[#52525B]" : "text-[#A1A1AA]"} />
-                          <span className="text-[11px] font-mono uppercase tracking-wider text-[#71717A]">
-                            Tatum Inflow Sentinel
-                          </span>
-                        </div>
-                        <span
-                          className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
-                            isDegradedMode
-                              ? "text-[#71717A] bg-[#18181B] border-[#27272A]"
-                              : isMet
-                              ? "text-[#10B981] bg-[#10B981]/10 border-[#10B981]/25"
-                              : hasInflowGoal
-                              ? "text-[#F59E0B] bg-[#F59E0B]/10 border-[#F59E0B]/25"
-                              : "text-[#A1A1AA] bg-[#18181C] border-[#27272A]"
-                          }`}
-                        >
-                          {isDegradedMode
-                            ? "Offline (Web2)"
-                            : isMet
-                            ? "Goal Met"
-                            : hasInflowGoal
-                            ? "Inflow Deficit"
-                            : "No Goal Configured"}
-                        </span>
-                      </div>
-
-                      {isDegradedMode ? (
-                        <p className="text-xs text-[#71717A] leading-relaxed italic">
-                          Tatum on-chain telemetry is bypassed in legacy Web2 mode. Incoming deposits are not cross-referenced against your resolutions.
-                        </p>
-                      ) : hasInflowGoal ? (
-                        <div className="flex flex-col gap-2.5">
-                          <div className="flex items-center justify-between">
-                            <div className="flex flex-col">
-                              <span className="text-xs font-semibold text-white">
-                                {activeInflowRule?.title}
-                              </span>
-                              <span className="text-[10px] font-mono text-[#71717A]">
-                                Target: {inflowProgress.target}.00 SUI
-                              </span>
-                            </div>
-                            <span className="text-xs font-mono font-semibold text-white">
-                              {inflowProgress.current.toFixed(2)} SUI Received
-                            </span>
-                          </div>
-
-                          {/* Minimalist Progress Track */}
-                          <div className="w-full h-1.5 bg-[#18181C] rounded-full overflow-hidden border border-[#27272A]">
-                            <div
-                              className={`h-full transition-all duration-500 rounded-full ${
-                                isMet ? "bg-[#10B981]" : "bg-white"
-                              }`}
-                              style={{ width: `${progressPct}%` }}
-                            />
-                          </div>
-
-                          <div className="flex items-center justify-between text-[10px] font-mono text-[#71717A]">
-                            <span>
-                              {isMet
-                                ? "Adherence verified: on-chain deposits honor your pledge."
-                                : `${(inflowProgress.target - inflowProgress.current).toFixed(2)} SUI needed to satisfy pledge.`}
-                            </span>
-                            <span>{progressPct.toFixed(0)}%</span>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col gap-1.5">
-                          <p className="text-xs text-[#71717A] leading-relaxed">
-                            No deposit target detected. Add a resolution like &quot;Save 500 SUI&quot; or &quot;Deposit 250 SUI&quot; to audit incoming wealth accumulation on-chain.
-                          </p>
-                          <div className="flex items-center justify-between text-[10px] font-mono text-[#52525B] pt-1">
-                            <span>Audited by Tatum Sui Gateway</span>
-                            <span>Current: {inflowProgress.current.toFixed(2)} SUI</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {/* Walrus Memory Ledger: Inscribed Events */}
-                <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-3.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-mono text-[#71717A] uppercase tracking-wider">
-                      Walrus Memory Ledger · Live Activity
-                    </span>
-                    <span className="text-xs font-mono text-white">
-                      {infractions.length} Inscribed Events
-                    </span>
-                  </div>
-
-                  {infractions.length === 0 ? (
-                    <div className="py-4 text-center text-xs text-[#71717A] border-t border-[#18181C] mt-1">
-                      Zero transactions recorded yet. Send SUI to create live Walrus proofs.
-                    </div>
-                  ) : (
-                    <div className="flex flex-col gap-2.5 border-t border-[#18181C] pt-3">
-                      {infractions.map((infr) => {
-                        const isHonored = infr.verdict === "honored";
-                        return (
-                          <div
-                            key={infr.id}
-                            className="bg-[#131316] border border-[#222226] rounded-xl p-3 flex flex-col gap-1.5"
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className={`text-[10px] font-mono font-medium px-2 py-0.5 rounded border ${
-                                    isHonored
-                                      ? "text-[#10B981] bg-[#10B981]/10 border-[#10B981]/25"
-                                      : "text-[#EF4444] bg-[#EF4444]/10 border-[#EF4444]/25"
-                                  }`}
-                                >
-                                  {isHonored ? "Honored" : infr.repeatCount && infr.repeatCount > 1 ? `Breach #${infr.repeatCount}` : "Breach Fine"}
-                                </span>
-                                <span className="text-xs font-semibold text-white">
-                                  {isHonored ? `-${infr.amount} SUI` : `+${infr.penaltySui} SUI Locked`}
-                                </span>
-                              </div>
-                              <span className="text-[10px] font-mono text-[#71717A]">
-                                {infr.timestamp}
-                              </span>
-                            </div>
-                            <span className="text-xs text-[#D4D4D8]">
-                              "{infr.memo}"
-                            </span>
-                            <div className="flex items-center justify-between mt-1 pt-1.5 border-t border-[#1E1E22]">
-                              <span className="text-[10px] text-[#71717A] truncate">
-                                {isHonored
-                                  ? infr.recipient
-                                    ? `To: ${infr.recipient.slice(0, 8)}...`
-                                    : "Compliant transfer"
-                                  : `Breach: ${infr.ruleTitle}`}
-                              </span>
-                              <div className="flex items-center gap-2">
-                                {infr.isRealOnChain && infr.txHash && infr.explorerUrl ? (
-                                  <a
-                                    href={infr.explorerUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-[10px] font-mono text-[#E5A93C] hover:text-[#F3BA5B] flex items-center gap-0.5 transition-colors"
-                                    title="View PTB on SuiScan"
-                                  >
-                                    <span>PTB #{infr.txHash.slice(0, 6)}...</span>
-                                    <ExternalLink size={9} />
-                                  </a>
-                                ) : infr.voucherSignature || infr.isOffChainVoucher ? (
-                                  <span
-                                    className="text-[10px] font-mono text-[#71717A] bg-[#141417] px-2 py-0.5 rounded border border-[#222226]"
-                                    title="x402 Cryptographic Debt Voucher (Inscribed to Walrus)"
-                                  >
-                                    x402 Voucher
-                                  </span>
-                                ) : null}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setExpandedJsonBlobId(infr.blobId);
-                                    setIsMemoryInspectorOpen(true);
-                                  }}
-                                  className="text-[10px] font-mono text-[#A1A1AA] hover:text-white flex items-center gap-1 transition-colors"
-                                >
-                                  <span>Blob #{infr.blobId.slice(0, 8)}...</span>
-                                  <ExternalLink size={10} />
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
               </div>
             )}
 
