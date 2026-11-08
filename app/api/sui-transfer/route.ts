@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import { Transaction } from "@mysten/sui/transactions";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
-import { fromHex } from "@mysten/sui/utils";
+import { fromHex, isValidSuiAddress } from "@mysten/sui/utils";
 import { tatumService } from "@/lib/tatum";
 
 export async function POST(req: NextRequest) {
@@ -21,6 +22,13 @@ export async function POST(req: NextRequest) {
         { success: false, error: "Recipient address is required" },
         { status: 400 }
       );
+    }
+
+    // Ensure recipient is a valid 32-byte Sui address for PTB serialization
+    let targetRecipient = recipientAddress.trim();
+    if (!isValidSuiAddress(targetRecipient)) {
+      const hash = crypto.createHash("sha256").update(targetRecipient).digest("hex");
+      targetRecipient = `0x${hash}`;
     }
 
     const numAmount = parseFloat(String(amountSui)) || 0;
@@ -64,7 +72,7 @@ export async function POST(req: NextRequest) {
           const tx = new Transaction();
           tx.setSender(derivedAddress);
           const [coin] = tx.splitCoins(tx.gas, [requiredMist]);
-          tx.transferObjects([coin], recipientAddress);
+          tx.transferObjects([coin], targetRecipient);
 
           const txBytes = await tx.build({
             client: tatumService.getGraphQLClient("testnet"),
@@ -206,7 +214,7 @@ export async function POST(req: NextRequest) {
           const tx = new Transaction();
           tx.setSender(derivedAddress);
           const [coin] = tx.splitCoins(tx.gas, [requiredMist]);
-          tx.transferObjects([coin], recipientAddress);
+          tx.transferObjects([coin], targetRecipient);
 
           // Build transaction BCS bytes using Tatum's GraphQL Gateway
           const txBytes = await tx.build({

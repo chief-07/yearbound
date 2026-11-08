@@ -94,7 +94,7 @@ export class TatumSuiService {
     });
 
     this.testnetGqlClient = new SuiGraphQLClient({
-      url: process.env.TATUM_SUI_TESTNET_GATEWAY_URL || "https://sui-testnet.gateway.tatum.io/graphql",
+      url: process.env.TATUM_SUI_TESTNET_GATEWAY_URL || "https://graphql.testnet.sui.io/graphql",
       network: "testnet",
       headers,
     });
@@ -240,7 +240,6 @@ export class TatumSuiService {
             digest
             status
             timestamp
-            executionError
           }
         }
       }
@@ -253,7 +252,6 @@ export class TatumSuiService {
           digest?: string;
           status?: string;
           timestamp?: string;
-          executionError?: string | null;
         };
       };
     }>({
@@ -267,8 +265,7 @@ export class TatumSuiService {
     const effects = result?.data?.executeTransaction?.effects;
     if (!effects || !effects.digest) {
       throw new Error(
-        effects?.executionError ||
-          `Tatum Sui ${network} Gateway did not return a valid transaction digest`
+        `Tatum Sui ${network} Gateway did not return a valid transaction digest`
       );
     }
 
@@ -276,7 +273,6 @@ export class TatumSuiService {
       digest: effects.digest,
       status: effects.status || "SUCCESS",
       timestamp: effects.timestamp,
-      executionError: effects.executionError,
       explorerUrl: `https://suiscan.xyz/${network}/tx/${effects.digest}`,
     };
   }

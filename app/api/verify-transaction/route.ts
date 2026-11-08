@@ -14,6 +14,7 @@ import {
   type AccountabilityEventPayload,
   type BehavioralPatternPayload,
 } from "@/lib/walrus";
+import { synthesizeWallyIntervention } from "@/lib/wally-synthesizer";
 
 const TransactionAuditSchema = z.object({
   verdict: z
@@ -93,26 +94,31 @@ export async function POST(req: Request) {
     let inflowMetrics = { totalInflowSui: 0, incomingTxCount: 0, auditedPeriodDays: 30, provider: `Tatum Sui ${targetNetwork} Gateway` };
 
     try {
-      if (walletAddress && walletAddress.startsWith("0x") && walletAddress.length > 10) {
-        const [balances, velocity, inflows] = await Promise.all([
-          tatumService.getWalletBalances(walletAddress, targetNetwork),
-          tatumService.getSpendingVelocity(walletAddress, 24, targetNetwork),
-          tatumService.getInflowMetrics(walletAddress, 30, targetNetwork),
-        ]);
-        const suiCoin = balances.find((b) => b.coinType.includes("::sui::SUI") || b.coinType === "0x2::sui::SUI");
-        if (suiCoin) {
-          tatumBalanceSui = Number(suiCoin.totalBalance) / 1_000_000_000;
-        }
-        spendingVelocity = velocity;
-        inflowMetrics = inflows;
-      }
+      await Promise.race([
+        (async () => {
+          if (walletAddress && walletAddress.startsWith("0x") && walletAddress.length > 10) {
+            const [balances, velocity, inflows] = await Promise.all([
+              tatumService.getWalletBalances(walletAddress, targetNetwork),
+              tatumService.getSpendingVelocity(walletAddress, 24, targetNetwork),
+              tatumService.getInflowMetrics(walletAddress, 30, targetNetwork),
+            ]);
+            const suiCoin = balances.find((b) => b.coinType.includes("::sui::SUI") || b.coinType === "0x2::sui::SUI");
+            if (suiCoin) {
+              tatumBalanceSui = Number(suiCoin.totalBalance) / 1_000_000_000;
+            }
+            spendingVelocity = velocity;
+            inflowMetrics = inflows;
+          }
 
-      if (vaultObjectId && vaultObjectId.startsWith("0x")) {
-        const vaultState = await tatumService.getVaultState(vaultObjectId, targetNetwork);
-        if (vaultState) {
-          tatumVaultSui = vaultState.balanceSui;
-        }
-      }
+          if (vaultObjectId && vaultObjectId.startsWith("0x")) {
+            const vaultState = await tatumService.getVaultState(vaultObjectId, targetNetwork);
+            if (vaultState) {
+              tatumVaultSui = vaultState.balanceSui;
+            }
+          }
+        })(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Telemetry timeout")), 2500)),
+      ]);
     } catch (tatumErr) {
       console.warn("[Verify API] Tatum RPC notice (using fallback baseline):", tatumErr);
     }
@@ -155,15 +161,20 @@ export async function POST(req: Request) {
       const ruleKeywords = userRules.map((r) => `${r.title} ${r.condition}`).join(" ");
       const queryStr = `${cleanMemo} ${cleanRecipient} ${ruleKeywords} resolution commitment oath penalty`.trim();
 
-      const [events, patterns, rawTexts] = await Promise.all([
-        walrusService.recallTyped<AccountabilityEventPayload>("accountability_event", "accountability_event"),
-        walrusService.recallTyped<BehavioralPatternPayload>("behavioral_pattern", "behavioral_pattern"),
-        walrusService.recall(queryStr, 6),
-      ]);
+      await Promise.race([
+        (async () => {
+          const [events, patterns, rawTexts] = await Promise.all([
+            walrusService.recallTyped<AccountabilityEventPayload>("accountability_event", "accountability_event"),
+            walrusService.recallTyped<BehavioralPatternPayload>("behavioral_pattern", "behavioral_pattern"),
+            walrusService.recall(queryStr, 6),
+          ]);
 
-      walrusEvents = events || [];
-      walrusPatterns = patterns || [];
-      rawRecalledTexts = rawTexts || [];
+          walrusEvents = events || [];
+          walrusPatterns = patterns || [];
+          rawRecalledTexts = rawTexts || [];
+        })(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Walrus recall timeout")), 2500)),
+      ]);
     } catch (walrusErr) {
       console.warn("[Verify API] Walrus typed recall notice:", walrusErr);
     }
@@ -312,9 +323,9 @@ export async function POST(req: Request) {
 
     // Escalated Penalty Curve for Repeat Breaches:
     // 1st breach: 1.0x | 2nd breach: 1.5x | 3rd breach: 2.0x | 4th+ breach: 2.5x
-    const basePenalty = Number(matchedViolationRule?.penalty) || 10;
+    const basePenalty = Number(matchedViolationRule?.penalty) || 0.05;
     const penaltyMultiplier = repeatCount <= 1 ? 1 : repeatCount === 2 ? 1.5 : repeatCount === 3 ? 2 : 2.5;
-    const escalatedPenalty = Math.round(basePenalty * penaltyMultiplier);
+    const escalatedPenalty = Math.round(basePenalty * penaltyMultiplier * 100) / 100;
 
     // Past breach memos summary
     const pastBreachSummaries = pastRuleBreaches
@@ -345,11 +356,30 @@ export async function POST(req: Request) {
     }
 
     // -------------------------------------------------------------------------
-    // 5. GEMINI SEMANTIC JUDICIAL EVALUATION WITH ACCUMULATED WALRUS MEMORY
+    // 5. WALLY'S AGENT SYNTHESIS WITH ACCUMULATED WALRUS MEMORY
     // -------------------------------------------------------------------------
-    const motivation = matchedViolationRule?.whyItMatters || "Personal financial discipline";
+    const motivation = matchedViolationRule?.whyItMatters || "";
 
-    const promptMemoryDossier = `
+    const dynamicRoast = isBreached
+      ? synthesizeWallyIntervention({
+          ruleTitle: targetRuleTitle,
+          motivation,
+          condition: matchedViolationRule?.condition,
+          recipient: cleanRecipient,
+          memo: cleanMemo,
+          amountSui: transferAmount,
+          repeatCount,
+          cleanStreakDays,
+        })
+      : "Transaction verified. Completely honors your active commitments in Walrus Memory.";
+
+    let finalRoast = dynamicRoast;
+
+    // Optional rapid AI refinement (1200ms budget)
+    try {
+      const model = google("gemini-3.8-flash");
+
+      const promptMemoryDossier = `
 ACCUMULATED WALRUS MEMORY & INFRACTION DOSSIER:
 - Evaluated Resolution: "${targetRuleTitle}"
 - User's Personal Motivation (Sacred Oath): "${motivation}"
@@ -364,130 +394,72 @@ ${walrusPatterns.length > 0 ? "- Active Behavioral Patterns in Walrus: " + walru
 
 TATUM ON-CHAIN REALITY & TELEMETRY:
 - Verified Balance: ${tatumBalanceSui.toFixed(2)} SUI
-- Recent 24h Transaction Velocity: ${spendingVelocity.recentTxCount} transactions (${spendingVelocity.isHighVelocity ? "HIGH VELOCITY SPENDING DETECTED" : "Normal velocity"})
-- 30-Day Cumulative Inflow (Audited by Tatum): ${inflowMetrics.totalInflowSui.toFixed(2)} SUI across ${inflowMetrics.incomingTxCount} deposits
-${inflowRule ? `- User's Specific Inflow Resolution: "${inflowRule.title}" (Goal: ${inflowTargetAmount} SUI | Current On-Chain Inflow: ${inflowMetrics.totalInflowSui.toFixed(2)} SUI | Status: ${isInflowDeficit ? `DEFICIT - Still needs ${(inflowTargetAmount! - inflowMetrics.totalInflowSui).toFixed(2)} SUI` : "HONORED"})` : ""}
-    `.trim();
-
-    try {
-      const model = google("gemini-3.8-flash");
+- Recent 24h Transaction Velocity: ${spendingVelocity.recentTxCount} transactions
+- 30-Day Cumulative Inflow: ${inflowMetrics.totalInflowSui.toFixed(2)} SUI
+      `.trim();
 
       const { output } = await generateText({
         model,
         output: Output.object({
           schema: TransactionAuditSchema,
         }),
-        abortSignal: AbortSignal.timeout(5000),
+        abortSignal: AbortSignal.timeout(1200),
         system:
-          "You are Wally for Yearbound on Sui. " +
-          "When stopping a user from a transfer that breaches their resolution, write a SINGLE concise, punchy sentence. " +
-          "CRITICAL RULES: " +
-          "1. NEVER describe character physical actions or third-person gestures (NO 'Wally peers over his chronometer', NO 'adjusts his collar'). Zero roleplay. " +
-          "2. Tell them directly why the transfer violates their commitment. " +
-          "3. If repeat violation, state it naturally (e.g. 'You have done this twice in a row' or 'You have done this three times now'). " +
-          "4. Remind them of their personal motivation verbatim (e.g. 'remember, you are doing this for: \"...\"'). " +
-          "5. Keep the entire output to 1-2 direct, natural sentences max.",
-        prompt: `Evaluate this transfer against the user's active resolutions and Walrus Memory:
-
-TRANSACTION DETAILS:
+          "You are Wally, the discerning accountability concierge for Yearbound on Sui. " +
+          "When stopping a user from a transfer that breaches their resolution: " +
+          "1. NEVER describe character physical actions or third-person gestures. Zero roleplay slop. " +
+          "2. Paraphrase their personal motivation naturally into second person ('You swore to respect your boundaries because...'). " +
+          "3. DO NOT use mechanical templates like 'remember, you are doing this for: \"...\"'. " +
+          "4. Keep the output to 1-2 sharp, direct, empathetic sentences.",
+        prompt: `Evaluate this transfer:
 - Amount: ${transferAmount} SUI
 - Recipient: ${cleanRecipient}
 - Memo: "${cleanMemo}"
 - Timestamp: ${timestamp}
 
-${promptMemoryDossier}
-
-Determine the verdict ('broken', 'honored', 'excused'), matched rule, escalated penalty, repeat infraction count (${repeatCount}), streak broken status, and Wally's single-sentence direct intervention.`,
+${promptMemoryDossier}`,
       });
 
-      return NextResponse.json({
-        success: true,
-        verdict: output.verdict,
-        reason: output.reason,
-        matchedRule: output.matched_rule,
-        penaltySui: isBreached ? output.penalty_sui || escalatedPenalty : 0,
-        wallyRoast: output.wally_roast,
-        repeatInfractionCount: repeatCount,
-        streakBroken: streakBroken,
-        behavioralInsight: output.behavioral_insight || newPatternDetected?.observation,
-        tatum: {
-          balanceSui: tatumBalanceSui,
-          vaultLockedSui: tatumVaultSui,
-          isSolvent,
-          verifiedVia: "Tatum Sui Gateway (mainnet GraphQL & RPC)",
-          spendingVelocity,
-          inflowMetrics,
-          inflowRuleChecked: inflowRule
-            ? {
-                title: inflowRule.title,
-                targetSui: inflowTargetAmount,
-                currentInflowSui: inflowMetrics.totalInflowSui,
-                isMet: !isInflowDeficit,
-              }
-            : null,
-        },
-        walrus: {
-          recalledCount: rawRecalledTexts.length + walrusEvents.length,
-          totalPastBreaches: pastBreaches.length,
-          previousRuleBreaches: previousBreachCount,
-          cleanStreakCount,
-          cleanStreakDays,
-          patternsCount: walrusPatterns.length,
-          verifiedVia: "Walrus Memory (MemWal Mainnet)",
-        },
-        timestamp: new Date().toISOString(),
-      });
-    } catch (aiErr) {
-      console.warn("[Verify API] AI synthesis deferred to dynamic evaluator:", aiErr);
-
-      // Deterministic dynamic verdict derived strictly from accumulated Walrus memory
-      let dynamicRoast = "";
-      if (isBreached) {
-        const repeatPhrase =
-          repeatCount === 2
-            ? "You've done this twice in a row — "
-            : repeatCount > 2
-            ? `You've done this ${repeatCount} times now — `
-            : "";
-        const oathPhrase = motivation
-          ? `remember, you are doing this for: "${motivation}".`
-          : "remember your commitment to financial discipline.";
-
-        dynamicRoast = `This transfer violates your commitment against ${targetRuleTitle.toLowerCase()}. ${repeatPhrase}${oathPhrase}`;
-      } else {
-        dynamicRoast = `Transaction verified. Completely honors your active commitments in Walrus Memory.`;
+      if (output?.wally_roast && !output.wally_roast.includes("you are doing this for:")) {
+        finalRoast = output.wally_roast;
       }
-
-      return NextResponse.json({
-        success: true,
-        verdict: isBreached ? "broken" : "honored",
-        reason: isBreached
-          ? violationReason || `Transaction memo '${cleanMemo}' breaches your commitment to '${targetRuleTitle}'.`
-          : "Discipline maintained. Transaction verified as resolution-compliant.",
-        matchedRule: isBreached ? targetRuleTitle : "Resolutions Honored",
-        penaltySui: isBreached ? escalatedPenalty : 0,
-        wallyRoast: dynamicRoast,
-        repeatInfractionCount: repeatCount,
-        streakBroken: streakBroken,
-        behavioralInsight: newPatternDetected?.observation,
-        tatum: {
-          balanceSui: tatumBalanceSui,
-          vaultLockedSui: tatumVaultSui,
-          isSolvent,
-          verifiedVia: "Tatum Sui RPC (verified)",
-        },
-        walrus: {
-          recalledCount: rawRecalledTexts.length + walrusEvents.length,
-          totalPastBreaches: pastBreaches.length,
-          previousRuleBreaches: previousBreachCount,
-          cleanStreakCount,
-          cleanStreakDays,
-          patternsCount: walrusPatterns.length,
-          verifiedVia: "Walrus Memory (MemWal Mainnet)",
-        },
-        timestamp: new Date().toISOString(),
-      });
+    } catch {
+      // Rapid agent fallback seamlessly applies gold-standard synthesized roast
+      finalRoast = dynamicRoast;
     }
+
+    return NextResponse.json({
+      success: true,
+      verdict: isBreached ? "broken" : "honored",
+      reason: isBreached
+        ? violationReason || `Transaction memo '${cleanMemo}' breaches your commitment to '${targetRuleTitle}'.`
+        : "Discipline maintained. Transaction verified as resolution-compliant.",
+      matchedRule: isBreached ? targetRuleTitle : "Resolutions Honored",
+      matchedRuleId: matchedViolationRule?.id || null,
+      matchedRuleBlobId: (matchedViolationRule as any)?.blobId || null,
+      motivation: matchedViolationRule?.whyItMatters || null,
+      penaltySui: isBreached ? escalatedPenalty : 0,
+      wallyRoast: finalRoast,
+      repeatInfractionCount: repeatCount,
+      streakBroken: streakBroken,
+      behavioralInsight: newPatternDetected?.observation,
+      tatum: {
+        balanceSui: tatumBalanceSui,
+        vaultLockedSui: tatumVaultSui,
+        isSolvent,
+        verifiedVia: "Tatum Sui RPC (verified)",
+      },
+      walrus: {
+        recalledCount: rawRecalledTexts.length + walrusEvents.length,
+        totalPastBreaches: pastBreaches.length,
+        previousRuleBreaches: previousBreachCount,
+        cleanStreakCount,
+        cleanStreakDays,
+        patternsCount: walrusPatterns.length,
+        verifiedVia: "Walrus Memory (MemWal Mainnet)",
+      },
+      timestamp: new Date().toISOString(),
+    });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Verification failure";
     console.error("[Verify API] Fatal error:", error);

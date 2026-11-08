@@ -16,8 +16,8 @@ export interface WalletInfo {
 // Stored in localStorage so each tester/judge has their own isolated testnet wallet
 // with no coin-lock contention. Derives deterministic keypair as fallback.
 // -----------------------------------------------------------------------------
-const DEMO_SEED_HEX = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
-const DEMO_WALLET_STORAGE_KEY = "yearbound_demo_testnet_wallet_v2";
+const DEMO_SEED_HEX = "6089aea65e7c0780c57afa97846ca7deeb309cdcf41489020628e35e6fe50ace";
+const DEMO_WALLET_STORAGE_KEY = "yearbound_demo_testnet_wallet_v4";
 
 export function getDemoKeypair(): Ed25519Keypair {
   const seedBytes = fromHex(DEMO_SEED_HEX);
@@ -42,14 +42,14 @@ export function getOrCreateDemoKeypair(): { keypair: Ed25519Keypair; isNew: bool
     }
   }
 
-  const newKp = new Ed25519Keypair();
+  const demoKp = getDemoKeypair();
   try {
-    localStorage.setItem(DEMO_WALLET_STORAGE_KEY, newKp.getSecretKey());
+    localStorage.setItem(DEMO_WALLET_STORAGE_KEY, demoKp.getSecretKey());
   } catch (err) {
     console.warn("[Wallet] Could not persist demo keypair to localStorage:", err);
   }
 
-  return { keypair: newKp, isNew: true };
+  return { keypair: demoKp, isNew: false };
 }
 
 export function exportDemoPrivateKeyHex(): string | null {

@@ -28,7 +28,7 @@ export async function POST(req: Request) {
         rule_title: body.rule_title,
         verdict: body.verdict || "broken",
         user_explanation: body.user_explanation || "No explanation provided",
-        penalty_deposited_sui: Number(body.penalty_deposited_sui) || 10,
+        penalty_deposited_sui: Number(body.penalty_deposited_sui) || 0.05,
         vault_tx_hash: body.vault_tx_hash || undefined,
         voucher_signature: body.voucher_signature || undefined,
         settlement_type: body.settlement_type || (body.vault_tx_hash ? "on_chain_ptb" : "cryptographic_voucher"),

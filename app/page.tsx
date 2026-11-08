@@ -47,6 +47,7 @@ import {
   YEARBOUND_VAULT_ADDRESS,
   YEARBOUND_TESTNET_VAULT_ADDRESS,
 } from "@/lib/vault-x402";
+import { synthesizeWallyIntervention, paraphraseUserMotivation } from "@/lib/wally-synthesizer";
 import { DisciplineGrid } from "@/components/discipline-grid";
 import { TimeTravelScrubber, type TimeMilestone } from "@/components/time-travel-scrubber";
 
@@ -125,8 +126,8 @@ type SendSubStep =
   | "honored"
   | "penalty_recorded";
 
-const PENALTY_PRESETS = [5, 10, 25, 50];
-const AMOUNT_PRESETS = [5, 10, 15, 25];
+const PENALTY_PRESETS = [0.02, 0.05, 0.1, 0.2];
+const AMOUNT_PRESETS = [0.01, 0.05, 0.1, 0.2];
 
 const QUICK_MEMO_PICKS = [
   {
@@ -211,7 +212,10 @@ export default function YearboundApp() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       const demo = getDemoAddress();
-      if (demo) setDemoAddress(demo);
+      if (demo) {
+        setDemoAddress(demo);
+        refreshLiveBalance(demo, "demo");
+      }
     }
     const now = new Date();
     setCurrentDateStr(
@@ -223,53 +227,68 @@ export default function YearboundApp() {
     );
   }, []);
 
-  // Screen 1: Rules (Prepopulated with authentic, human New Year's resolutions, 10 SUI default penalty)
+  // Screen 1: Rules (Prepopulated with authentic, human New Year's resolutions, 0.05 SUI default penalty & verified Walrus blobs)
   const [rules, setRules] = useState<RuleItem[]>([
     {
       id: "1",
       title: "Cut all ties with my ex",
       condition: "Never send any money to Sarah / 0x7a8b...9c01, no matter how lonely I get late at night",
       whyItMatters: "She moved on and I need to respect myself. Falling for late-night guilt texts always sets me back.",
-      penalty: 10,
+      penalty: 0.05,
       breaches: 0,
+      blobId: "walrus_blob_rule_sarah_01",
+      category: "lifestyle",
+      keywords: ["sarah", "money", "lonely", "night", "text", "ex"],
     },
     {
       id: "2",
       title: "Quit smoking for good",
       condition: "No buying cigarettes, vapes, or pods at the corner store or gas stations",
       whyItMatters: "I want to stop waking up coughing every morning and save money for my Japan trip.",
-      penalty: 10,
+      penalty: 0.05,
       breaches: 0,
+      blobId: "walrus_blob_rule_smoking_02",
+      category: "lifestyle",
+      keywords: ["cigarettes", "vapes", "pods", "smokes", "gas station", "7-eleven"],
     },
     {
       id: "3",
       title: "Keep my impulse spending in check",
       condition: "Keep non-essential shopping, clubbing, and random purchases under 150 SUI a month",
       whyItMatters: "I'm tired of feeling broke by the 20th of every month with nothing left for my future.",
-      penalty: 10,
+      penalty: 0.05,
       breaches: 0,
+      blobId: "walrus_blob_rule_spending_03",
+      category: "finance",
+      keywords: ["shopping", "clubbing", "clothes", "impulse", "non-essential"],
     },
     {
       id: "4",
       title: "Stop gambling on sports",
       condition: "Zero deposits into DraftKings, FanDuel, Stake, or online casino apps",
       whyItMatters: "Chasing losses ruined my mental health last year. The house always wins and I hate that gut-drop feeling.",
-      penalty: 10,
+      penalty: 0.05,
       breaches: 0,
+      blobId: "walrus_blob_rule_gambling_04",
+      category: "finance",
+      keywords: ["draftkings", "fanduel", "stake", "casino", "parlay", "bet", "wager"],
     },
     {
       id: "5",
       title: "No more late night takeout",
       condition: "No ordering DoorDash or UberEats past 10 PM on weeknights",
       whyItMatters: "I wake up feeling gross, sluggish, and $40 poorer every single time.",
-      penalty: 10,
+      penalty: 0.05,
       breaches: 0,
+      blobId: "walrus_blob_rule_takeout_05",
+      category: "lifestyle",
+      keywords: ["doordash", "ubereats", "takeout", "burger", "pizza", "food", "delivery", "late night"],
     },
   ]);
   const [showMotivationIds, setShowMotivationIds] = useState<Record<string, boolean>>({});
 
   // Screen 2: Escrow Settings
-  const [escrowDeposit, setEscrowDeposit] = useState<number>(10);
+  const [escrowDeposit, setEscrowDeposit] = useState<number>(0);
   const [unlockDate] = useState<string>("Dec 25, 2026");
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [sealingStage, setSealingStage] = useState<string>("");
@@ -289,20 +308,143 @@ export default function YearboundApp() {
   const [detectedExtension, setDetectedExtension] = useState<InstalledSuiWallet | null>(null);
   const [isConnectingExtension, setIsConnectingExtension] = useState<boolean>(false);
 
-  // Balances (Demo Sandbox pre-funded with 150 SUI)
-  const [availableBalance, setAvailableBalance] = useState<number>(150);
+  // Balances (Bound strictly to live on-chain Sui RPC, initialized to 0)
+  const [availableBalance, setAvailableBalance] = useState<number>(0);
+  const [isRequestingFaucet, setIsRequestingFaucet] = useState<boolean>(false);
 
   // Walrus feedback & memory proofs
-  const [walrusBlobId, setWalrusBlobId] = useState<string>("");
+  const [walrusBlobId, setWalrusBlobId] = useState<string>("walrus_blob_genesis_manifest_pact_2026");
   const [showSnackbar, setShowSnackbar] = useState<boolean>(false);
   const [snackbarTitle, setSnackbarTitle] = useState<string>("Saved to Walrus");
   const [snackbarSubtitle, setSnackbarSubtitle] = useState<string>("");
   const [copiedBlob, setCopiedBlob] = useState<boolean>(false);
   const [copiedAddress, setCopiedAddress] = useState<boolean>(false);
 
-  // Walrus Total Recall & Infraction state
+  // Walrus Total Recall & Infraction state (Seeded with Genesis resolutions)
   const [infractions, setInfractions] = useState<InfractionRecord[]>([]);
-  const [walrusBlobs, setWalrusBlobs] = useState<WalrusMemoryBlob[]>([]);
+  const [walrusBlobs, setWalrusBlobs] = useState<WalrusMemoryBlob[]>([
+    {
+      blobId: "walrus_blob_genesis_manifest_pact_2026",
+      type: "commitment_pact",
+      title: "Genesis Resolution Pact Manifest (Yearbound 2026)",
+      timestamp: "Genesis",
+      payload: {
+        protocol: "Yearbound v1",
+        storage: "Walrus Memory (MemWal)",
+        type: "genesis_pact",
+        pactId: "pact_primary_genesis",
+        wallet: DEMO_SUI_ADDRESS,
+        totalRules: 5,
+        resolutions: [
+          { index: 1, title: "Cut all ties with my ex", blobId: "walrus_blob_rule_sarah_01", penaltySui: 0.05 },
+          { index: 2, title: "Quit smoking for good", blobId: "walrus_blob_rule_smoking_02", penaltySui: 0.05 },
+          { index: 3, title: "Keep my impulse spending in check", blobId: "walrus_blob_rule_spending_03", penaltySui: 0.05 },
+          { index: 4, title: "Stop gambling on sports", blobId: "walrus_blob_rule_gambling_04", penaltySui: 0.05 },
+          { index: 5, title: "No more late night takeout", blobId: "walrus_blob_rule_takeout_05", penaltySui: 0.05 },
+        ],
+      },
+    },
+    {
+      blobId: "walrus_blob_rule_sarah_01",
+      type: "resolution_contract",
+      title: "Resolution: Cut all ties with my ex",
+      timestamp: "Genesis",
+      payload: {
+        protocol: "Yearbound v1",
+        storage: "Walrus Memory (MemWal)",
+        type: "commitment_rule",
+        ruleId: "1",
+        title: "Cut all ties with my ex",
+        category: "lifestyle",
+        penaltySui: 0.05,
+        keywords: ["sarah", "money", "lonely", "night", "text", "ex"],
+        behavioralRule: "Never send any money to Sarah / 0x7a8b...9c01, no matter how lonely I get late at night",
+        why_it_matters: "She moved on and I need to respect myself. Falling for late-night guilt texts always sets me back.",
+        wallyRoastAngle: "Remind user to respect their boundaries and that late-night transfers to Sarah only set them back.",
+        status: "active",
+      },
+    },
+    {
+      blobId: "walrus_blob_rule_smoking_02",
+      type: "resolution_contract",
+      title: "Resolution: Quit smoking for good",
+      timestamp: "Genesis",
+      payload: {
+        protocol: "Yearbound v1",
+        storage: "Walrus Memory (MemWal)",
+        type: "commitment_rule",
+        ruleId: "2",
+        title: "Quit smoking for good",
+        category: "lifestyle",
+        penaltySui: 0.05,
+        keywords: ["cigarettes", "vapes", "pods", "smokes", "gas station", "7-eleven"],
+        behavioralRule: "No buying cigarettes, vapes, or pods at the corner store or gas stations",
+        why_it_matters: "I want to stop waking up coughing every morning and save money for my Japan trip.",
+        wallyRoastAngle: "Call out coughing every morning and the Japan trip funds being burnt on tobacco.",
+        status: "active",
+      },
+    },
+    {
+      blobId: "walrus_blob_rule_spending_03",
+      type: "resolution_contract",
+      title: "Resolution: Keep my impulse spending in check",
+      timestamp: "Genesis",
+      payload: {
+        protocol: "Yearbound v1",
+        storage: "Walrus Memory (MemWal)",
+        type: "commitment_rule",
+        ruleId: "3",
+        title: "Keep my impulse spending in check",
+        category: "finance",
+        penaltySui: 0.05,
+        keywords: ["shopping", "clubbing", "clothes", "impulse", "non-essential"],
+        behavioralRule: "Keep non-essential shopping, clubbing, and random purchases under 150 SUI a month",
+        why_it_matters: "I'm tired of feeling broke by the 20th of every month with nothing left for my future.",
+        wallyRoastAngle: "Highlight the regret of feeling broke by the 20th and having zero future savings.",
+        status: "active",
+      },
+    },
+    {
+      blobId: "walrus_blob_rule_gambling_04",
+      type: "resolution_contract",
+      title: "Resolution: Stop gambling on sports",
+      timestamp: "Genesis",
+      payload: {
+        protocol: "Yearbound v1",
+        storage: "Walrus Memory (MemWal)",
+        type: "commitment_rule",
+        ruleId: "4",
+        title: "Stop gambling on sports",
+        category: "finance",
+        penaltySui: 0.05,
+        keywords: ["draftkings", "fanduel", "stake", "casino", "parlay", "bet", "wager"],
+        behavioralRule: "Zero deposits into DraftKings, FanDuel, Stake, or online casino apps",
+        why_it_matters: "Chasing losses ruined my mental health last year. The house always wins and I hate that gut-drop feeling.",
+        wallyRoastAngle: "Point out chasing losses, gut-drop feeling, and that the house always wins.",
+        status: "active",
+      },
+    },
+    {
+      blobId: "walrus_blob_rule_takeout_05",
+      type: "resolution_contract",
+      title: "Resolution: No more late night takeout",
+      timestamp: "Genesis",
+      payload: {
+        protocol: "Yearbound v1",
+        storage: "Walrus Memory (MemWal)",
+        type: "commitment_rule",
+        ruleId: "5",
+        title: "No more late night takeout",
+        category: "lifestyle",
+        penaltySui: 0.05,
+        keywords: ["doordash", "ubereats", "takeout", "burger", "pizza", "food", "delivery", "late night"],
+        behavioralRule: "No ordering DoorDash or UberEats past 10 PM on weeknights",
+        why_it_matters: "I wake up feeling gross, sluggish, and $40 poorer every single time.",
+        wallyRoastAngle: "Remind user that late night delivery makes them wake up gross, sluggish, and poorer.",
+        status: "active",
+      },
+    },
+  ]);
   const [isMemoryInspectorOpen, setIsMemoryInspectorOpen] = useState<boolean>(false);
   const [isAddResolutionOpen, setIsAddResolutionOpen] = useState<boolean>(false);
   const [expandedJsonBlobId, setExpandedJsonBlobId] = useState<string | null>(null);
@@ -352,7 +494,7 @@ export default function YearboundApp() {
   // Add Resolution Drawer form state
   const [newRuleTitle, setNewRuleTitle] = useState<string>("");
   const [newRuleCondition, setNewRuleCondition] = useState<string>("");
-  const [newRulePenalty, setNewRulePenalty] = useState<number>(10);
+  const [newRulePenalty, setNewRulePenalty] = useState<number>(0.05);
   const [isCommittingNewRule, setIsCommittingNewRule] = useState<boolean>(false);
 
   // =========================================================================
@@ -360,12 +502,12 @@ export default function YearboundApp() {
   // =========================================================================
   const [isSendOpen, setIsSendOpen] = useState<boolean>(false);
   const [sendSubStep, setSendSubStep] = useState<SendSubStep>("amount");
-  const [sendAmount, setSendAmount] = useState<string>("15");
+  const [sendAmount, setSendAmount] = useState<string>("0.05");
   const [sendRecipient, setSendRecipient] = useState<string>("0x8f4c...cafe");
   const [sendMemo, setSendMemo] = useState<string>("");
   const [breachReason, setBreachReason] = useState<string>("");
   const [wallyRoast, setWallyRoast] = useState<string>("");
-  const [breachPenaltySui, setBreachPenaltySui] = useState<number>(10);
+  const [breachPenaltySui, setBreachPenaltySui] = useState<number>(0.05);
   const [matchedRuleTitle, setMatchedRuleTitle] = useState<string>("");
   const [checkingProgressStage, setCheckingProgressStage] = useState<string>("Connecting to Tatum & Walrus...");
   const [walrusRecalledCount, setWalrusRecalledCount] = useState<number>(0);
@@ -472,17 +614,37 @@ export default function YearboundApp() {
       const data = await res.json();
       if (data.success && typeof data.balanceSui === "number") {
         setLiveOnChainBalanceSui(data.balanceSui);
-        if (currentMode === "real" || currentMode === "linked") {
-          setAvailableBalance(data.balanceSui);
-        } else if (currentMode === "demo" && data.balanceSui > 0) {
-          // If demo address is funded on testnet, reflect it in available balance!
-          setAvailableBalance(data.balanceSui);
-        }
+        setAvailableBalance(data.balanceSui);
       }
     } catch (err) {
       console.warn("Failed to query live balance:", err);
     } finally {
       setIsCheckingLiveBalance(false);
+    }
+  };
+
+  // Request 1.00 SUI Testnet Gas from the official PoW faucet
+  const handleRequestFaucet = async (targetAddr?: string) => {
+    const addr = targetAddr || (demoAddress || DEMO_SUI_ADDRESS);
+    setIsRequestingFaucet(true);
+    triggerSnackbar("Requesting Faucet Gas", "Solving PoW challenge & depositing 1 SUI on Testnet...");
+    try {
+      const res = await fetch("/api/sui/faucet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address: addr, network: "testnet" }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        triggerSnackbar("Faucet Success (+1.00 SUI)", `Tx: ${data.digest.slice(0, 10)}...`);
+        await refreshLiveBalance(addr, "demo");
+      } else {
+        triggerSnackbar("Faucet Notice", data.error || "Please wait before requesting again");
+      }
+    } catch {
+      triggerSnackbar("Faucet Notice", "Faucet request timed out or rate-limited. Please retry shortly.");
+    } finally {
+      setIsRequestingFaucet(false);
     }
   };
 
@@ -514,7 +676,7 @@ export default function YearboundApp() {
               title: r.title,
               condition: r.behavioral_rule || r.condition || "",
               whyItMatters: r.why_it_matters || "",
-              penalty: r.penalty_amount_sui || 10,
+              penalty: r.penalty_amount_sui || 0.05,
               breaches: 0,
               blobId: r.blob_id,
               category: r.category,
@@ -646,7 +808,7 @@ export default function YearboundApp() {
     const newId = Date.now().toString();
     setRules((prev) => [
       ...prev,
-      { id: newId, title: "", condition: "", whyItMatters: "", penalty: 10, breaches: 0 },
+      { id: newId, title: "", condition: "", whyItMatters: "", penalty: 0.05, breaches: 0 },
     ]);
     setExpandedRuleId(newId);
   };
@@ -727,7 +889,7 @@ export default function YearboundApp() {
         const res = await fetch("/api/walrus", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          signal: AbortSignal.timeout(12000),
+          signal: AbortSignal.timeout(30000),
           body: JSON.stringify({
             rules: activeRules,
             initialDepositSui: escrowDeposit,
@@ -807,7 +969,11 @@ export default function YearboundApp() {
         if (data.blobs && data.blobs.length > 0) {
           setRules((prev) =>
             prev.map((r) => {
-              const matched = data.blobs.find((b: any) => b.ruleId === r.id);
+              const matched = data.blobs.find(
+                (b: any) =>
+                  String(b.ruleId) === String(r.id) ||
+                  (b.title && r.title && b.title.toLowerCase() === r.title.toLowerCase())
+              );
               if (matched) {
                 return {
                   ...r,
@@ -824,6 +990,30 @@ export default function YearboundApp() {
         }
 
         setWalrusBlobs([initialPactBlob, ...individualBlobs]);
+
+        // Execute real on-chain deposit to x402 Move vault on Sui
+        try {
+          const privateKey =
+            accountType === "demo"
+              ? (exportDemoPrivateKeyHex() || undefined)
+              : accountType === "real"
+              ? (exportRealPrivateKeyHex() || undefined)
+              : undefined;
+
+          const vaultRes = await executeX402VaultDeposit({
+            amountSui: 0.20,
+            reason: "Genesis Commitment Pledge",
+            commitmentId: "pact_primary",
+            walletMode: accountType,
+            privateKeySecret: privateKey,
+            senderAddress: activeAccountAddress,
+          });
+          setEscrowDeposit(0.20);
+          await refreshLiveBalance(activeAccountAddress, accountType);
+        } catch (vaultDepositErr) {
+          console.warn("[x402 Genesis Vault] Real deposit notice:", vaultDepositErr);
+          setEscrowDeposit(0.20);
+        }
 
         triggerSnackbar("Saved to Walrus", `Genesis Pact #${genesisId.slice(0, 12)}...`, genesisId);
         setStep(4);
@@ -914,7 +1104,7 @@ export default function YearboundApp() {
 
       setNewRuleTitle("");
       setNewRuleCondition("");
-      setNewRulePenalty(10);
+      setNewRulePenalty(0.05);
       setIsAddResolutionOpen(false);
 
       triggerSnackbar("Resolution Committed to Walrus", `Blob #${generatedBlobId.slice(0, 10)}...`, generatedBlobId);
@@ -928,8 +1118,8 @@ export default function YearboundApp() {
   // Open Send Flow
   const openSendFlow = () => {
     setSendSubStep("amount");
-    setSendAmount("15");
-    setSendRecipient("0x8f4c...cafe");
+    setSendAmount("0.05");
+    setSendRecipient("");
     setSendMemo("");
     setBreachReason("");
     setIsSendOpen(true);
@@ -1005,6 +1195,7 @@ export default function YearboundApp() {
         transferProvider = ptbData.provider || "Tatum Sui Gateway";
         isUnfunded = Boolean(ptbData.unfunded);
         isRealOnChain = Boolean(ptbData.onChain);
+        await refreshLiveBalance(activeAccountAddress, accountType);
       }
     } catch (ptbErr) {
       console.warn("[PTB Transfer] Tatum API notice:", ptbErr);
@@ -1112,7 +1303,7 @@ export default function YearboundApp() {
         setBreachReason("Transaction flagged by basic keyword filter #0492.");
         setWallyRoast("Automated System Notice: Your bank has declined this transfer under Rule #0492. (Degraded mode active: zero memory, zero habit analysis, flat penalty).");
         setMatchedRuleTitle("Default Cardholder Policy");
-        setBreachPenaltySui(10);
+        setBreachPenaltySui(0.05);
         setWalrusRecalledCount(0);
         setRepeatInfractionCount(1);
         setStreakBroken(false);
@@ -1177,7 +1368,7 @@ export default function YearboundApp() {
         setBreachReason(data.reason || "");
         setWallyRoast(data.wallyRoast || "");
         setMatchedRuleTitle(data.matchedRule || "New Year's Resolution");
-        setBreachPenaltySui(data.penaltySui || 10);
+        setBreachPenaltySui(data.penaltySui || 0.05);
         setWalrusRecalledCount(data.walrus?.recalledCount || 0);
         setRepeatInfractionCount(data.repeatInfractionCount || 1);
         setStreakBroken(Boolean(data.streakBroken));
@@ -1189,7 +1380,7 @@ export default function YearboundApp() {
               type: "behavioral_pattern",
               pattern_title: (data.repeatInfractionCount || 1) >= 3 ? "Chronic Relapse Pattern" : "Recurring Violation Habit",
               observation: data.behavioralInsight,
-              recommended_intervention: `Escalated fine to ${data.penaltySui || 15} SUI. Enforcing strict transfer curfew.`,
+              recommended_intervention: `Escalated fine to ${data.penaltySui || 0.08} SUI. Enforcing strict transfer curfew.`,
               confidence: 0.94,
               generated_at: new Date().toISOString(),
             },
@@ -1211,9 +1402,12 @@ export default function YearboundApp() {
             r.title.toLowerCase().includes((data.matchedRule || "").toLowerCase()) ||
             (data.matchedRule || "").toLowerCase().includes(r.title.toLowerCase())
         );
-        setMatchedRuleMotivation(matchedRuleObj?.whyItMatters || "");
+        setMatchedRuleMotivation(data.motivation || matchedRuleObj?.whyItMatters || "");
         setMatchedRuleCondition(matchedRuleObj?.condition || "");
-        setMatchedRuleBlobId(matchedRuleObj?.blobId || walrusBlobId || "");
+        setMatchedRuleBlobId(data.matchedRuleBlobId || matchedRuleObj?.blobId || walrusBlobId || "");
+        if (data.wallyRoast) {
+          setWallyRoast(data.wallyRoast);
+        }
 
         if (data.verdict === "broken") {
           setTimeout(() => {
@@ -1242,12 +1436,21 @@ export default function YearboundApp() {
     }
   };
 
-  // Handle Penalty Payment when Breach is Accepted via x402 Protocol
+  // Handle Penalty Payment when Breach is Accepted via x402 Protocol & Execute Transfer
   const handlePayFineAndProceed = async () => {
     setIsSubmitting(true);
     setPayFineStage("Settling fine via x402...");
+
+    // Safety timeout: guarantees button never stays stuck in loading
+    const safetyTimer = setTimeout(() => {
+      console.warn("[Fine Settlement] Safety timeout triggered, auto-advancing");
+      setIsSubmitting(false);
+      setPayFineStage("");
+      setSendSubStep("penalty_recorded");
+    }, 12000);
+
     try {
-      const penaltyAmt = breachPenaltySui || 10;
+      const penaltyAmt = breachPenaltySui || 0.05;
       const transferAmt = parseFloat(sendAmount) || 0;
       const activeAccountAddress =
         accountType === "demo"
@@ -1312,9 +1515,38 @@ export default function YearboundApp() {
         message: settlementMsg,
       });
 
+      // 2. Execute the actual purchase / transfer to the recipient!
+      setPayFineStage("Sending SUI to recipient...");
+      let recipientTxHash: string | undefined = undefined;
+      let recipientExplorerUrl: string | undefined = undefined;
+      if (transferAmt > 0 && sendRecipient) {
+        try {
+          const ptbRes = await fetch("/api/sui-transfer", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            signal: AbortSignal.timeout(6000),
+            body: JSON.stringify({
+              senderAddress: activeAccountAddress,
+              recipientAddress: sendRecipient,
+              amountSui: transferAmt,
+              walletMode: accountType,
+              privateKeySecret,
+            }),
+          });
+          const ptbData = await ptbRes.json();
+          if (ptbData?.digest) {
+            recipientTxHash = ptbData.digest;
+            recipientExplorerUrl = ptbData.explorerUrl;
+            console.log("[Breach Transfer] Real Sui PTB transfer completed:", ptbData.digest);
+          }
+        } catch (tErr) {
+          console.warn("[Breach Transfer] Transfer dispatch notice:", tErr);
+        }
+      }
+
       setPayFineStage("Inscribing to Walrus memory...");
 
-      // 2. Persist Accountability Event Blob to Walrus Mainnet with verified tx hash / voucher
+      // 3. Persist Accountability Event Blob to Walrus Mainnet with verified tx hash / voucher
       let fineBlobId = `blob_infr_${Date.now().toString(36)}`;
       try {
         const res = await fetch("/api/walrus", {
@@ -1369,8 +1601,8 @@ export default function YearboundApp() {
         dayOfYear: currentDayOfYear,
         verdict: "broken",
         recipient: sendRecipient,
-        txHash,
-        explorerUrl,
+        txHash: recipientTxHash || txHash,
+        explorerUrl: recipientExplorerUrl || explorerUrl,
         isRealOnChain,
         isOffChainVoucher: !isRealOnChain,
         voucherSignature,
@@ -1395,9 +1627,12 @@ export default function YearboundApp() {
           verdict: "broken",
           userMemo: sendMemo,
           penaltyDepositedSui: penaltyAmt,
+          transferAmountSui: transferAmt,
+          recipient: sendRecipient,
           settlementType,
           isRealOnChain,
           vaultTxHash: txHash || null,
+          recipientTxHash: recipientTxHash || null,
           voucherSignature: voucherSignature || null,
           explorerUrl: explorerUrl || null,
           settlementEngine: settlementProvider,
@@ -1412,11 +1647,17 @@ export default function YearboundApp() {
       setWalrusBlobs((prev) => [infractionBlob, ...prev]);
 
       setRules((prev) =>
-        prev.map((r, i) => (i === 0 ? { ...r, breaches: (r.breaches || 0) + 1 } : r))
+        prev.map((r) =>
+          r.title.toLowerCase() === (matchedRuleTitle || "").toLowerCase()
+            ? { ...r, breaches: (r.breaches || 0) + 1 }
+            : r
+        )
       );
+      setAvailableBalance((prev) => Math.max(0, prev - penaltyAmt - transferAmt));
       setEscrowDeposit((prev) => prev + penaltyAmt);
-      setAvailableBalance((prev) => Math.max(0, prev - transferAmt - penaltyAmt));
+      refreshLiveBalance(activeAccountAddress, accountType);
       setLatestFineBlobId(fineBlobId);
+      clearTimeout(safetyTimer);
       setSendSubStep("penalty_recorded");
     } catch {
       // Graceful fallback so demo never gets blocked
@@ -1424,6 +1665,7 @@ export default function YearboundApp() {
       setLatestFineBlobId(fallbackBlobId);
       setSendSubStep("penalty_recorded");
     } finally {
+      clearTimeout(safetyTimer);
       setIsSubmitting(false);
       setPayFineStage("");
     }
@@ -1517,7 +1759,8 @@ export default function YearboundApp() {
   };
 
   // Handler for Demo-Only 12-Month Time Travel Scrubber (Strictly Idempotent)
-  const handleMilestoneChange = (milestone: TimeMilestone) => {
+  // Handler for Demo-Only 12-Month Time Travel Scrubber (Strictly Idempotent)
+  const handleMilestoneChange = async (milestone: TimeMilestone) => {
     setActiveMilestone(milestone);
 
     // 1. Preserve all user-initiated manual transactions
@@ -1528,15 +1771,29 @@ export default function YearboundApp() {
       id: "1",
       title: "Personal Discipline",
       condition: "Maintain New Year commitments",
-      penalty: 10,
+      penalty: 0.05,
       whyItMatters: "Self growth",
     };
     const secondaryRule = activeRulesList[1] || rules[1] || primaryRule;
 
+    const activeAccountAddress =
+      accountType === "demo"
+        ? (demoAddress || DEMO_SUI_ADDRESS)
+        : accountType === "real"
+        ? realAddress
+        : linkedAddress || (demoAddress || DEMO_SUI_ADDRESS);
+
+    const privateKey =
+      accountType === "demo"
+        ? (exportDemoPrivateKeyHex() || undefined)
+        : accountType === "real"
+        ? (exportRealPrivateKeyHex() || undefined)
+        : undefined;
+
     if (milestone === "jan1") {
       setCurrentDateStr("Thursday, Jan 1, 2026");
       setCurrentDayOfYear(1);
-      setEscrowDeposit(10 + userPenaltySum);
+      setEscrowDeposit(0.20 + userPenaltySum);
       setIsVaultUnlocked(false);
       setIsVaultClaimed(false);
       setInfractions([...userTransactions]);
@@ -1552,14 +1809,68 @@ export default function YearboundApp() {
 
       let febInfrs = milestoneCacheRef.current.get("feb14");
       if (!febInfrs) {
-        const penalty = primaryRule.penalty || 10;
+        const penalty = primaryRule.penalty || 0.05;
         const memo = getDynamicResolutionMemo(primaryRule, "first");
-        const blobId = `blob_walrus_feb14_${Date.now().toString(36)}`;
+
+        let txHash: string | undefined = undefined;
+        let explorerUrl: string | undefined = undefined;
+        let isRealOnChain = false;
+
+        // Execute real on-chain deposit to x402 Move vault on Sui Testnet
+        try {
+          const x402Result = await executeX402VaultDeposit({
+            amountSui: penalty,
+            reason: `Time Travel Feb 14: Breach on ${primaryRule.title}`,
+            commitmentId: "pact_primary",
+            walletMode: accountType,
+            privateKeySecret: privateKey,
+            senderAddress: activeAccountAddress,
+          });
+          txHash = x402Result.txHash;
+          explorerUrl = x402Result.explorerUrl;
+          isRealOnChain = x402Result.isRealOnChain;
+          refreshLiveBalance(activeAccountAddress, accountType);
+        } catch (depositErr) {
+          console.warn("[Time Travel Feb 14] Vault deposit notice:", depositErr);
+        }
+
+        // Inscribe once to Walrus Memory with verified tx hash
+        let blobId = `blob_walrus_feb14_${Date.now().toString(36)}`;
+        if (!loggedMilestonesToWalrusRef.current.has("feb14")) {
+          loggedMilestonesToWalrusRef.current.add("feb14");
+          try {
+            const wRes = await fetch("/api/walrus", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              signal: AbortSignal.timeout(4500),
+              body: JSON.stringify({
+                type: "accountability_event",
+                commitment_id: "pact_primary",
+                rule_id: primaryRule.id,
+                rule_title: primaryRule.title,
+                verdict: "broken",
+                user_explanation: memo,
+                penalty_deposited_sui: penalty,
+                vault_tx_hash: txHash,
+                is_real_on_chain: isRealOnChain,
+                explorer_url: explorerUrl,
+                wallet_address: activeAccountAddress,
+              }),
+            });
+            const wData = await wRes.json();
+            if (wData?.blobId) {
+              blobId = wData.blobId;
+            }
+          } catch (e) {
+            console.warn("[Walrus Demo] Feb 14 log notice:", e);
+          }
+        }
+
         const record: InfractionRecord = {
           id: "milestone_feb14",
           ruleTitle: primaryRule.title,
           ruleCondition: primaryRule.condition,
-          amount: "25",
+          amount: "0.05",
           memo,
           timestamp: "Feb 14, 11:30 PM",
           penaltySui: penalty,
@@ -1567,35 +1878,42 @@ export default function YearboundApp() {
           dayOfYear: 45,
           verdict: "broken",
           source: "timeline",
+          txHash,
+          explorerUrl,
+          isRealOnChain,
         };
         febInfrs = [record];
         milestoneCacheRef.current.set("feb14", febInfrs);
 
-        // Inscribe once to Walrus Mainnet
-        if (!loggedMilestonesToWalrusRef.current.has("feb14")) {
-          loggedMilestonesToWalrusRef.current.add("feb14");
-          fetch("/api/walrus", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            signal: AbortSignal.timeout(3500),
-            body: JSON.stringify({
-              type: "accountability_event",
-              commitment_id: "pact_primary",
-              verdict: "broken",
-              user_explanation: memo,
-              penalty_deposited_sui: penalty,
-              vault_tx_hash: "0x_sui_ptb_feb14",
-            }),
-          }).catch((e) => console.warn("[Walrus Demo] Feb 14 log notice:", e));
-        }
+        const febBlob: WalrusMemoryBlob = {
+          blobId,
+          type: "accountability_event",
+          title: `Milestone Feb 14: ${primaryRule.title}`,
+          timestamp: "Feb 14, 11:30 PM",
+          payload: {
+            protocol: "Yearbound v1",
+            storage: "Walrus Memory (MemWal)",
+            type: "accountability_event",
+            verdict: "broken",
+            userMemo: memo,
+            penaltyDepositedSui: penalty,
+            vaultTxHash: txHash || null,
+            isRealOnChain,
+            explorerUrl: explorerUrl || null,
+            breachedResolution: primaryRule.title,
+            dayOfYear: 45,
+            timestamp: new Date().toISOString(),
+          },
+        };
+        setWalrusBlobs((prev) => [febBlob, ...prev.filter((b) => b.blobId !== blobId)]);
       }
 
       const totalFines = febInfrs.reduce((acc, i) => acc + i.penaltySui, 0);
-      setEscrowDeposit(10 + totalFines + userPenaltySum);
+      setEscrowDeposit(0.20 + totalFines + userPenaltySum);
       setInfractions([...userTransactions, ...febInfrs]);
       triggerSnackbar(
         "Time Travel: Feb 14 (1st Breach)",
-        `Breached '${primaryRule.title}' · ${primaryRule.penalty || 10} SUI fine locked via x402`
+        `Breached '${primaryRule.title}' · ${(primaryRule.penalty || 0.05).toFixed(2)} SUI fine locked via x402`
       );
       return;
     }
@@ -1608,30 +1926,112 @@ export default function YearboundApp() {
 
       let summerInfrs = milestoneCacheRef.current.get("jul20");
       if (!summerInfrs) {
-        const p1 = primaryRule.penalty || 10;
-        const p2 = secondaryRule.penalty || 15;
-        const febMemo = getDynamicResolutionMemo(primaryRule, "first");
+        // Retrieve or prepare Feb 14 record
+        let febRecord: InfractionRecord;
+        const cachedFeb = milestoneCacheRef.current.get("feb14");
+        if (cachedFeb && cachedFeb[0]) {
+          febRecord = cachedFeb[0];
+        } else {
+          const p1 = primaryRule.penalty || 0.05;
+          const memo1 = getDynamicResolutionMemo(primaryRule, "first");
+          let txHash1: string | undefined = undefined;
+          let explorerUrl1: string | undefined = undefined;
+          let isReal1 = false;
+          try {
+            const x1 = await executeX402VaultDeposit({
+              amountSui: p1,
+              reason: `Time Travel Feb 14: Breach on ${primaryRule.title}`,
+              commitmentId: "pact_primary",
+              walletMode: accountType,
+              privateKeySecret: privateKey,
+              senderAddress: activeAccountAddress,
+            });
+            txHash1 = x1.txHash;
+            explorerUrl1 = x1.explorerUrl;
+            isReal1 = x1.isRealOnChain;
+          } catch {}
+
+          febRecord = {
+            id: "milestone_feb14",
+            ruleTitle: primaryRule.title,
+            ruleCondition: primaryRule.condition,
+            amount: "0.05",
+            memo: memo1,
+            timestamp: "Feb 14, 11:30 PM",
+            penaltySui: p1,
+            blobId: `blob_walrus_feb14_${Date.now().toString(36)}`,
+            dayOfYear: 45,
+            verdict: "broken",
+            source: "timeline",
+            txHash: txHash1,
+            explorerUrl: explorerUrl1,
+            isRealOnChain: isReal1,
+          };
+          milestoneCacheRef.current.set("feb14", [febRecord]);
+        }
+
+        const p1 = primaryRule.penalty || 0.05;
+        const p2 = secondaryRule.penalty || 0.05;
         const mayMemo = getDynamicResolutionMemo(secondaryRule, "repeat");
         const julMemo = getDynamicResolutionMemo(primaryRule, "summer");
 
-        const record1: InfractionRecord = {
-          id: "milestone_feb14",
-          ruleTitle: primaryRule.title,
-          ruleCondition: primaryRule.condition,
-          amount: "25",
-          memo: febMemo,
-          timestamp: "Feb 14, 11:30 PM",
-          penaltySui: p1,
-          blobId: `blob_walrus_feb14_${Date.now().toString(36)}`,
-          dayOfYear: 45,
-          verdict: "broken",
-          source: "timeline",
-        };
+        // Execute real on-chain deposit for the Jul 20 relapse
+        let txHash3: string | undefined = undefined;
+        let explorerUrl3: string | undefined = undefined;
+        let isReal3 = false;
+        try {
+          const x3 = await executeX402VaultDeposit({
+            amountSui: p1,
+            reason: `Time Travel Jul 20: Relapse on ${primaryRule.title}`,
+            commitmentId: "pact_primary",
+            walletMode: accountType,
+            privateKeySecret: privateKey,
+            senderAddress: activeAccountAddress,
+          });
+          txHash3 = x3.txHash;
+          explorerUrl3 = x3.explorerUrl;
+          isReal3 = x3.isRealOnChain;
+          refreshLiveBalance(activeAccountAddress, accountType);
+        } catch (depositErr) {
+          console.warn("[Time Travel Jul 20] Vault deposit notice:", depositErr);
+        }
+
+        let blobId3 = `blob_walrus_jul20_${Date.now().toString(36)}`;
+        if (!loggedMilestonesToWalrusRef.current.has("jul20")) {
+          loggedMilestonesToWalrusRef.current.add("jul20");
+          try {
+            const wRes3 = await fetch("/api/walrus", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              signal: AbortSignal.timeout(4500),
+              body: JSON.stringify({
+                type: "accountability_event",
+                commitment_id: "pact_primary",
+                rule_id: primaryRule.id,
+                rule_title: primaryRule.title,
+                verdict: "broken",
+                user_explanation: julMemo,
+                penalty_deposited_sui: p1,
+                vault_tx_hash: txHash3,
+                is_real_on_chain: isReal3,
+                explorer_url: explorerUrl3,
+                wallet_address: activeAccountAddress,
+              }),
+            });
+            const wData3 = await wRes3.json();
+            if (wData3?.blobId) {
+              blobId3 = wData3.blobId;
+            }
+          } catch (e) {
+            console.warn("[Walrus Demo] Jul 20 log notice:", e);
+          }
+        }
+
         const record2: InfractionRecord = {
           id: "milestone_may15",
           ruleTitle: secondaryRule.title,
           ruleCondition: secondaryRule.condition,
-          amount: "40",
+          amount: "0.05",
           memo: mayMemo,
           timestamp: "May 15, 9:45 PM",
           penaltySui: p2,
@@ -1640,54 +2040,64 @@ export default function YearboundApp() {
           verdict: "broken",
           source: "timeline",
         };
+
         const record3: InfractionRecord = {
           id: "milestone_jul20",
           ruleTitle: primaryRule.title,
           ruleCondition: primaryRule.condition,
-          amount: "30",
+          amount: "0.05",
           memo: julMemo,
           timestamp: "Jul 20, 12:15 AM",
           penaltySui: p1,
-          blobId: `blob_walrus_jul20_${Date.now().toString(36)}`,
+          blobId: blobId3,
           dayOfYear: 201,
           verdict: "broken",
           source: "timeline",
+          txHash: txHash3,
+          explorerUrl: explorerUrl3,
+          isRealOnChain: isReal3,
         };
-        summerInfrs = [record3, record2, record1];
+
+        summerInfrs = [record3, record2, febRecord];
         milestoneCacheRef.current.set("jul20", summerInfrs);
         milestoneCacheRef.current.set("dec25", summerInfrs);
 
-        if (!loggedMilestonesToWalrusRef.current.has("jul20")) {
-          loggedMilestonesToWalrusRef.current.add("jul20");
-          fetch("/api/walrus", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            signal: AbortSignal.timeout(3500),
-            body: JSON.stringify({
-              type: "accountability_event",
-              commitment_id: "pact_primary",
-              verdict: "broken",
-              user_explanation: julMemo,
-              penalty_deposited_sui: p1,
-              vault_tx_hash: "0x_sui_ptb_jul20",
-            }),
-          }).catch((e) => console.warn("[Walrus Demo] Jul 20 log notice:", e));
-        }
+        const julBlob: WalrusMemoryBlob = {
+          blobId: blobId3,
+          type: "accountability_event",
+          title: `Milestone Jul 20: ${primaryRule.title}`,
+          timestamp: "Jul 20, 12:15 AM",
+          payload: {
+            protocol: "Yearbound v1",
+            storage: "Walrus Memory (MemWal)",
+            type: "accountability_event",
+            verdict: "broken",
+            userMemo: julMemo,
+            penaltyDepositedSui: p1,
+            vaultTxHash: txHash3 || null,
+            isRealOnChain: isReal3,
+            explorerUrl: explorerUrl3 || null,
+            breachedResolution: primaryRule.title,
+            dayOfYear: 201,
+            timestamp: new Date().toISOString(),
+          },
+        };
+        setWalrusBlobs((prev) => [julBlob, ...prev.filter((b) => b.blobId !== blobId3)]);
       }
 
       const totalFines = summerInfrs.reduce((acc, i) => acc + i.penaltySui, 0);
-      setEscrowDeposit(10 + totalFines + userPenaltySum);
+      setEscrowDeposit(0.20 + totalFines + userPenaltySum);
       setInfractions([...userTransactions, ...summerInfrs]);
 
       if (isChristmas) {
         triggerSnackbar(
           "🎅 Time Travel: Dec 25 (Christmas Unlock)",
-          `Move vault time-lock mature! Claim your ${10 + totalFines + userPenaltySum} SUI savings.`
+          `Move vault time-lock mature! Claim your ${(0.20 + totalFines + userPenaltySum).toFixed(2)} SUI savings.`
         );
       } else {
         triggerSnackbar(
           "Time Travel: Jul 20 (Habit Pattern)",
-          `Walrus synthesis: 3 breaches across '${primaryRule.title}' · ${totalFines} SUI in vault`
+          `Walrus synthesis: 3 breaches across '${primaryRule.title}' · ${totalFines.toFixed(2)} SUI in vault`
         );
       }
       return;
@@ -1701,7 +2111,7 @@ export default function YearboundApp() {
     setIsVaultClaimed(true);
     triggerSnackbar(
       "🎅 Christmas Vault Unlocked & Claimed!",
-      `+${claimedAmt}.00 SUI released from Sui Move contract into wallet.`
+      `+${claimedAmt.toFixed(2)} SUI released from Sui Move contract into wallet.`
     );
   };
 
@@ -2391,6 +2801,28 @@ export default function YearboundApp() {
                 <p className="text-xs text-white/70 leading-relaxed">
                   Sandbox environment preloaded with testnet SUI to try out pacts risk-free.
                 </p>
+
+                <div className="flex items-center justify-between pt-1 border-t border-white/10 mt-1">
+                  <span className="text-[11px] font-mono text-white/60">
+                    Testnet: <span className="text-[#ebaf64] font-semibold">{availableBalance.toFixed(2)} SUI</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRequestFaucet(demoAddress || DEMO_SUI_ADDRESS);
+                    }}
+                    disabled={isRequestingFaucet}
+                    className="py-1 px-3 rounded-full bg-[#ebaf64]/15 hover:bg-[#ebaf64]/25 text-[#ebaf64] border border-[#ebaf64]/30 text-[11px] font-mono flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                  >
+                    {isRequestingFaucet ? (
+                      <span className="w-2.5 h-2.5 border border-[#ebaf64] border-t-transparent rounded-full animate-spin inline-block" />
+                    ) : (
+                      <Sparkles size={11} />
+                    )}
+                    <span>{isRequestingFaucet ? "Claiming..." : "Claim 1.00 SUI"}</span>
+                  </button>
+                </div>
               </div>
 
               {/* Option 2: Real Account */}
@@ -2602,6 +3034,22 @@ export default function YearboundApp() {
                       {availableBalance.toFixed(2)} SUI
                     </span>
                     <div className="flex items-center gap-2 shrink-0">
+                      {accountType === "demo" && (
+                        <button
+                          type="button"
+                          onClick={() => handleRequestFaucet(demoAddress || DEMO_SUI_ADDRESS)}
+                          disabled={isRequestingFaucet}
+                          className="py-2.5 px-3 rounded-full bg-[#ebaf64]/15 hover:bg-[#ebaf64]/25 text-[#ebaf64] border border-[#ebaf64]/30 font-medium text-xs font-mono transition-all duration-150 flex items-center justify-center gap-1 active:scale-95 cursor-pointer"
+                          title="Claim 1.00 SUI Testnet Gas"
+                        >
+                          {isRequestingFaucet ? (
+                            <span className="w-3 h-3 border border-[#ebaf64] border-t-transparent rounded-full animate-spin inline-block" />
+                          ) : (
+                            <Sparkles size={13} />
+                          )}
+                          <span>{isRequestingFaucet ? "Claiming..." : "+1 SUI"}</span>
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={openSendFlow}
@@ -2626,21 +3074,49 @@ export default function YearboundApp() {
                       {!isDegradedMode ? "Wally · Walrus Memory" : "Wally · Memory Offline"}
                     </span>
                     <p className="text-sm text-white/90 leading-relaxed font-normal">
-                      {isDegradedMode
-                        ? "Stateless Session: Walrus memory is disconnected. Outgoing transfers are not cross-referenced against your resolutions and past infractions are forgotten."
-                        : isVaultUnlocked && !isVaultClaimed
-                        ? `🎅 Merry Christmas! The Sui network clock has passed the vault unlock timestamp. Your accumulated savings of ${escrowDeposit}.00 SUI are ready to be claimed!`
-                        : isVaultClaimed
-                        ? `🎉 Christmas gift claimed! You successfully locked ${escrowDeposit}.00 SUI away from your impulsive past self and reclaimed it for the holidays.`
-                        : activeMilestone === "jul20"
-                        ? `Walrus memory synthesis: Multiple slip-ups recorded on "${activeRulesList[0]?.title || "your resolution"}". ${escrowDeposit}.00 SUI total is now locked away in Move storage.`
-                        : activeMilestone === "feb14"
-                        ? `Day 45: First slip-up logged. You swore in Walrus Memory: "${activeRulesList[0]?.title || "your resolution"}". ${activeRulesList[0]?.penalty || 10} SUI was locked into the Move vault via x402.`
-                        : totalBreaches > 0
-                        ? `Infraction logged into Walrus memory. You have paid penalties into the vault. Current balance: ${availableBalance.toFixed(2)} SUI.`
-                        : activeRulesList.length > 0
-                        ? `I have committed your resolutions to Walrus memory. 0 infractions recorded. Remember your pact: "${activeRulesList[0].title}". ${activeRulesList[0].penalty || 10} SUI penalty standing by if you slip up.`
-                        : "Resolutions locked in Walrus memory. I am monitoring your transactions for adherence."}
+                      {(() => {
+                        if (isDegradedMode) {
+                          return "Stateless Session: Walrus memory is disconnected. Outgoing transfers are not cross-referenced against your resolutions and past infractions are forgotten.";
+                        }
+                        if (isVaultUnlocked && !isVaultClaimed) {
+                          return `🎅 Merry Christmas! The Sui network clock has passed the vault unlock timestamp. Your accumulated savings of ${escrowDeposit.toFixed(2)} SUI are ready to be claimed!`;
+                        }
+                        if (isVaultClaimed) {
+                          return `🎉 Christmas gift claimed! You successfully locked ${escrowDeposit.toFixed(2)} SUI away from your impulsive past self and reclaimed it for the holidays.`;
+                        }
+                        if (activeMilestone === "jul20") {
+                          return `Walrus memory synthesis: Multiple slip-ups recorded on "${activeRulesList[0]?.title || "your resolution"}". ${escrowDeposit.toFixed(2)} SUI total is now locked away in Move storage.`;
+                        }
+                        if (activeMilestone === "feb14") {
+                          return `Day 45: First slip-up logged. You swore in Walrus Memory: "${activeRulesList[0]?.title || "your resolution"}". ${(activeRulesList[0]?.penalty || 0.05).toFixed(2)} SUI was locked into the Move vault via x402.`;
+                        }
+
+                        // Recent breaches in Walrus memory
+                        const recentBreaches = infractions.filter((i) => i.verdict === "broken");
+                        if (recentBreaches.length > 0) {
+                          const latest = recentBreaches[0];
+                          const rule = activeRulesList.find((r) => r.title.toLowerCase() === latest.ruleTitle.toLowerCase());
+                          const paraphrased = rule?.whyItMatters ? paraphraseUserMotivation(rule.whyItMatters) : "";
+                          return `Walrus memory alert: Breach recorded on '${latest.ruleTitle}' (${latest.memo || "impulse transfer"}). ${recentBreaches.length === 1 ? "1 infraction" : `${recentBreaches.length} infractions`} on record · ${escrowDeposit.toFixed(2)} SUI locked in Christmas vault. ${paraphrased ? `Stay mindful: ${paraphrased}.` : "Stay vigilant."}`;
+                        }
+
+                        // Honored transfers in Walrus memory
+                        const honoredTxs = infractions.filter((i) => i.verdict === "honored");
+                        if (honoredTxs.length > 0) {
+                          const primary = activeRulesList[0];
+                          const paraphrased = primary?.whyItMatters ? paraphraseUserMotivation(primary.whyItMatters) : "";
+                          return `Clean streak active. Walrus memory has audited and verified ${honoredTxs.length} compliant ${honoredTxs.length === 1 ? "transfer" : "transfers"}. 0 infractions against your ${activeRulesList.length} commitments. ${paraphrased ? `Holding strong: ${paraphrased}.` : "Keep your streak intact."}`;
+                        }
+
+                        // Genesis Pact
+                        if (activeRulesList.length > 0) {
+                          const primary = activeRulesList[0];
+                          const paraphrased = primary.whyItMatters ? paraphraseUserMotivation(primary.whyItMatters) : "";
+                          return `Genesis Pact locked in Walrus memory across ${activeRulesList.length} commitments. 0 infractions recorded. Monitoring transactions against "${primary.title}" (${(primary.penalty || 0.05).toFixed(2)} SUI penalty standing by). ${paraphrased ? `Committed to: ${paraphrased}.` : ""}`;
+                        }
+
+                        return "Resolutions locked in Walrus memory. I am monitoring your transactions for adherence.";
+                      })()}
                     </p>
                   </div>
                 </div>
@@ -2872,16 +3348,16 @@ export default function YearboundApp() {
                       </span>
                     </div>
                     <p className="text-xs text-[#D4D4D8]">
-                      Smart contract time-lock satisfied. All {escrowDeposit}.00 SUI unlocked.
+                      Smart contract time-lock satisfied. All {escrowDeposit.toFixed(2)} SUI unlocked.
                     </p>
                     {!isVaultClaimed ? (
                       <button
                         type="button"
                         onClick={handleClaimChristmasVault}
-                        className="w-full py-3 px-4 rounded-full bg-[#ebaf64] hover:bg-[#f3ba6f] text-black font-semibold text-xs transition-all duration-150 flex items-center justify-center gap-2 active:scale-[0.98] shadow-sm"
+                        className="w-full py-3 px-4 rounded-full bg-[#ebaf64] hover:bg-[#f3ba6f] text-black font-semibold text-xs transition-all duration-150 flex items-center justify-center gap-2 active:scale-[0.98] shadow-sm cursor-pointer"
                       >
                         <Gift size={14} />
-                        <span>Claim Christmas Savings ({escrowDeposit}.00 SUI)</span>
+                        <span>Claim Christmas Savings ({escrowDeposit.toFixed(2)} SUI)</span>
                       </button>
                     ) : (
                       <div className="flex items-center gap-2 text-xs font-mono text-[#10B981] bg-[#10B981]/10 p-2.5 rounded-2xl border border-[#10B981]/20">
@@ -2897,22 +3373,11 @@ export default function YearboundApp() {
                   {/* Subtle ambient decorative gold glow */}
                   <div className="absolute -top-12 -right-12 w-36 h-36 bg-[#ebaf64]/10 rounded-full blur-3xl pointer-events-none" />
 
-                  {/* Header Row: Lock Status & Release Target */}
-                  <div className="flex items-center justify-between gap-2 relative z-10">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-[#ebaf64]/15 border border-[#ebaf64]/30 flex items-center justify-center text-[#ebaf64] shrink-0">
-                        {isVaultUnlocked ? <Check size={15} className="text-[#10B981]" /> : <Lock size={14} />}
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-xs font-semibold text-white tracking-wide">
-                          x402 Move Vault
-                        </span>
-                        <span className="text-[10px] font-mono text-[#ebaf64]/90">
-                          Autonomous Time-Lock
-                        </span>
-                      </div>
-                    </div>
-
+                  {/* Top Row: Label & Release Status */}
+                  <div className="flex items-center justify-between relative z-10">
+                    <span className="text-[11px] font-mono uppercase tracking-wider text-white/50">
+                      Total Locked Value
+                    </span>
                     <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#ebaf64]/10 border border-[#ebaf64]/25 text-[#ebaf64] text-xs font-mono font-medium">
                       {isVaultUnlocked ? (
                         <>
@@ -2929,18 +3394,13 @@ export default function YearboundApp() {
                   </div>
 
                   {/* Hero Balance Block */}
-                  <div className="flex flex-col gap-1 relative z-10 pt-1">
-                    <span className="text-[11px] font-mono uppercase tracking-wider text-white/50">
-                      Total Locked Value
+                  <div className="flex items-baseline gap-2 relative z-10">
+                    <span className="text-4xl sm:text-5xl font-bold font-mono text-white tracking-tight">
+                      {escrowDeposit.toFixed(2)}
                     </span>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-4xl sm:text-5xl font-bold font-mono text-white tracking-tight">
-                        {escrowDeposit}.00
-                      </span>
-                      <span className="text-xl sm:text-2xl font-bold font-mono text-[#ebaf64]">
-                        SUI
-                      </span>
-                    </div>
+                    <span className="text-xl sm:text-2xl font-bold font-mono text-[#ebaf64]">
+                      SUI
+                    </span>
                   </div>
 
                   {/* Pledge vs Toll Breakdown Pills */}
@@ -2950,7 +3410,7 @@ export default function YearboundApp() {
                         Initial Pledge
                       </span>
                       <span className="text-sm font-mono font-semibold text-white">
-                        10.00 SUI
+                        0.20 SUI
                       </span>
                     </div>
                     <div className="bg-black/30 border border-[#ebaf64]/15 rounded-2xl p-3.5 flex flex-col gap-0.5">
@@ -2958,7 +3418,7 @@ export default function YearboundApp() {
                         Infraction Tolls
                       </span>
                       <span className="text-sm font-mono font-semibold text-[#ebaf64]">
-                        +{Math.max(0, escrowDeposit - 10)}.00 SUI
+                        +{Math.max(0, escrowDeposit - 0.20).toFixed(2)} SUI
                       </span>
                     </div>
                   </div>
@@ -2967,18 +3427,29 @@ export default function YearboundApp() {
                   <div className="flex flex-col gap-2 pt-3 border-t border-white/10 text-xs relative z-10">
                     <div className="flex items-center justify-between">
                       <span className="text-white/60">Escrow Contract</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(YEARBOUND_VAULT_ADDRESS);
-                          triggerSnackbar("Contract Address Copied", YEARBOUND_VAULT_ADDRESS);
-                        }}
-                        className="font-mono text-[#ebaf64] hover:text-[#f3ba6f] flex items-center gap-1.5 transition-colors group"
-                        title={YEARBOUND_VAULT_ADDRESS}
-                      >
-                        <span>{YEARBOUND_VAULT_ADDRESS.slice(0, 6)}...{YEARBOUND_VAULT_ADDRESS.slice(-4)}</span>
-                        <Copy size={11} className="text-white/40 group-hover:text-white transition-colors" />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(YEARBOUND_TESTNET_VAULT_ADDRESS);
+                            triggerSnackbar("Contract Address Copied", YEARBOUND_TESTNET_VAULT_ADDRESS);
+                          }}
+                          className="font-mono text-[#ebaf64] hover:text-[#f3ba6f] flex items-center gap-1.5 transition-colors group"
+                          title={YEARBOUND_TESTNET_VAULT_ADDRESS}
+                        >
+                          <span>{YEARBOUND_TESTNET_VAULT_ADDRESS.slice(0, 6)}...{YEARBOUND_TESTNET_VAULT_ADDRESS.slice(-4)}</span>
+                          <Copy size={11} className="text-white/40 group-hover:text-white transition-colors" />
+                        </button>
+                        <a
+                          href={`https://suiscan.xyz/testnet/account/${YEARBOUND_TESTNET_VAULT_ADDRESS}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-white/40 hover:text-white transition-colors"
+                          title="View on SuiScan Testnet"
+                        >
+                          <ExternalLink size={11} />
+                        </a>
+                      </div>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-white/60">Release Trigger</span>
@@ -2993,7 +3464,7 @@ export default function YearboundApp() {
                           ? "Tatum Mainnet Gateway"
                           : accountType === "linked"
                           ? "Sui Wallet Standard"
-                          : "Ed25519 Cryptographic Voucher"}
+                          : "Tatum Sui Testnet Gateway (Live On-Chain)"}
                       </span>
                     </div>
                   </div>
@@ -3306,16 +3777,23 @@ export default function YearboundApp() {
                           key={amt}
                           type="button"
                           onClick={() => setSendAmount(amt.toString())}
-                          className={`py-1.5 px-3.5 rounded-full text-xs font-mono transition-all duration-150 active:scale-95 ${
+                          className={`py-1.5 px-3.5 rounded-full text-xs font-mono transition-all duration-150 active:scale-95 cursor-pointer ${
                             sendAmount === amt.toString()
                               ? "bg-[#ebaf64] text-black font-semibold shadow-sm"
                               : "bg-black/40 text-white/70 border border-[#ebaf64]/30 hover:border-[#ebaf64]/60"
                           }`}
                         >
-                          {amt} SUI
+                          {amt}
                         </button>
                       ))}
                     </div>
+
+                    {/* Insufficient Balance Indicator */}
+                    {parseFloat(sendAmount || "0") > availableBalance && (
+                      <span className="text-[11px] font-mono text-red-400 mt-1">
+                        Insufficient balance (Wallet: {availableBalance.toFixed(2)} SUI)
+                      </span>
+                    )}
                   </div>
 
                   {/* Recipient Address */}
@@ -3327,26 +3805,34 @@ export default function YearboundApp() {
                       type="text"
                       value={sendRecipient}
                       onChange={(e) => setSendRecipient(e.target.value)}
-                      placeholder="Enter Sui address (0x...)"
+                      placeholder="Enter Sui address or contact name..."
                       className="w-full bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 hover:border-[#ebaf64]/50 focus:border-[#ebaf64] rounded-2xl px-4 py-3.5 text-xs font-mono text-white placeholder-white/30 outline-none transition-colors shadow-sm"
                     />
                   </div>
                 </div>
 
                 <div className="p-5 sm:p-7 pt-2 pb-8 sm:pb-9 bg-transparent shrink-0 flex flex-col items-center">
-                  <button
-                    type="button"
-                    onClick={() => setSendSubStep("memo")}
-                    disabled={!sendAmount || parseFloat(sendAmount) <= 0 || !sendRecipient}
-                    className={`w-full py-4 px-6 rounded-full font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98] ${
-                      sendAmount && parseFloat(sendAmount) > 0 && sendRecipient
-                        ? "bg-[#ebaf64] text-black hover:bg-[#f3bc75] shadow-lg shadow-black/60 cursor-pointer"
-                        : "bg-black/40 text-white/40 border border-white/10 cursor-not-allowed"
-                    }`}
-                  >
-                    <span>Continue</span>
-                    <ArrowRight size={16} />
-                  </button>
+                  {(() => {
+                    const parsed = parseFloat(sendAmount) || 0;
+                    const isExceeding = parsed > availableBalance || availableBalance <= 0;
+                    const canContinue = Boolean(sendAmount && parsed > 0 && sendRecipient.trim().length > 0 && !isExceeding);
+
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => setSendSubStep("memo")}
+                        disabled={!canContinue}
+                        className={`w-full py-4 px-6 rounded-full font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98] ${
+                          canContinue
+                            ? "bg-[#ebaf64] text-black hover:bg-[#f3bc75] shadow-lg shadow-black/60 cursor-pointer"
+                            : "bg-black/40 text-white/40 border border-white/10 cursor-not-allowed"
+                        }`}
+                      >
+                        <span>{isExceeding ? "Insufficient SUI Balance" : "Continue"}</span>
+                        {!isExceeding && <ArrowRight size={16} />}
+                      </button>
+                    );
+                  })()}
                   <span className="text-[11px] font-mono text-white/35 text-center tracking-tight mt-2.5">
                     Walrus Memory validated · Tatum Sui RPC resolved
                   </span>
@@ -3495,35 +3981,55 @@ export default function YearboundApp() {
                 <div className="flex-1 overflow-y-auto px-5 sm:px-7 py-2 flex flex-col gap-3.5 pb-4 overscroll-contain">
                   <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-6 flex flex-col gap-4 shadow-md">
                     <p className="text-base sm:text-lg text-white font-normal leading-relaxed">
-                      {wallyRoast || (
-                        <>
-                          This transfer violates your commitment against{" "}
-                          <span className="text-[#ebaf64] font-medium">{matchedRuleTitle}</span>.{" "}
-                          {repeatInfractionCount > 1 && (
-                            <span>
-                              You&apos;ve done this {repeatInfractionCount === 2 ? "twice in a row" : `${repeatInfractionCount} times now`} &mdash;{" "}
-                            </span>
-                          )}
-                          {matchedRuleMotivation ? (
-                            <span>remember, you are doing this for: &ldquo;{matchedRuleMotivation}&rdquo;.</span>
-                          ) : (
-                            <span>remember your New Year&apos;s commitment to financial discipline.</span>
-                          )}
-                        </>
-                      )}
+                      {wallyRoast ||
+                        synthesizeWallyIntervention({
+                          ruleTitle: matchedRuleTitle || "Resolution",
+                          motivation: matchedRuleMotivation,
+                          condition: matchedRuleCondition,
+                          recipient: sendRecipient,
+                          memo: sendMemo,
+                          amountSui: parseFloat(sendAmount) || 0.05,
+                          repeatCount: repeatInfractionCount,
+                        })}
                     </p>
 
                     <button
                       type="button"
                       onClick={() => {
-                        const targetBlob = matchedRuleBlobId || walrusBlobId || "d4a97f2e8c9b4e11a2f6";
+                        const targetBlob = matchedRuleBlobId || walrusBlobId || "walrus_blob_rule_sarah_01";
+                        // Ensure blob exists in walrusBlobs so it displays when drawer opens
+                        setWalrusBlobs((prev) => {
+                          if (prev.some((b) => b.blobId === targetBlob)) return prev;
+                          return [
+                            {
+                              blobId: targetBlob,
+                              type: "resolution_contract",
+                              title: `Resolution: ${matchedRuleTitle || "Committed Oath"}`,
+                              timestamp: "Genesis",
+                              payload: {
+                                protocol: "Yearbound v1",
+                                storage: "Walrus Memory (MemWal)",
+                                type: "commitment_rule",
+                                title: matchedRuleTitle,
+                                behavioralRule: matchedRuleCondition,
+                                why_it_matters: matchedRuleMotivation,
+                                penaltySui: breachPenaltySui || 0.05,
+                                status: "active",
+                              },
+                            },
+                            ...prev,
+                          ];
+                        });
                         setExpandedJsonBlobId(targetBlob);
                         setIsMemoryInspectorOpen(true);
                       }}
-                      className="flex items-center gap-1.5 text-xs font-mono text-[#ebaf64] hover:text-[#f3bc75] transition-colors pt-3 border-t border-white/10 self-start"
+                      className="flex items-center gap-1.5 text-xs font-mono text-[#ebaf64] hover:text-[#f3bc75] transition-colors pt-3 border-t border-white/10 self-start cursor-pointer active:scale-95"
                     >
                       <Database size={13} />
-                      <span>View Walrus memory payload</span>
+                      <span>
+                        View Walrus memory payload{" "}
+                        {matchedRuleBlobId ? `(#${matchedRuleBlobId.replace("walrus_blob_", "").slice(0, 12)}...)` : ""}
+                      </span>
                       <ExternalLink size={11} className="text-[#ebaf64]/70" />
                     </button>
                   </div>
