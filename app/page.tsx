@@ -2892,7 +2892,114 @@ export default function YearboundApp() {
                   </div>
                 )}
 
-                {/* 365-DAY DISCIPLINE GRID HEATMAP */}
+                {/* 1. PRIMARY HERO VAULT CARD (Top Section) */}
+                <div className="relative bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/30 rounded-3xl p-6 sm:p-7 flex flex-col gap-5 shadow-xl transition-all duration-200 overflow-hidden">
+                  {/* Subtle ambient decorative gold glow */}
+                  <div className="absolute -top-12 -right-12 w-36 h-36 bg-[#ebaf64]/10 rounded-full blur-3xl pointer-events-none" />
+
+                  {/* Header Row: Lock Status & Release Target */}
+                  <div className="flex items-center justify-between gap-2 relative z-10">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-full bg-[#ebaf64]/15 border border-[#ebaf64]/30 flex items-center justify-center text-[#ebaf64] shrink-0">
+                        {isVaultUnlocked ? <Check size={15} className="text-[#10B981]" /> : <Lock size={14} />}
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-semibold text-white tracking-wide">
+                          x402 Move Vault
+                        </span>
+                        <span className="text-[10px] font-mono text-[#ebaf64]/90">
+                          Autonomous Time-Lock
+                        </span>
+                      </div>
+                    </div>
+
+                    <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#ebaf64]/10 border border-[#ebaf64]/25 text-[#ebaf64] text-xs font-mono font-medium">
+                      {isVaultUnlocked ? (
+                        <>
+                          <Check size={12} className="text-[#10B981]" />
+                          <span className="text-[#10B981]">Release Active</span>
+                        </>
+                      ) : (
+                        <>
+                          <Lock size={11} />
+                          <span>Locked until {unlockDate}</span>
+                        </>
+                      )}
+                    </span>
+                  </div>
+
+                  {/* Hero Balance Block */}
+                  <div className="flex flex-col gap-1 relative z-10 pt-1">
+                    <span className="text-[11px] font-mono uppercase tracking-wider text-white/50">
+                      Total Locked Value
+                    </span>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-4xl sm:text-5xl font-bold font-mono text-white tracking-tight">
+                        {escrowDeposit}.00
+                      </span>
+                      <span className="text-xl sm:text-2xl font-bold font-mono text-[#ebaf64]">
+                        SUI
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Pledge vs Toll Breakdown Pills */}
+                  <div className="grid grid-cols-2 gap-2.5 relative z-10">
+                    <div className="bg-black/30 border border-[#ebaf64]/15 rounded-2xl p-3.5 flex flex-col gap-0.5">
+                      <span className="text-[10px] font-mono text-white/50 uppercase tracking-wider">
+                        Initial Pledge
+                      </span>
+                      <span className="text-sm font-mono font-semibold text-white">
+                        10.00 SUI
+                      </span>
+                    </div>
+                    <div className="bg-black/30 border border-[#ebaf64]/15 rounded-2xl p-3.5 flex flex-col gap-0.5">
+                      <span className="text-[10px] font-mono text-white/50 uppercase tracking-wider">
+                        Infraction Tolls
+                      </span>
+                      <span className="text-sm font-mono font-semibold text-[#ebaf64]">
+                        +{Math.max(0, escrowDeposit - 10)}.00 SUI
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Contract Details Micro-Rows */}
+                  <div className="flex flex-col gap-2 pt-3 border-t border-white/10 text-xs relative z-10">
+                    <div className="flex items-center justify-between">
+                      <span className="text-white/60">Escrow Contract</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(YEARBOUND_VAULT_ADDRESS);
+                          triggerSnackbar("Contract Address Copied", YEARBOUND_VAULT_ADDRESS);
+                        }}
+                        className="font-mono text-[#ebaf64] hover:text-[#f3ba6f] flex items-center gap-1.5 transition-colors group"
+                        title={YEARBOUND_VAULT_ADDRESS}
+                      >
+                        <span>{YEARBOUND_VAULT_ADDRESS.slice(0, 6)}...{YEARBOUND_VAULT_ADDRESS.slice(-4)}</span>
+                        <Copy size={11} className="text-white/40 group-hover:text-white transition-colors" />
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-white/60">Release Trigger</span>
+                      <span className="font-mono text-white/80">
+                        Sui Network Epoch Clock (Dec 25)
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-white/60">Settlement Gateway</span>
+                      <span className="font-mono text-white/80">
+                        {accountType === "real"
+                          ? "Tatum Mainnet Gateway"
+                          : accountType === "linked"
+                          ? "Sui Wallet Standard"
+                          : "Ed25519 Cryptographic Voucher"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. 365-DAY DISCIPLINE GRID HEATMAP (Activity Visualizer) */}
                 <DisciplineGrid
                   currentDayOfYear={currentDayOfYear}
                   infractions={infractions.map((i) => ({
@@ -2913,62 +3020,6 @@ export default function YearboundApp() {
                     setIsMemoryInspectorOpen(true);
                   }}
                 />
-
-                {/* Primary Vault Balance Card */}
-                <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-6 flex flex-col gap-4 shadow-md">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-mono text-[#ebaf64]">
-                      Locked until {unlockDate}
-                    </span>
-                    <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#ebaf64]/10 border border-[#ebaf64]/20 text-[#ebaf64] text-xs font-mono">
-                      {isVaultUnlocked ? (
-                        <>
-                          <Check size={12} className="text-[#10B981]" />
-                          <span className="text-[#10B981]">Unlocked</span>
-                        </>
-                      ) : (
-                        <>
-                          <Lock size={12} />
-                          <span>Time-Locked</span>
-                        </>
-                      )}
-                    </span>
-                  </div>
-
-                  <div className="flex flex-col gap-1">
-                    <span className="text-3xl sm:text-4xl font-bold font-mono text-white tracking-tight">
-                      {escrowDeposit}.00 SUI
-                    </span>
-                    <span className="text-xs text-white/50 font-mono">
-                      10.00 SUI initial pledge + {Math.max(0, escrowDeposit - 10)}.00 SUI penalty toll
-                    </span>
-                  </div>
-
-                  <div className="flex flex-col gap-2 pt-2 border-t border-white/10 text-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="text-white/60">Escrow Contract</span>
-                      <span className="font-mono text-[#ebaf64]/90" title={YEARBOUND_VAULT_ADDRESS}>
-                        x402 Move Vault ({YEARBOUND_VAULT_ADDRESS.slice(0, 6)}...{YEARBOUND_VAULT_ADDRESS.slice(-4)})
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-white/60">Release Trigger</span>
-                      <span className="font-mono text-white/80">
-                        Sui Network Epoch Clock (Dec 25)
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-white/60">Settlement Mode</span>
-                      <span className="font-mono text-white/80">
-                        {accountType === "real"
-                          ? "Tatum Mainnet Gateway"
-                          : accountType === "linked"
-                          ? "Sui Wallet Standard"
-                          : "Ed25519 Cryptographic Voucher"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
 
               </div>
             )}
