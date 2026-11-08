@@ -1739,69 +1739,6 @@ export default function YearboundApp() {
           </div>
         )}
 
-        {/* ====================================================================
-            TOP SYSTEM BAR: TOTAL RECALL vs DEGRADED LEGACY TOGGLE
-            (Visible ONLY inside the active in-app dashboard, hidden on all onboarding screens)
-            ==================================================================== */}
-        {step === 4 && (
-          <>
-            <div
-              className={`w-full px-4 py-2 border-b transition-colors duration-200 flex items-center justify-between shrink-0 z-30 ${
-                isDegradedMode
-                  ? "bg-[#18181B] border-[#27272A]"
-                  : "bg-[#0A0A0C] border-[#18181C]"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <span
-                  className={`w-2 h-2 rounded-full ${
-                    isDegradedMode
-                      ? "bg-[#71717A]"
-                      : "bg-[#10B981] shadow-[0_0_8px_#10B981]"
-                  }`}
-                />
-                <span
-                  className={`text-[10px] font-mono tracking-wider uppercase font-semibold ${
-                    isDegradedMode ? "text-[#A1A1AA]" : "text-white"
-                  }`}
-                >
-                  {isDegradedMode ? "Legacy Banking (Degraded)" : "Walrus Recall · Tatum"}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {isHydrating && (
-                  <span className="text-[9px] font-mono text-[#E5A93C] animate-pulse">
-                    Hydrating...
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setIsDegradedMode((prev) => !prev)}
-                  className={`text-[10px] font-mono px-2.5 py-1 rounded-full border transition-all duration-150 active:scale-95 flex items-center gap-1 ${
-                    isDegradedMode
-                      ? "bg-[#27272A] text-white border-[#3F3F46] hover:bg-[#3F3F46]"
-                      : "bg-[#131316] text-[#A1A1AA] border-[#27272A] hover:text-white hover:border-[#3F3F46]"
-                  }`}
-                  title={
-                    isDegradedMode
-                      ? "Restore Walrus Total Recall & Tatum Gateway"
-                      : "Simulate stateless Web2 legacy banking without memory"
-                  }
-                >
-                  <span>{isDegradedMode ? "⚡ Restore Recall" : "Simulate Degraded"}</span>
-                </button>
-              </div>
-            </div>
-
-            {isDegradedMode && (
-              <div className="w-full bg-[#1C1917] border-b border-[#292524] px-4 py-1.5 flex items-center justify-between text-[10px] font-mono text-[#FCA5A5] animate-in slide-in-from-top-1 shrink-0 z-20">
-                <span>⚠️ Web2 Mode: Walrus Memory bypassed · Flat fines · Stateless</span>
-                <span className="text-[#A8A29E]">No Recall</span>
-              </div>
-            )}
-          </>
-        )}
 
         {/* Existing Genesis Pact Banner (if hydrated from Walrus on Steps 1-3) */}
         {step > 0 && step < 4 && hydratedPactId && (
@@ -2586,38 +2523,46 @@ export default function YearboundApp() {
             ================================================================== */}
         {step === 4 && !isSendOpen && (
           <div className="relative flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-300">
-            {/* DEMO ACCOUNT ONLY: 12-MONTH CHRONOLOGICAL TIME-TRAVEL SCRUBBER */}
-            {accountType === "demo" && (
-              <TimeTravelScrubber
-                activeMilestone={activeMilestone}
-                onChangeMilestone={handleMilestoneChange}
-              />
-            )}
-
             {/* TAB: HOME */}
             {activeTab === "home" && (
-              <div className="flex-1 overflow-y-auto px-7 pt-6 sm:pt-8 pb-28 flex flex-col gap-4 overscroll-contain">
-                {/* 1. TOP LEFT: CURRENT DATE */}
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-mono uppercase tracking-wider text-[#71717A]">
-                    {currentDateStr || "Wednesday, Nov 4"}
-                  </span>
-                  <span className="text-[11px] font-mono text-[#A1A1AA] bg-[#0A0A0C] border border-[#222226] px-2.5 py-1 rounded-full">
-                    {activeWalletDisplay}
-                  </span>
+              <div className="flex-1 overflow-y-auto px-5 sm:px-7 pt-6 sm:pt-8 pb-36 flex flex-col gap-4 overscroll-contain">
+                {/* 1. TOP HEADER: PROMINENT DATE + MINIMALIST WALRUS SWITCH */}
+                <div className="flex items-center justify-between pt-1 pb-1">
+                  <div className="text-[26px] sm:text-[30px] font-bold tracking-[0.02em] leading-tight text-[#ebaf64]">
+                    {currentDateStr || "Sunday, Nov 8"}
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-xs font-mono text-white/70">Walrus</span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={!isDegradedMode}
+                      onClick={() => setIsDegradedMode((prev) => !prev)}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        !isDegradedMode ? "bg-[#ebaf64]" : "bg-white/20"
+                      }`}
+                      title={!isDegradedMode ? "Walrus & Tatum Active" : "Walrus Disconnected"}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-black shadow-lg ring-0 transition duration-200 ease-in-out ${
+                          !isDegradedMode ? "translate-x-5" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                  </div>
                 </div>
 
                 {/* CHRISTMAS UNLOCK BANNER (When Time-Lock Reaches Dec 25) */}
                 {isVaultUnlocked && (
-                  <div className="bg-gradient-to-r from-[#18150A] to-[#12110E] border border-[#E5A93C]/40 rounded-2xl p-5 flex flex-col gap-3 shadow-lg shadow-[#E5A93C]/5 animate-in zoom-in-95 duration-200">
+                  <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 flex flex-col gap-3 shadow-md animate-in zoom-in-95 duration-200">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <Gift size={16} className="text-[#E5A93C]" />
+                        <Gift size={16} className="text-[#ebaf64]" />
                         <span className="text-xs font-semibold text-white uppercase tracking-wider">
                           Christmas Vault Unlocked
                         </span>
                       </div>
-                      <span className="text-[10px] font-mono text-[#E5A93C] bg-[#E5A93C]/10 px-2 py-0.5 rounded border border-[#E5A93C]/20">
+                      <span className="text-[10px] font-mono text-[#ebaf64] bg-[#ebaf64]/10 px-2 py-0.5 rounded border border-[#ebaf64]/20">
                         {isVaultClaimed ? "Funds Claimed" : "Time-Lock Expired"}
                       </span>
                     </div>
@@ -2630,13 +2575,13 @@ export default function YearboundApp() {
                       <button
                         type="button"
                         onClick={handleClaimChristmasVault}
-                        className="w-full py-3 px-4 rounded-xl bg-[#E5A93C] hover:bg-[#F5B84D] text-black font-semibold text-xs transition-all duration-150 flex items-center justify-center gap-2 active:scale-[0.98] shadow-md"
+                        className="w-full py-3 px-4 rounded-full bg-[#ebaf64] hover:bg-[#f3ba6f] text-black font-semibold text-xs transition-all duration-150 flex items-center justify-center gap-2 active:scale-[0.98] shadow-sm"
                       >
                         <Gift size={14} />
                         <span>Claim Christmas Savings ({escrowDeposit}.00 SUI)</span>
                       </button>
                     ) : (
-                      <div className="flex items-center gap-2 text-xs font-mono text-[#10B981] bg-[#10B981]/10 p-2.5 rounded-xl border border-[#10B981]/20">
+                      <div className="flex items-center gap-2 text-xs font-mono text-[#10B981] bg-[#10B981]/10 p-2.5 rounded-2xl border border-[#10B981]/20">
                         <Check size={14} />
                         <span>55.00 SUI released from Sui Move contract into available balance</span>
                       </div>
@@ -2644,298 +2589,96 @@ export default function YearboundApp() {
                   </div>
                 )}
 
-                {/* 2. WALLY MEMORY SHOWCASE BOX */}
-                <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-2.5 relative transition-all duration-200 hover:border-[#3F3F46]">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-mono uppercase tracking-wider text-[#71717A]">
-                      {isDegradedMode ? "Legacy Banking Engine" : "Wally · Walrus Memory"}
-                    </span>
-                    <span className="text-[11px] font-mono text-[#71717A]">
-                      {isDegradedMode ? "Stateless (Web2)" : walrusBlobId ? `Blob #${walrusBlobId.slice(0, 8)}` : "Blob #d4a97f"}
-                    </span>
+                {/* 2. UNIFIED HERO CARD: BALANCE + ACTIONS + WALLY'S VOICE (Zero Slop, No Divider Line) */}
+                <div className="relative bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 sm:p-6 pt-7 sm:pt-8 flex flex-col gap-4 shadow-md transition-all duration-200 mt-8">
+                  {/* Wally Mascot with Memories Book: Small, above the card, on the left top edge */}
+                  <div className="absolute -top-11 sm:-top-13 left-5 sm:left-6 z-20 pointer-events-none select-none">
+                    <img
+                      src="/assets/mascot/wally_memories.png"
+                      alt="Wally with Memories book"
+                      className="w-16 h-auto sm:w-18 drop-shadow-[0_8px_16px_rgba(0,0,0,0.8)] filter"
+                      draggable={false}
+                    />
                   </div>
-                  <p className="text-sm text-[#E4E4E7] leading-relaxed font-normal">
-                    {isDegradedMode
-                      ? "Stateless Session: Web2 banking mode active. Walrus memory is disconnected. Outgoing transfers are not cross-referenced against your resolutions and past infractions are forgotten."
-                      : isVaultUnlocked && !isVaultClaimed
-                      ? `🎅 Merry Christmas! The Sui network clock has passed the vault unlock timestamp (1798156800000 ms). Your accumulated savings of ${escrowDeposit}.00 SUI are now ready to be claimed!`
-                      : isVaultClaimed
-                      ? `🎉 Christmas gift claimed! You successfully locked ${escrowDeposit}.00 SUI away from your impulsive past self and reclaimed it for the holidays.`
-                      : activeMilestone === "jul20"
-                      ? `Walrus memory synthesis: Multiple slip-ups recorded on "${activeRulesList[0]?.title || "your resolution"}". ${activeRulesList[0]?.whyItMatters ? `You pledged: "${activeRulesList[0].whyItMatters}". ` : ""}${escrowDeposit}.00 SUI total is now locked away in Move storage.`
-                      : activeMilestone === "feb14"
-                      ? `Day 45: First slip-up logged. You swore in Walrus Memory: "${activeRulesList[0]?.title || "your resolution"}". ${activeRulesList[0]?.penalty || 10} SUI was locked into the Move vault via x402.`
-                      : totalBreaches > 0
-                      ? `Infraction logged into Walrus memory. You have paid penalties into the vault. Current balance: ${availableBalance.toFixed(2)} SUI.`
-                      : activeRulesList.length > 0
-                      ? `I have committed your resolutions to Walrus memory. 0 infractions recorded. Remember your pact: "${activeRulesList[0].title}". ${activeRulesList[0].penalty || 10} SUI penalty standing by if you slip up.`
-                      : "Resolutions locked in Walrus memory. I am monitoring your transactions for adherence."}
-                  </p>
-                </div>
 
-                {/* 3. BALANCE & SEND / RECEIVE BUTTONS */}
-                <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-4">
-                  <div className="flex flex-col">
-                    <span className="text-[11px] font-mono uppercase tracking-wider text-[#71717A]">
-                      Available Balance
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-3xl sm:text-4xl font-bold font-mono text-white tracking-tight">
+                      {availableBalance.toFixed(2)} SUI
                     </span>
-                    <div className="flex items-baseline gap-2 mt-1">
-                      <span className="text-3xl font-semibold text-white tracking-tight font-mono">
-                        {availableBalance.toFixed(2)} SUI
-                      </span>
-                      <span className="text-xs text-[#71717A] font-mono">
-                        ({escrowDeposit} SUI locked in vault)
-                      </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={openSendFlow}
+                        className="py-2.5 px-4 rounded-full bg-[#ebaf64] hover:bg-[#f3ba6f] text-black font-semibold text-xs transition-all duration-150 flex items-center justify-center gap-1.5 active:scale-95 shadow-sm"
+                      >
+                        <ArrowUpRight size={14} className="stroke-[2.5]" />
+                        <span>Send</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={copyAddress}
+                        className="py-2.5 px-4 rounded-full bg-black/40 hover:bg-black/60 text-[#ebaf64] border border-[#ebaf64]/30 hover:border-[#ebaf64]/60 font-medium text-xs transition-all duration-150 flex items-center justify-center gap-1.5 active:scale-95"
+                      >
+                        {copiedAddress ? <Check size={14} className="text-[#ebaf64]" /> : <ArrowDownLeft size={14} />}
+                        <span>{copiedAddress ? "Copied" : "Receive"}</span>
+                      </button>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 pt-1">
-                    <button
-                      type="button"
-                      onClick={openSendFlow}
-                      className="py-3 px-4 rounded-xl bg-white text-black hover:bg-[#E4E4E7] font-semibold text-xs transition-all duration-150 flex items-center justify-center gap-1.5 active:scale-[0.98]"
-                    >
-                      <ArrowUpRight size={14} />
-                      <span>Send</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={copyAddress}
-                      className="py-3 px-4 rounded-xl bg-[#131316] text-white border border-[#27272A] hover:border-[#52525B] font-medium text-xs transition-all duration-150 flex items-center justify-center gap-1.5 active:scale-[0.98]"
-                    >
-                      {copiedAddress ? <Check size={14} className="text-white" /> : <ArrowDownLeft size={14} />}
-                      <span>{copiedAddress ? "Copied" : "Receive"}</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* 3A. WALLY'S COMPOUNDING MEMORY JOURNAL */}
-                <div
-                  className={`border rounded-2xl p-5 flex flex-col gap-3 transition-all duration-200 ${
-                    isDegradedMode
-                      ? "bg-[#111113] border-[#222226] text-[#71717A]"
-                      : "bg-[#0A0A0C] border-[#222226] hover:border-[#3F3F46]"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Sparkles
-                        size={14}
-                        className={isDegradedMode ? "text-[#52525B]" : "text-[#E5A93C]"}
-                      />
-                      <span className="text-[11px] font-mono uppercase tracking-wider text-[#71717A]">
-                        Wally's Memory Journal · Pattern Synthesis
-                      </span>
-                    </div>
-                    <span
-                      className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
-                        isDegradedMode
-                          ? "text-[#71717A] bg-[#18181B] border-[#27272A]"
-                          : "text-[#10B981] bg-[#10B981]/10 border-[#10B981]/25"
-                      }`}
-                    >
-                      {isDegradedMode ? "Offline (Web2)" : "Compounding Active"}
+                  <div className="flex flex-col gap-1.5 pt-1">
+                    <span className="text-[11px] font-mono text-[#ebaf64]/80 uppercase tracking-wider font-semibold">
+                      {!isDegradedMode ? "Wally · Walrus Memory" : "Wally · Memory Offline"}
                     </span>
-                  </div>
-
-                  {isDegradedMode ? (
-                    <p className="text-xs text-[#71717A] leading-relaxed italic">
-                      Decentralized memory journal offline. Traditional Web2 banking does not synthesize recurring behavioral habits or cross-session accountability.
+                    <p className="text-sm text-white/90 leading-relaxed font-normal">
+                      {isDegradedMode
+                        ? "Stateless Session: Walrus memory is disconnected. Outgoing transfers are not cross-referenced against your resolutions and past infractions are forgotten."
+                        : isVaultUnlocked && !isVaultClaimed
+                        ? `🎅 Merry Christmas! The Sui network clock has passed the vault unlock timestamp. Your accumulated savings of ${escrowDeposit}.00 SUI are ready to be claimed!`
+                        : isVaultClaimed
+                        ? `🎉 Christmas gift claimed! You successfully locked ${escrowDeposit}.00 SUI away from your impulsive past self and reclaimed it for the holidays.`
+                        : activeMilestone === "jul20"
+                        ? `Walrus memory synthesis: Multiple slip-ups recorded on "${activeRulesList[0]?.title || "your resolution"}". ${escrowDeposit}.00 SUI total is now locked away in Move storage.`
+                        : activeMilestone === "feb14"
+                        ? `Day 45: First slip-up logged. You swore in Walrus Memory: "${activeRulesList[0]?.title || "your resolution"}". ${activeRulesList[0]?.penalty || 10} SUI was locked into the Move vault via x402.`
+                        : totalBreaches > 0
+                        ? `Infraction logged into Walrus memory. You have paid penalties into the vault. Current balance: ${availableBalance.toFixed(2)} SUI.`
+                        : activeRulesList.length > 0
+                        ? `I have committed your resolutions to Walrus memory. 0 infractions recorded. Remember your pact: "${activeRulesList[0].title}". ${activeRulesList[0].penalty || 10} SUI penalty standing by if you slip up.`
+                        : "Resolutions locked in Walrus memory. I am monitoring your transactions for adherence."}
                     </p>
-                  ) : behavioralPatterns.length > 0 ? (
-                    <div className="flex flex-col gap-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-white">
-                          {behavioralPatterns[0].pattern_title || "Emerging Behavioral Habit"}
-                        </span>
-                        <span className="text-[10px] font-mono text-[#E5A93C]">
-                          {Math.round((behavioralPatterns[0].confidence || 0.94) * 100)}% Confidence
-                        </span>
-                      </div>
-                      <p className="text-xs text-[#D4D4D8] leading-relaxed">
-                        {behavioralPatterns[0].observation || "Multiple breaches detected. Agent has synthesized habit correlation across your transaction history."}
-                      </p>
-                      {behavioralPatterns[0].recommended_intervention && (
-                        <div className="text-[11px] font-mono text-[#A1A1AA] bg-[#131316] border border-[#222226] p-2.5 rounded-xl">
-                          💡 Intervention: {behavioralPatterns[0].recommended_intervention}
-                        </div>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const patternBlobId = `blob_pattern_${(behavioralPatterns[0].pattern_title || "habit").toLowerCase().replace(/\s+/g, "_")}`;
-                          setExpandedJsonBlobId(patternBlobId);
-                          setIsMemoryInspectorOpen(true);
-                        }}
-                        className="self-start text-[11px] font-mono text-[#E5A93C] hover:text-[#F5B84D] flex items-center gap-1 mt-1 transition-colors"
-                      >
-                        <span>Inspect Pattern Blob Proof</span>
-                        <ExternalLink size={10} />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col gap-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-white">
-                          Zero Habit Decay Detected · Clean Record
-                        </span>
-                        <span className="text-[10px] font-mono text-[#10B981]">
-                          100% Adherence
-                        </span>
-                      </div>
-                      <p className="text-xs text-[#A1A1AA] leading-relaxed">
-                        Walrus memory is actively cross-referencing your transactions against {activeRulesList.length} locked commitments. As transactions accumulate, Wally synthesizes recurring timing vulnerabilities and escalating deterrents.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => setIsMemoryInspectorOpen(true)}
-                        className="self-start text-[11px] font-mono text-[#A1A1AA] hover:text-white flex items-center gap-1 mt-1 transition-colors"
-                      >
-                        <span>View Decentralized Memory Ledger</span>
-                        <ExternalLink size={10} />
-                      </button>
-                    </div>
-                  )}
+                  </div>
                 </div>
 
-                {/* 3B. RECENT ACTIVITY · WALRUS MEMORY LEDGER */}
-                {infractions.length > 0 && (
-                  <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-3 transition-all duration-200">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Activity size={14} className="text-[#A1A1AA]" />
-                        <span className="text-[11px] font-mono uppercase tracking-wider text-[#71717A]">
-                          Recent Activity · Walrus Ledger
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setIsMemoryInspectorOpen(true)}
-                        className="text-[11px] font-mono text-[#A1A1AA] hover:text-white flex items-center gap-1 transition-colors"
-                      >
-                        <span>Memory Proofs ({infractions.length})</span>
-                        <ExternalLink size={10} />
-                      </button>
-                    </div>
-
-                    <div className="flex flex-col gap-2 pt-1">
-                      {infractions.slice(0, 3).map((item) => {
-                        const isHonored = item.verdict === "honored";
-                        return (
-                          <div
-                            key={item.id}
-                            className="bg-[#131316] border border-[#222226] rounded-xl p-3 flex items-center justify-between gap-3"
-                          >
-                            <div className="flex items-center gap-3 min-w-0">
-                              <div className="flex flex-col gap-0.5 shrink-0">
-                                <span
-                                  className={`text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border text-center ${
-                                    isHonored
-                                      ? "text-[#10B981] bg-[#10B981]/10 border-[#10B981]/25"
-                                      : "text-[#EF4444] bg-[#EF4444]/10 border-[#EF4444]/25"
-                                  }`}
-                                >
-                                  {isHonored ? "Honored" : "Breach"}
-                                </span>
-                                {item.repeatCount && item.repeatCount > 1 && (
-                                  <span className="text-[8px] font-mono text-red-400 text-center font-semibold">
-                                    #{item.repeatCount}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex flex-col min-w-0">
-                                <span className="text-xs font-medium text-white truncate">
-                                  {item.memo || (isHonored ? "Transfer" : "Breach Fine")}
-                                </span>
-                                <span className="text-[10px] text-[#71717A] truncate">
-                                  {item.timestamp}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="flex flex-col items-end shrink-0 gap-0.5">
-                              <span className="text-xs font-mono font-semibold text-white">
-                                {isHonored ? `-${item.amount} SUI` : `+${item.penaltySui} SUI`}
-                              </span>
-                              <div className="flex items-center gap-1.5">
-                                {item.isRealOnChain && item.txHash && item.explorerUrl ? (
-                                  <a
-                                    href={item.explorerUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-[9px] font-mono text-[#E5A93C] hover:text-[#F3BA5B] flex items-center gap-0.5 transition-colors"
-                                    title="View Sui PTB on SuiScan"
-                                  >
-                                    <span>PTB</span>
-                                    <ExternalLink size={8} />
-                                  </a>
-                                ) : item.voucherSignature || item.isOffChainVoucher ? (
-                                  <span
-                                    className="text-[9px] font-mono text-[#71717A] bg-[#18181C] px-1.5 py-0.5 rounded border border-[#222226]"
-                                    title="x402 Agent Cryptographic Voucher (Inscribed to Walrus)"
-                                  >
-                                    x402 Voucher
-                                  </span>
-                                ) : null}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setExpandedJsonBlobId(item.blobId);
-                                    setIsMemoryInspectorOpen(true);
-                                  }}
-                                  className="text-[9px] font-mono text-[#71717A] hover:text-white transition-colors"
-                                >
-                                  #{item.blobId.slice(0, 8)}...
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* 4. RESOLUTIONS (IN WALRUS MEMORY) */}
-                <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-4">
+                {/* 3. ACTIVE RESOLUTIONS PREVIEW (Dark Glass Penalties Style) */}
+                <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 shadow-md flex flex-col gap-3.5">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-white">
-                        {activeRulesList.length} Resolutions
-                      </span>
-                      <span className="text-xs text-[#71717A] font-mono">
-                        (in Walrus Memory)
-                      </span>
-                    </div>
+                    <span className="text-base font-semibold text-[#ebaf64]">
+                      {activeRulesList.length} Resolutions
+                    </span>
                     <button
                       type="button"
                       onClick={() => setActiveTab("resolutions")}
-                      className="text-xs text-[#A1A1AA] hover:text-white transition-colors"
+                      className="text-xs font-mono text-[#ebaf64]/80 hover:text-white transition-colors"
                     >
-                      See more
+                      See all →
                     </button>
                   </div>
 
-                  <div className="flex flex-col gap-3">
-                    {activeRulesList.slice(0, 2).map((rule) => (
+                  <div className="flex flex-col gap-2.5">
+                    {activeRulesList.slice(0, 3).map((rule) => (
                       <div
                         key={rule.id}
-                        className="bg-[#131316] border border-[#222226] rounded-xl p-3.5 flex items-center justify-between gap-3 transition-colors hover:border-[#3F3F46]"
+                        className="bg-black/30 border border-[#ebaf64]/20 rounded-2xl p-4 flex items-center justify-between gap-3 transition-colors hover:border-[#ebaf64]/40"
                       >
                         <div className="flex flex-col min-w-0">
                           <span className="text-sm font-medium text-white truncate">
                             {rule.title}
                           </span>
-                          {rule.condition && (
-                            <span className="text-xs text-[#71717A] truncate mt-0.5">
-                              {rule.condition}
-                            </span>
-                          )}
-                          <span className="text-[11px] font-mono text-[#A1A1AA] mt-1">
-                            {rule.penalty} SUI penalty
+                          <span className="text-[11px] font-mono text-[#ebaf64]/70 mt-0.5">
+                            {rule.penalty} SUI stake per breach
                           </span>
                         </div>
 
-                        {/* Circular ring of infractions */}
                         <div className="relative w-8 h-8 flex items-center justify-center shrink-0">
                           <svg className="w-8 h-8 -rotate-90" viewBox="0 0 32 32">
                             <circle
@@ -2943,7 +2686,7 @@ export default function YearboundApp() {
                               cy="16"
                               r="13"
                               fill="none"
-                              stroke="#222226"
+                              stroke="rgba(235, 175, 100, 0.15)"
                               strokeWidth="2.5"
                             />
                             <circle
@@ -2951,7 +2694,7 @@ export default function YearboundApp() {
                               cy="16"
                               r="13"
                               fill="none"
-                              stroke="#FFFFFF"
+                              stroke="#ebaf64"
                               strokeWidth="2.5"
                               strokeDasharray={81.68}
                               strokeDashoffset={
@@ -2963,7 +2706,7 @@ export default function YearboundApp() {
                               className="transition-all duration-700 ease-out"
                             />
                           </svg>
-                          <span className="absolute text-[11px] font-mono font-semibold text-white">
+                          <span className="absolute text-[11px] font-mono font-semibold text-[#ebaf64]">
                             {rule.breaches || 0}
                           </span>
                         </div>
@@ -2971,78 +2714,13 @@ export default function YearboundApp() {
                     ))}
                   </div>
                 </div>
-
-                {/* 5. YEAR IN CONTEXT */}
-                <div className="bg-[#0A0A0C] border border-[#222226] rounded-2xl p-5 flex flex-col gap-4">
-                  <div className="text-sm font-semibold text-white">
-                    Year in Context
-                  </div>
-
-                  <div className="flex items-center gap-5">
-                    {/* Main Circular Ring */}
-                    <div className="relative w-16 h-16 flex items-center justify-center shrink-0">
-                      <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
-                        <circle
-                          cx="32"
-                          cy="32"
-                          r="26"
-                          fill="none"
-                          stroke="#18181C"
-                          strokeWidth="4"
-                        />
-                        <circle
-                          cx="32"
-                          cy="32"
-                          r="26"
-                          fill="none"
-                          stroke="#FFFFFF"
-                          strokeWidth="4"
-                          strokeDasharray={163.36}
-                          strokeDashoffset={
-                            totalBreaches > 0
-                              ? 163.36 - (totalBreaches / 5) * 163.36
-                              : 163.36
-                          }
-                          strokeLinecap="round"
-                          className="transition-all duration-1000 ease-out"
-                        />
-                      </svg>
-                      <div className="absolute flex flex-col items-center">
-                        <span className="text-sm font-mono font-semibold text-white leading-none">
-                          {totalBreaches}
-                        </span>
-                        <span className="text-[9px] font-mono text-[#71717A] uppercase mt-0.5 leading-none">
-                          Breaches
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Quick Deets */}
-                    <div className="flex flex-col gap-2 min-w-0">
-                      <div className="flex items-center justify-between gap-4">
-                        <span className="text-xs text-[#71717A]">Amount in x402 Vault</span>
-                        <span className="text-xs font-mono font-medium text-white">{escrowDeposit} SUI</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-4">
-                        <span className="text-xs text-[#71717A]">Resolutions Broken</span>
-                        <span className="text-xs font-mono font-medium text-white">
-                          {totalBreaches} of {activeRulesList.length}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-4">
-                        <span className="text-xs text-[#71717A]">Year Remaining</span>
-                        <span className="text-xs font-mono font-medium text-white">325 Days</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
               </div>
             )}
 
             {/* TAB: RESOLUTIONS */}
             {activeTab === "resolutions" && (
-              <div className="flex-1 overflow-y-auto px-7 pt-6 sm:pt-8 pb-28 flex flex-col gap-4 animate-in fade-in duration-200 overscroll-contain">
-                <div className="text-[30px] sm:text-[34px] font-semibold tracking-[-0.02em] leading-tight text-white">
+              <div className="flex-1 overflow-y-auto px-5 sm:px-7 pt-6 sm:pt-8 pb-36 flex flex-col gap-4 animate-in fade-in duration-200 overscroll-contain">
+                <div className="text-[26px] sm:text-[30px] font-bold tracking-[0.02em] leading-tight text-[#ebaf64]">
                   Saved Resolutions
                 </div>
 
@@ -3054,17 +2732,17 @@ export default function YearboundApp() {
                       <div
                         key={rule.id}
                         onClick={() => setSelectedMemoryRuleId(isExpanded ? null : rule.id)}
-                        className={`bg-[#0A0A0C] border rounded-2xl p-5 flex flex-col gap-2.5 cursor-pointer transition-all duration-200 ${
+                        className={`bg-black/20 backdrop-blur-2xl border rounded-3xl p-5 flex flex-col gap-2.5 cursor-pointer transition-all duration-200 shadow-md ${
                           isExpanded
-                            ? "border-white/40 ring-1 ring-white/10"
-                            : "border-[#222226] hover:border-[#3F3F46]"
+                            ? "border-[#ebaf64] ring-1 ring-[#ebaf64]/30"
+                            : "border-[#ebaf64]/25 hover:border-[#ebaf64]/50"
                         }`}
                       >
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-mono font-medium text-[#71717A] tracking-wider">
+                          <span className="text-xs font-mono font-medium text-[#ebaf64] tracking-wider">
                             0{idx + 1}
                           </span>
-                          <span className="text-xs font-mono text-white bg-[#18181C] px-2 py-0.5 rounded border border-[#27272A]">
+                          <span className="text-xs font-mono text-black font-semibold bg-[#ebaf64] px-2.5 py-0.5 rounded-full shadow-sm">
                             {rule.penalty} SUI Penalty
                           </span>
                         </div>
@@ -3072,15 +2750,15 @@ export default function YearboundApp() {
                           {rule.title}
                         </div>
                         {rule.condition && (
-                          <p className="text-xs text-[#71717A] leading-relaxed">
+                          <p className="text-xs text-[#D4D4D8] leading-relaxed">
                             {rule.condition}
                           </p>
                         )}
-                        <div className="flex items-center justify-between border-t border-[#18181C] pt-2 mt-1">
-                          <span className="text-[10px] font-mono text-[#71717A]">
-                            Walrus Item #{idx + 1} · Enforced by Wally
+                        <div className="flex items-center justify-between border-t border-white/10 pt-2.5 mt-1">
+                          <span className="text-[10px] font-mono text-white/50">
+                            Walrus Inscribed · Enforced by Wally
                           </span>
-                          <span className="text-[10px] font-mono text-white">
+                          <span className="text-[10px] font-mono text-[#ebaf64] font-semibold">
                             {rule.breaches || 0} Breaches
                           </span>
                         </div>
@@ -3089,14 +2767,14 @@ export default function YearboundApp() {
                         {isExpanded && (
                           <div
                             onClick={(e) => e.stopPropagation()}
-                            className="bg-[#131316] border border-[#27272A] rounded-xl p-3.5 flex flex-col gap-2.5 mt-2 animate-in fade-in duration-200"
+                            className="bg-black/40 border border-[#ebaf64]/25 rounded-2xl p-4 flex flex-col gap-2.5 mt-2 animate-in fade-in duration-200"
                           >
                             <div className="flex items-center justify-between">
-                              <span className="text-[10px] font-mono text-[#A1A1AA] uppercase tracking-wider">
+                              <span className="text-[10px] font-mono text-[#ebaf64]/80 uppercase tracking-wider">
                                 Walrus Memory Record
                               </span>
                               {rule.category ? (
-                                <span className="text-[10px] font-mono text-[#E4E4E7] bg-[#1F1F24] px-1.5 py-0.5 rounded uppercase">
+                                <span className="text-[10px] font-mono text-white bg-black/50 px-2 py-0.5 rounded-full uppercase border border-[#ebaf64]/20">
                                   {rule.category}
                                 </span>
                               ) : (
@@ -3106,7 +2784,7 @@ export default function YearboundApp() {
                               )}
                             </div>
 
-                            <div className="flex items-center justify-between bg-[#0A0A0C] border border-[#1E1E22] rounded-lg px-2.5 py-1.5">
+                            <div className="flex items-center justify-between bg-black/60 border border-[#ebaf64]/20 rounded-xl px-3 py-2">
                               <span className="text-[11px] font-mono text-white truncate mr-2">
                                 Blob #{rule.blobId ? `${rule.blobId.slice(0, 16)}...` : walrusBlobId ? `${walrusBlobId.slice(0, 16)}...` : "d4a97f2e8c9b4e11..."}
                               </span>
@@ -3120,7 +2798,7 @@ export default function YearboundApp() {
                                   }
                                   triggerSnackbar("Copied Blob ID to clipboard", `Blob #${bid.slice(0, 12)}...`);
                                 }}
-                                className="text-[#71717A] hover:text-white p-1 transition-colors shrink-0"
+                                className="text-white/60 hover:text-white p-1 transition-colors shrink-0"
                                 title="Copy Blob ID"
                               >
                                 <Copy size={12} />
@@ -3130,19 +2808,19 @@ export default function YearboundApp() {
                             {rule.keywords && rule.keywords.length > 0 && (
                               <div className="flex flex-wrap gap-1 mt-0.5">
                                 {rule.keywords.slice(0, 4).map((kw, kIdx) => (
-                                  <span key={kIdx} className="text-[9px] font-mono text-[#71717A] bg-[#18181C] px-1.5 py-0.5 rounded border border-[#222226]">
+                                  <span key={kIdx} className="text-[9px] font-mono text-[#ebaf64]/80 bg-black/40 px-2 py-0.5 rounded-full border border-[#ebaf64]/20">
                                     #{kw}
                                   </span>
                                 ))}
                               </div>
                             )}
 
-                            <div className="text-[11px] font-mono text-[#71717A] leading-relaxed">
-                              Boundary: "{rule.condition || rule.title}"
+                            <div className="text-[11px] font-mono text-white/70 leading-relaxed">
+                              Boundary: &ldquo;{rule.condition || rule.title}&rdquo;
                             </div>
 
                             {rule.wallyRoastAngle && (
-                              <div className="text-[10px] text-[#A1A1AA] italic bg-[#0E0E11] p-2 rounded border border-[#1E1E24]">
+                              <div className="text-[11px] text-white/90 italic bg-black/50 p-2.5 rounded-xl border border-[#ebaf64]/20">
                                 Wally Angle: &ldquo;{rule.wallyRoastAngle}&rdquo;
                               </div>
                             )}
@@ -3156,7 +2834,7 @@ export default function YearboundApp() {
                   <button
                     type="button"
                     onClick={() => setIsAddResolutionOpen(true)}
-                    className="w-full py-3.5 px-4 rounded-2xl border border-dashed border-[#2E2E33] hover:border-[#52525B] hover:bg-[#0A0A0C] text-[#A1A1AA] hover:text-white text-xs font-medium flex items-center justify-center gap-2 transition-all duration-150 active:scale-[0.99] mt-1"
+                    className="w-full py-3.5 px-4 rounded-full border border-dashed border-[#ebaf64]/35 hover:border-[#ebaf64]/60 bg-black/20 hover:bg-black/40 text-[#ebaf64] text-xs font-medium flex items-center justify-center gap-2 transition-all duration-150 active:scale-[0.99] mt-1 shadow-sm"
                   >
                     <Plus size={14} />
                     <span>Add another resolution</span>
@@ -3167,22 +2845,22 @@ export default function YearboundApp() {
 
             {/* TAB: x402 VAULT */}
             {activeTab === "vault" && (
-              <div className="flex-1 overflow-y-auto px-7 pt-6 sm:pt-8 pb-28 flex flex-col gap-4 animate-in fade-in duration-200 overscroll-contain">
-                <div className="text-[30px] sm:text-[34px] font-semibold tracking-[-0.02em] leading-tight text-white">
+              <div className="flex-1 overflow-y-auto px-5 sm:px-7 pt-6 sm:pt-8 pb-36 flex flex-col gap-4 animate-in fade-in duration-200 overscroll-contain">
+                <div className="text-[26px] sm:text-[30px] font-bold tracking-[0.02em] leading-tight text-[#ebaf64]">
                   x402 Vault
                 </div>
 
                 {/* CHRISTMAS UNLOCK ACTION IN VAULT */}
                 {isVaultUnlocked && (
-                  <div className="bg-gradient-to-r from-[#18150A] to-[#12110E] border border-[#E5A93C]/40 rounded-2xl p-5 flex flex-col gap-3 shadow-lg shadow-[#E5A93C]/5 animate-in zoom-in-95 duration-200">
+                  <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 flex flex-col gap-3 shadow-md animate-in zoom-in-95 duration-200">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <Gift size={16} className="text-[#E5A93C]" />
+                        <Gift size={16} className="text-[#ebaf64]" />
                         <span className="text-xs font-semibold text-white uppercase tracking-wider">
                           Christmas Release Active
                         </span>
                       </div>
-                      <span className="text-[10px] font-mono text-[#E5A93C] bg-[#E5A93C]/10 px-2 py-0.5 rounded border border-[#E5A93C]/20">
+                      <span className="text-[10px] font-mono text-[#ebaf64] bg-[#ebaf64]/10 px-2 py-0.5 rounded border border-[#ebaf64]/20">
                         {isVaultClaimed ? "Funds Claimed" : "Unlocked"}
                       </span>
                     </div>
@@ -3193,13 +2871,13 @@ export default function YearboundApp() {
                       <button
                         type="button"
                         onClick={handleClaimChristmasVault}
-                        className="w-full py-3 px-4 rounded-xl bg-[#E5A93C] hover:bg-[#F5B84D] text-black font-semibold text-xs transition-all duration-150 flex items-center justify-center gap-2 active:scale-[0.98] shadow-md"
+                        className="w-full py-3 px-4 rounded-full bg-[#ebaf64] hover:bg-[#f3ba6f] text-black font-semibold text-xs transition-all duration-150 flex items-center justify-center gap-2 active:scale-[0.98] shadow-sm"
                       >
                         <Gift size={14} />
                         <span>Claim Christmas Savings ({escrowDeposit}.00 SUI)</span>
                       </button>
                     ) : (
-                      <div className="flex items-center gap-2 text-xs font-mono text-[#10B981] bg-[#10B981]/10 p-2.5 rounded-xl border border-[#10B981]/20">
+                      <div className="flex items-center gap-2 text-xs font-mono text-[#10B981] bg-[#10B981]/10 p-2.5 rounded-2xl border border-[#10B981]/20">
                         <Check size={14} />
                         <span>Funds Claimed into Available Balance</span>
                       </div>
@@ -3681,48 +3359,66 @@ export default function YearboundApp() {
             )}
 
             {/* ================================================================
-                FLOATING NAVBAR PILL
+                FLOATING TIME-TRAVEL SCRUBBER (DEMO MODE ONLY)
                 ================================================================ */}
-            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 bg-black/90 backdrop-blur-xl rounded-full px-7 py-3.5 flex items-center gap-8 shadow-2xl border-0">
+            {accountType === "demo" && (
+              <TimeTravelScrubber
+                activeMilestone={activeMilestone}
+                onChangeMilestone={handleMilestoneChange}
+              />
+            )}
+
+            {/* ================================================================
+                FLOATING NAVBAR PILL (With White Circle Selected Look)
+                ================================================================ */}
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 bg-black/90 backdrop-blur-2xl rounded-full p-1.5 flex items-center gap-1.5 shadow-2xl border border-white/10">
               <button
                 type="button"
                 onClick={() => setActiveTab("home")}
-                className={`transition-all duration-150 p-1 active:scale-90 ${
-                  activeTab === "home" ? "text-white scale-105" : "text-[#52525B] hover:text-white"
+                className={`w-10 h-10 rounded-full transition-all duration-200 active:scale-90 flex items-center justify-center ${
+                  activeTab === "home"
+                    ? "bg-white text-black shadow-md scale-105"
+                    : "text-white/50 hover:text-white"
                 }`}
                 title="Home"
               >
-                <Home size={19} strokeWidth={activeTab === "home" ? 2.5 : 2} />
+                <Home size={18} className={activeTab === "home" ? "fill-current" : ""} />
               </button>
               <button
                 type="button"
                 onClick={() => setActiveTab("resolutions")}
-                className={`transition-all duration-150 p-1 active:scale-90 ${
-                  activeTab === "resolutions" ? "text-white scale-105" : "text-[#52525B] hover:text-white"
+                className={`w-10 h-10 rounded-full transition-all duration-200 active:scale-90 flex items-center justify-center ${
+                  activeTab === "resolutions"
+                    ? "bg-white text-black shadow-md scale-105"
+                    : "text-white/50 hover:text-white"
                 }`}
                 title="Resolutions"
               >
-                <ListCheck size={19} strokeWidth={activeTab === "resolutions" ? 2.5 : 2} />
+                <ListCheck size={18} strokeWidth={activeTab === "resolutions" ? 2.8 : 2} />
               </button>
               <button
                 type="button"
                 onClick={() => setActiveTab("vault")}
-                className={`transition-all duration-150 p-1 active:scale-90 ${
-                  activeTab === "vault" ? "text-white scale-105" : "text-[#52525B] hover:text-white"
+                className={`w-10 h-10 rounded-full transition-all duration-200 active:scale-90 flex items-center justify-center ${
+                  activeTab === "vault"
+                    ? "bg-white text-black shadow-md scale-105"
+                    : "text-white/50 hover:text-white"
                 }`}
                 title="x402 Vault"
               >
-                <Shield size={19} strokeWidth={activeTab === "vault" ? 2.5 : 2} />
+                <Shield size={18} className={activeTab === "vault" ? "fill-current" : ""} />
               </button>
               <button
                 type="button"
                 onClick={() => setActiveTab("settings")}
-                className={`transition-all duration-150 p-1 active:scale-90 ${
-                  activeTab === "settings" ? "text-white scale-105" : "text-[#52525B] hover:text-white"
+                className={`w-10 h-10 rounded-full transition-all duration-200 active:scale-90 flex items-center justify-center ${
+                  activeTab === "settings"
+                    ? "bg-white text-black shadow-md scale-105"
+                    : "text-white/50 hover:text-white"
                 }`}
                 title="Settings"
               >
-                <Settings size={19} strokeWidth={activeTab === "settings" ? 2.5 : 2} />
+                <Settings size={18} strokeWidth={activeTab === "settings" ? 2.8 : 2} />
               </button>
             </div>
           </div>

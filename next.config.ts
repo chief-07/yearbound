@@ -33,6 +33,8 @@ const nextConfig: NextConfig = {
   partialPrefetching: true,
   allowedDevOrigins: [
     ...detectedIps,
+    '172.29.225.175',
+    '172.29.225.175:3000',
     '10.105.125.175',
     '10.105.125.175:3000',
     '10.82.149.175',
