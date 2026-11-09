@@ -1030,7 +1030,6 @@ export default function YearboundApp() {
     } finally {
       clearTimeout(t1);
       clearTimeout(t2);
-      clearTimeout(t3);
       setIsSubmitting(false);
       setSealingStage("");
       setSealingProgress(0);
