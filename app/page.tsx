@@ -23,7 +23,6 @@ import {
   FileText,
   Wallet,
   Gift,
-  Sparkles,
   TrendingUp,
   Activity,
   Database,
@@ -47,7 +46,7 @@ import {
   YEARBOUND_VAULT_ADDRESS,
   YEARBOUND_TESTNET_VAULT_ADDRESS,
 } from "@/lib/vault-x402";
-import { synthesizeWallyIntervention, paraphraseUserMotivation } from "@/lib/wally-synthesizer";
+import { synthesizeWallyIntervention } from "@/lib/wally-synthesizer";
 import { DisciplineGrid } from "@/components/discipline-grid";
 import { TimeTravelScrubber, type TimeMilestone } from "@/components/time-travel-scrubber";
 
@@ -206,7 +205,17 @@ export default function YearboundApp() {
     }
   }, []);
 
-  // Live Date
+  // Live Date (Short weekday e.g. 'Thur, Jan 1', no year)
+  const formatShortCalendarDate = (d: Date): string => {
+    const weekdayRaw = new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(d);
+    const weekday = weekdayRaw === "Thu" ? "Thur" : weekdayRaw;
+    const monthDay = new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+    }).format(d);
+    return `${weekday}, ${monthDay}`;
+  };
+
   const [currentDateStr, setCurrentDateStr] = useState<string>("");
 
   useEffect(() => {
@@ -217,14 +226,7 @@ export default function YearboundApp() {
         refreshLiveBalance(demo, "demo");
       }
     }
-    const now = new Date();
-    setCurrentDateStr(
-      new Intl.DateTimeFormat("en-US", {
-        weekday: "long",
-        month: "short",
-        day: "numeric",
-      }).format(now)
-    );
+    setCurrentDateStr(formatShortCalendarDate(new Date()));
   }, []);
 
   // Screen 1: Rules (Prepopulated with authentic, human New Year's resolutions, 0.05 SUI default penalty & verified Walrus blobs)
@@ -446,6 +448,7 @@ export default function YearboundApp() {
     },
   ]);
   const [isMemoryInspectorOpen, setIsMemoryInspectorOpen] = useState<boolean>(false);
+  const [focusedMemoryBlobId, setFocusedMemoryBlobId] = useState<string | null>(null);
   const [isAddResolutionOpen, setIsAddResolutionOpen] = useState<boolean>(false);
   const [expandedJsonBlobId, setExpandedJsonBlobId] = useState<string | null>(null);
   const [selectedMemoryRuleId, setSelectedMemoryRuleId] = useState<string | null>(null);
@@ -460,14 +463,25 @@ export default function YearboundApp() {
     message?: string;
   } | null>(null);
 
-  // Degraded Mode (Web2 stateless banking simulation vs Walrus Total Recall + Tatum Gateway)
+  // Degraded Mode (Stateless mode with Walrus Memory & Tatum Gateway disabled)
   const [isDegradedMode, setIsDegradedMode] = useState<boolean>(false);
+  const isDegradedModeRef = useRef<boolean>(false);
+  const prevDegradedModeRef = useRef<boolean>(false);
+  const [tatumDisabledNotice, setTatumDisabledNotice] = useState<string>("");
 
   // Walrus Cold-Boot Hydration & Compounding Pattern Synthesis state
   const [isHydrating, setIsHydrating] = useState<boolean>(false);
   const [hasHydratedFromWalrus, setHasHydratedFromWalrus] = useState<boolean>(false);
   const [behavioralPatterns, setBehavioralPatterns] = useState<any[]>([]);
   const [hydratedPactId, setHydratedPactId] = useState<string | null>(null);
+
+  // AI-Synthesized Wally Home Screen Briefing
+  const [wallyBriefing, setWallyBriefing] = useState<string>("");
+  const [isLoadingWallyBriefing, setIsLoadingWallyBriefing] = useState<boolean>(false);
+  const [briefingRefreshTick, setBriefingRefreshTick] = useState<number>(0);
+  const briefingAbortRef = useRef<AbortController | null>(null);
+  const balanceSyncTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const justCommittedGenesisRef = useRef<boolean>(false);
 
   // Screen 0: Sign In & Restore state
   const [restoreInput, setRestoreInput] = useState<string>("");
@@ -479,6 +493,7 @@ export default function YearboundApp() {
   const [currentDayOfYear, setCurrentDayOfYear] = useState<number>(1);
   const [isVaultUnlocked, setIsVaultUnlocked] = useState<boolean>(false);
   const [isVaultClaimed, setIsVaultClaimed] = useState<boolean>(false);
+  const [isChristmasBannerDismissed, setIsChristmasBannerDismissed] = useState<boolean>(false);
   const [inflowProgress, setInflowProgress] = useState<{
     current: number;
     target: number;
@@ -503,7 +518,7 @@ export default function YearboundApp() {
   const [isSendOpen, setIsSendOpen] = useState<boolean>(false);
   const [sendSubStep, setSendSubStep] = useState<SendSubStep>("amount");
   const [sendAmount, setSendAmount] = useState<string>("0.05");
-  const [sendRecipient, setSendRecipient] = useState<string>("0x8f4c...cafe");
+  const [sendRecipient, setSendRecipient] = useState<string>("");
   const [sendMemo, setSendMemo] = useState<string>("");
   const [breachReason, setBreachReason] = useState<string>("");
   const [wallyRoast, setWallyRoast] = useState<string>("");
@@ -596,8 +611,14 @@ export default function YearboundApp() {
     }
   };
 
-  // Fetch live on-chain balance via Tatum Gateway
-  const refreshLiveBalance = async (targetAddress?: string, explicitMode?: AccountType) => {
+  // Fetch live on-chain balance via Tatum Gateway (always bypasses HTTP cache)
+  const refreshLiveBalance = async (
+    targetAddress?: string,
+    explicitMode?: AccountType,
+    opts?: { syncRetry?: boolean }
+  ): Promise<number | null> => {
+    if (isDegradedModeRef.current) return null;
+
     const currentMode = explicitMode || accountType;
     const addr =
       targetAddress ||
@@ -606,43 +627,88 @@ export default function YearboundApp() {
         : currentMode === "demo"
         ? (demoAddress || DEMO_SUI_ADDRESS)
         : linkedAddress);
-    if (!addr || !addr.startsWith("0x")) return;
+    if (!addr || !addr.startsWith("0x")) return null;
     const network = currentMode === "demo" ? "testnet" : "mainnet";
-    setIsCheckingLiveBalance(true);
-    try {
-      const res = await fetch(`/api/sui/balance?address=${addr}&network=${network}`);
-      const data = await res.json();
-      if (data.success && typeof data.balanceSui === "number") {
-        setLiveOnChainBalanceSui(data.balanceSui);
-        setAvailableBalance(data.balanceSui);
+
+    const fetchOnce = async (): Promise<number | null> => {
+      if (isDegradedModeRef.current) return null;
+      setIsCheckingLiveBalance(true);
+      try {
+        const res = await fetch(
+          `/api/sui/balance?address=${encodeURIComponent(addr)}&network=${network}&_=${Date.now()}`,
+          { cache: "no-store" }
+        );
+        const data = await res.json();
+        if (isDegradedModeRef.current) return null;
+        if (data.success && typeof data.balanceSui === "number" && data.isLive !== false) {
+          setLiveOnChainBalanceSui(data.balanceSui);
+          setAvailableBalance(data.balanceSui);
+          return data.balanceSui;
+        }
+      } catch (err) {
+        console.warn("Failed to query live balance:", err);
+      } finally {
+        setIsCheckingLiveBalance(false);
       }
-    } catch (err) {
-      console.warn("Failed to query live balance:", err);
-    } finally {
-      setIsCheckingLiveBalance(false);
+      return null;
+    };
+
+    const result = await fetchOnce();
+
+    if (opts?.syncRetry && !isDegradedModeRef.current) {
+      balanceSyncTimersRef.current.forEach((id) => clearTimeout(id));
+      balanceSyncTimersRef.current = [
+        setTimeout(() => {
+          if (!isDegradedModeRef.current) fetchOnce().catch(() => {});
+        }, 2200),
+        setTimeout(() => {
+          if (!isDegradedModeRef.current) fetchOnce().catch(() => {});
+        }, 4800),
+      ];
     }
+
+    return result;
   };
 
   // Request 1.00 SUI Testnet Gas from the official PoW faucet
-  const handleRequestFaucet = async (targetAddr?: string) => {
+  const handleRequestFaucet = async (
+    targetAddr?: string,
+    opts?: { quietStartSnackbar?: boolean; quietResultSnackbar?: boolean; maxTimeoutMs?: number }
+  ): Promise<{ success: boolean; digest?: string; amountSui?: number; error?: string }> => {
+    if (isDegradedModeRef.current) {
+      return { success: false, error: "Tatum & Walrus are disabled" };
+    }
     const addr = targetAddr || (demoAddress || DEMO_SUI_ADDRESS);
     setIsRequestingFaucet(true);
-    triggerSnackbar("Requesting Faucet Gas", "Solving PoW challenge & depositing 1 SUI on Testnet...");
+    if (!opts?.quietStartSnackbar) {
+      triggerSnackbar("Requesting Faucet Gas", "Solving PoW challenge & claiming 1.00 SUI on Testnet...");
+    }
     try {
       const res = await fetch("/api/sui/faucet", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(opts?.maxTimeoutMs || 115000),
         body: JSON.stringify({ address: addr, network: "testnet" }),
       });
       const data = await res.json();
       if (data.success) {
-        triggerSnackbar("Faucet Success (+1.00 SUI)", `Tx: ${data.digest.slice(0, 10)}...`);
-        await refreshLiveBalance(addr, "demo");
+        if (!opts?.quietResultSnackbar) {
+          triggerSnackbar("Faucet Success (+1.00 SUI)", `Tx: ${data.digest.slice(0, 10)}...`);
+        }
+        await refreshLiveBalance(addr, "demo", { syncRetry: true });
+        return { success: true, digest: data.digest, amountSui: data.amountSui || 1 };
       } else {
-        triggerSnackbar("Faucet Notice", data.error || "Please wait before requesting again");
+        if (!opts?.quietResultSnackbar) {
+          triggerSnackbar("Faucet Notice", data.error || "Please wait before requesting again");
+        }
+        return { success: false, error: data.error || "Faucet error" };
       }
-    } catch {
-      triggerSnackbar("Faucet Notice", "Faucet request timed out or rate-limited. Please retry shortly.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Faucet timeout";
+      if (!opts?.quietResultSnackbar) {
+        triggerSnackbar("Faucet Notice", "Faucet request timed out or rate-limited. Please retry shortly.");
+      }
+      return { success: false, error: msg };
     } finally {
       setIsRequestingFaucet(false);
     }
@@ -650,6 +716,7 @@ export default function YearboundApp() {
 
   // Walrus Cold-Boot Hydration: reconstruct state from decentralized memory blobs
   const hydrateFromWalrus = async (targetAddress?: string) => {
+    if (isDegradedModeRef.current) return;
     const addr =
       targetAddress ||
       (accountType === "demo"
@@ -665,8 +732,9 @@ export default function YearboundApp() {
         setHasHydratedFromWalrus(true);
         if (data.pact) {
           setHydratedPactId(data.pact.pact_id || data.pact.blob_id || null);
-          if (data.pact.x402_escrow_deposit_sui) {
-            setEscrowDeposit(data.pact.x402_escrow_deposit_sui);
+          const restoredEscrow = data.pact.x402_escrow_deposit_sui ?? data.pact.initial_deposit_sui;
+          if (typeof restoredEscrow === "number" && restoredEscrow > 0) {
+            setEscrowDeposit(restoredEscrow);
           }
         }
         if (data.rules && Array.isArray(data.rules) && data.rules.length > 0) {
@@ -678,7 +746,7 @@ export default function YearboundApp() {
               whyItMatters: r.why_it_matters || "",
               penalty: r.penalty_amount_sui || 0.05,
               breaches: 0,
-              blobId: r.blob_id,
+              blobId: r.blob_id || `walrus_blob_rule_${r.rule_id || idx + 1}`,
               category: r.category,
               keywords: r.keywords,
               behavioralRule: r.behavioral_rule,
@@ -705,9 +773,9 @@ export default function YearboundApp() {
           });
         }
         if (data.rules && Array.isArray(data.rules)) {
-          data.rules.forEach((r: any) => {
+          data.rules.forEach((r: any, idx: number) => {
             hydratedBlobs.push({
-              blobId: r.blob_id || `blob_rule_${r.rule_id}`,
+              blobId: r.blob_id || `walrus_blob_rule_${r.rule_id || idx + 1}`,
               type: "resolution_contract",
               title: `Resolution: ${r.title}`,
               timestamp: r.created_at || "Active",
@@ -743,6 +811,7 @@ export default function YearboundApp() {
 
   // Refresh on-chain inflow metrics via Tatum Sui Gateway
   const refreshInflowMetrics = async (targetAddress?: string) => {
+    if (isDegradedModeRef.current) return;
     const addr =
       targetAddress ||
       (accountType === "demo"
@@ -788,13 +857,143 @@ export default function YearboundApp() {
     }
   };
 
-  // Run hydration and Tatum on-chain telemetry when entering dashboard or switching active account
+  // Keep degraded-mode ref synced, abort pending Tatum/Walrus timers when disabled, and re-sync when re-enabled
   useEffect(() => {
-    if (step === 4) {
-      hydrateFromWalrus();
+    isDegradedModeRef.current = isDegradedMode;
+    const wasDegraded = prevDegradedModeRef.current;
+    prevDegradedModeRef.current = isDegradedMode;
+
+    if (isDegradedMode) {
+      balanceSyncTimersRef.current.forEach((id) => clearTimeout(id));
+      balanceSyncTimersRef.current = [];
+      setIsCheckingLiveBalance(false);
+      setIsLoadingWallyBriefing(false);
+      setIsAddResolutionOpen(false);
+      setIsMemoryInspectorOpen(false);
+    } else {
+      setTatumDisabledNotice("");
+      if (wasDegraded && step === 4) {
+        refreshLiveBalance(undefined, accountType, { syncRetry: true });
+        refreshInflowMetrics();
+      }
+    }
+  }, [isDegradedMode]);
+
+  // Run hydration, live balance sync, and Tatum on-chain telemetry when entering dashboard or switching active account
+  useEffect(() => {
+    if (step === 4 && !isDegradedModeRef.current) {
+      refreshLiveBalance(undefined, accountType, { syncRetry: true });
+      if (justCommittedGenesisRef.current) {
+        justCommittedGenesisRef.current = false;
+      } else {
+        hydrateFromWalrus();
+      }
       refreshInflowMetrics();
     }
   }, [step, accountType]);
+
+  // Auto-sync live balance when returning to Home tab, switching browser tabs, or refocusing the window
+  useEffect(() => {
+    if (step !== 4 || isDegradedModeRef.current) return;
+    if (activeTab === "home") {
+      refreshLiveBalance(undefined, accountType);
+    }
+    const handleWindowFocus = () => {
+      if (!isDegradedModeRef.current) {
+        refreshLiveBalance(undefined, accountType);
+      }
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && !isDegradedModeRef.current) {
+        refreshLiveBalance(undefined, accountType);
+      }
+    };
+    window.addEventListener("focus", handleWindowFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("focus", handleWindowFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [step, accountType, activeTab]);
+
+  // AI-Synthesized Wally Home Screen Briefing backed by Walrus Memory
+  useEffect(() => {
+    if (step !== 4 || isDegradedMode) return;
+
+    if (briefingAbortRef.current) {
+      briefingAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    briefingAbortRef.current = controller;
+
+    const activeAccountAddress =
+      accountType === "demo"
+        ? (demoAddress || DEMO_SUI_ADDRESS)
+        : accountType === "real"
+        ? realAddress
+        : linkedAddress || (demoAddress || DEMO_SUI_ADDRESS);
+
+    const activeList = rules.filter((r) => r.title.trim().length > 0);
+    setIsLoadingWallyBriefing(true);
+
+    fetch("/api/wally-briefing", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+      body: JSON.stringify({
+        walletAddress: activeAccountAddress,
+        rules: activeList.map((r) => ({
+          title: r.title,
+          condition: r.condition,
+          whyItMatters: r.whyItMatters,
+          penalty: r.penalty,
+          breaches: r.breaches || 0,
+        })),
+        infractions: infractions.slice(0, 10).map((i) => ({
+          ruleTitle: i.ruleTitle,
+          verdict: i.verdict,
+          memo: i.memo,
+          timestamp: i.timestamp,
+          penaltySui: i.penaltySui,
+          amount: i.amount,
+        })),
+        availableBalance,
+        escrowDeposit,
+        currentDateStr,
+        activeMilestone,
+        isVaultUnlocked,
+        isVaultClaimed,
+      }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (!controller.signal.aborted && data?.message) {
+          setWallyBriefing(data.message);
+        }
+      })
+      .catch((err) => {
+        if (err?.name !== "AbortError") {
+          console.warn("[Wally Briefing] Fetch notice:", err);
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setIsLoadingWallyBriefing(false);
+        }
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [
+    step,
+    accountType,
+    isDegradedMode,
+    activeMilestone,
+    isVaultUnlocked,
+    isVaultClaimed,
+    briefingRefreshTick,
+  ]);
 
   // Rule management
   const addRule = () => {
@@ -860,19 +1059,13 @@ export default function YearboundApp() {
     }, 4500);
   };
 
-  // Step 3 Submission to Walrus
+  // Step 3 Submission to Walrus, Auto-Claim (2 SUI Testnet for Demo), & x402 Vault Lock
   const handleLockVault = async () => {
     setIsSubmitting(true);
-    setSealingProgress(20);
-    setSealingStage("Analyzing resolutions with Gemini...");
-    const t1 = setTimeout(() => {
-      setSealingProgress(55);
-      setSealingStage("Committing to Walrus Memory...");
-    }, 900);
-    const t2 = setTimeout(() => {
-      setSealingProgress(85);
-      setSealingStage("Locking x402 vault...");
-    }, 2200);
+    setSealingProgress(18);
+    setSealingStage("Committing resolutions to Walrus Memory...");
+
+    const genesisPledgeSui = 0.20;
 
     try {
       const activeRules = rules.filter((r) => r.title.trim().length > 0);
@@ -883,32 +1076,40 @@ export default function YearboundApp() {
           ? realAddress
           : linkedAddress || (demoAddress || DEMO_SUI_ADDRESS);
 
-      let data: any = null;
-
-      try {
-        const res = await fetch("/api/walrus", {
+      // Run Walrus Genesis Pact inscription concurrently with initial live balance query
+      const [walrusRes, initialBal] = await Promise.all([
+        fetch("/api/walrus", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           signal: AbortSignal.timeout(30000),
           body: JSON.stringify({
             rules: activeRules,
-            initialDepositSui: escrowDeposit,
+            initialDepositSui: genesisPledgeSui,
             unlockDate: "2026-12-25",
             walletAddress: activeAccountAddress,
             accountType,
           }),
-        });
+        })
+          .then((r) => r.json())
+          .catch((fetchErr) => {
+            console.warn(`[Vault] Submission notice:`, fetchErr);
+            return null;
+          }),
+        accountType === "demo"
+          ? refreshLiveBalance(activeAccountAddress, "demo")
+          : Promise.resolve(null),
+      ]);
 
-        const resData = await res.json();
-        if (resData && (resData.success || resData.genesisBlobId || resData.primaryBlobId)) {
-          data = resData;
-        }
-      } catch (fetchErr) {
-        console.warn(`[Vault] Submission notice:`, fetchErr);
-      }
+      const data =
+        walrusRes && (walrusRes.success || walrusRes.genesisBlobId || walrusRes.primaryBlobId)
+          ? walrusRes
+          : null;
+
+      let resolvedGenesisId = walrusBlobId;
 
       if (data && (data.genesisBlobId || data.primaryBlobId)) {
         const genesisId = data.genesisBlobId || data.primaryBlobId;
+        resolvedGenesisId = genesisId;
         setWalrusBlobId(genesisId);
 
         const timestampStr = new Intl.DateTimeFormat("en-US", {
@@ -952,7 +1153,7 @@ export default function YearboundApp() {
             type: "genesis_pact",
             pactId: data.pactId,
             wallet: activeAccountAddress,
-            x402VaultLock: `${escrowDeposit} SUI until ${unlockDate}`,
+            x402VaultLock: `${genesisPledgeSui.toFixed(2)} SUI until ${unlockDate}`,
             totalRules: (data.blobs || []).length,
             resolutions: (data.blobs || []).map((b: any, i: number) => ({
               index: i + 1,
@@ -990,46 +1191,99 @@ export default function YearboundApp() {
         }
 
         setWalrusBlobs([initialPactBlob, ...individualBlobs]);
-
-        // Execute real on-chain deposit to x402 Move vault on Sui
-        try {
-          const privateKey =
-            accountType === "demo"
-              ? (exportDemoPrivateKeyHex() || undefined)
-              : accountType === "real"
-              ? (exportRealPrivateKeyHex() || undefined)
-              : undefined;
-
-          const vaultRes = await executeX402VaultDeposit({
-            amountSui: 0.20,
-            reason: "Genesis Commitment Pledge",
-            commitmentId: "pact_primary",
-            walletMode: accountType,
-            privateKeySecret: privateKey,
-            senderAddress: activeAccountAddress,
-          });
-          setEscrowDeposit(0.20);
-          await refreshLiveBalance(activeAccountAddress, accountType);
-        } catch (vaultDepositErr) {
-          console.warn("[x402 Genesis Vault] Real deposit notice:", vaultDepositErr);
-          setEscrowDeposit(0.20);
-        }
-
-        triggerSnackbar("Saved to Walrus", `Genesis Pact #${genesisId.slice(0, 12)}...`, genesisId);
-        setStep(4);
-        setActiveTab("home");
-      } else {
-        triggerSnackbar("Notice", "Walrus memory is synchronizing in background. Proceeding...");
-        setStep(4);
-        setActiveTab("home");
       }
+
+      // Demo Mode: Auto-claim up to 2.00 SUI Testnet Gas during onboarding loading
+      let claimedDrops = 0;
+      if (accountType === "demo") {
+        let currentDemoBal = initialBal;
+        if (currentDemoBal === null || currentDemoBal < 1.95) {
+          const dropsNeeded = currentDemoBal !== null && currentDemoBal >= 0.95 ? 1 : 2;
+          for (let drop = 1; drop <= dropsNeeded; drop++) {
+            setSealingProgress(drop === 1 ? 44 : 68);
+            setSealingStage(`Claiming 2.00 SUI Testnet gas (${drop}/${dropsNeeded})...`);
+            const claimRes = await handleRequestFaucet(activeAccountAddress, {
+              quietStartSnackbar: true,
+              quietResultSnackbar: true,
+              maxTimeoutMs: 115000,
+            });
+            if (!claimRes.success) {
+              break;
+            }
+            claimedDrops++;
+            if (drop < dropsNeeded) {
+              await new Promise((r) => setTimeout(r, 600));
+              const updatedBal = await refreshLiveBalance(activeAccountAddress, "demo");
+              if (updatedBal !== null) currentDemoBal = updatedBal;
+              if (currentDemoBal !== null && currentDemoBal >= 1.95) break;
+            }
+          }
+          if (claimedDrops > 0) {
+            // Brief pause so newly minted faucet coins are indexed for the x402 Move deposit
+            await new Promise((r) => setTimeout(r, 1200));
+          }
+        }
+      }
+
+      // Execute real on-chain 0.20 SUI deposit to x402 Move vault on Sui
+      setSealingProgress(88);
+      setSealingStage("Locking 0.20 SUI in x402 vault...");
+
+      let vaultTxReal = false;
+      try {
+        const privateKey =
+          accountType === "demo"
+            ? (exportDemoPrivateKeyHex() || undefined)
+            : accountType === "real"
+            ? (exportRealPrivateKeyHex() || undefined)
+            : undefined;
+
+        const vaultRes = await executeX402VaultDeposit({
+          amountSui: genesisPledgeSui,
+          reason: "Genesis Commitment Pledge",
+          commitmentId: data?.pactId || "pact_primary",
+          walletMode: accountType,
+          privateKeySecret: privateKey,
+          senderAddress: activeAccountAddress,
+        });
+        vaultTxReal = Boolean(vaultRes?.isRealOnChain);
+      } catch (vaultDepositErr) {
+        console.warn("[x402 Genesis Vault] Real deposit notice:", vaultDepositErr);
+      }
+
+      setEscrowDeposit(genesisPledgeSui);
+      const syncedBal = await refreshLiveBalance(activeAccountAddress, accountType, { syncRetry: true });
+      if (vaultTxReal && syncedBal === null) {
+        setAvailableBalance((prev) => Math.max(0, prev - genesisPledgeSui));
+      }
+
+      setSealingProgress(100);
+      justCommittedGenesisRef.current = true;
+      setBriefingRefreshTick((t) => t + 1);
+
+      if (accountType === "demo" && claimedDrops > 0) {
+        triggerSnackbar(
+          "Vault Locked & Testnet Funded",
+          `Claimed ${claimedDrops === 2 ? "2.00" : "1.00"} SUI · 0.20 SUI locked in x402 vault`,
+          resolvedGenesisId
+        );
+      } else if (data && (data.genesisBlobId || data.primaryBlobId)) {
+        triggerSnackbar(
+          "Saved to Walrus",
+          `Genesis Pact #${resolvedGenesisId.slice(0, 12)}...`,
+          resolvedGenesisId
+        );
+      } else {
+        triggerSnackbar("Vault Locked", "Entered dashboard with Tatum & Walrus active");
+      }
+
+      setStep(4);
+      setActiveTab("home");
     } catch {
       triggerSnackbar("Notice", "Walrus memory connecting in background. Entering...");
       setStep(4);
       setActiveTab("home");
     } finally {
-      clearTimeout(t1);
-      clearTimeout(t2);
       setIsSubmitting(false);
       setSealingStage("");
       setSealingProgress(0);
@@ -1038,7 +1292,7 @@ export default function YearboundApp() {
 
   // Drawer Action: Add another resolution to Walrus
   const handleCommitNewResolution = async () => {
-    if (!newRuleTitle.trim()) return;
+    if (!newRuleTitle.trim() || isDegradedModeRef.current) return;
     setIsCommittingNewRule(true);
     try {
       const newRule: RuleItem = {
@@ -1049,13 +1303,21 @@ export default function YearboundApp() {
         breaches: 0,
       };
 
+      const activeAccountAddress =
+        accountType === "demo"
+          ? (demoAddress || DEMO_SUI_ADDRESS)
+          : accountType === "real"
+          ? realAddress
+          : linkedAddress || (demoAddress || DEMO_SUI_ADDRESS);
+
       const res = await fetch("/api/walrus", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           rules: [newRule],
-          initialDepositSui: escrowDeposit,
+          initialDepositSui: escrowDeposit || 0.20,
           unlockDate: "2026-12-25",
+          walletAddress: activeAccountAddress,
         }),
       });
 
@@ -1105,6 +1367,7 @@ export default function YearboundApp() {
       setNewRuleCondition("");
       setNewRulePenalty(0.05);
       setIsAddResolutionOpen(false);
+      setBriefingRefreshTick((t) => t + 1);
 
       triggerSnackbar("Resolution Committed to Walrus", `Blob #${generatedBlobId.slice(0, 10)}...`, generatedBlobId);
     } catch {
@@ -1128,12 +1391,54 @@ export default function YearboundApp() {
   const closeSendFlow = () => {
     setIsSendOpen(false);
     setSendSubStep("amount");
+    if (!isDegradedModeRef.current) {
+      refreshLiveBalance(undefined, accountType);
+    }
+    setBriefingRefreshTick((t) => t + 1);
   };
 
   // Handle Approved Transaction Recording to Walrus Memory & Tatum Sui Gateway
   const recordApprovedTransaction = async () => {
     const numAmount = parseFloat(sendAmount) || 0;
     setAvailableBalance((prev) => Math.max(0, prev - numAmount));
+
+    const timestampStr = new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(new Date());
+
+    // When Walrus & Tatum are disabled: bypass Tatum transfers, balance polling, and Walrus inscription
+    if (isDegradedMode || isDegradedModeRef.current) {
+      const statelessRecord: InfractionRecord = {
+        id: `tx_offline_${Date.now()}`,
+        ruleTitle: "Unchecked Transfer",
+        ruleCondition: "Walrus Memory & Tatum disabled",
+        amount: sendAmount,
+        memo: sendMemo || "Unchecked transfer",
+        timestamp: timestampStr,
+        penaltySui: 0,
+        blobId: "",
+        dayOfYear: currentDayOfYear,
+        verdict: "honored",
+        recipient: sendRecipient,
+        provider: "Offline Mode (Tatum & Walrus Disabled)",
+        isUnfunded: false,
+        isRealOnChain: false,
+        isOffChainVoucher: false,
+        source: "user",
+      };
+      setInfractions((prev) => [statelessRecord, ...prev]);
+
+      setIsSendOpen(false);
+      setSendSubStep("amount");
+      triggerSnackbar(
+        "Transfer Sent",
+        `${sendAmount} SUI · Walrus & Tatum disabled — no resolution checks performed`
+      );
+      return;
+    }
 
     const activeAccountAddress =
       accountType === "demo"
@@ -1176,7 +1481,7 @@ export default function YearboundApp() {
       const ptbRes = await fetch("/api/sui-transfer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        signal: AbortSignal.timeout(6000),
+        signal: AbortSignal.timeout(20000),
         body: JSON.stringify({
           senderAddress: activeAccountAddress,
           recipientAddress: sendRecipient,
@@ -1194,7 +1499,7 @@ export default function YearboundApp() {
         transferProvider = ptbData.provider || "Tatum Sui Gateway";
         isUnfunded = Boolean(ptbData.unfunded);
         isRealOnChain = Boolean(ptbData.onChain);
-        await refreshLiveBalance(activeAccountAddress, accountType);
+        await refreshLiveBalance(activeAccountAddress, accountType, { syncRetry: true });
       }
     } catch (ptbErr) {
       console.warn("[PTB Transfer] Tatum API notice:", ptbErr);
@@ -1228,13 +1533,6 @@ export default function YearboundApp() {
     } catch (walrusErr) {
       console.warn("[Walrus] Approved tx memory notice:", walrusErr);
     }
-
-    const timestampStr = new Intl.DateTimeFormat("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(new Date());
 
     const approvedRecord: InfractionRecord = {
       id: `tx_${Date.now()}`,
@@ -1294,21 +1592,12 @@ export default function YearboundApp() {
   const handleReviewAndCheck = async () => {
     if (!sendMemo.trim()) return;
 
-    // Degraded Mode (Web2 stateless banking simulation)
-    if (isDegradedMode) {
-      setSendSubStep("checking");
-      setCheckingProgressStage("Routing through legacy Web2 processor (zero memory)...");
+    // When Walrus & Tatum are disabled: do NOT check resolutions at all and NEVER stop transactions
+    if (isDegradedMode || isDegradedModeRef.current) {
+      setSendSubStep("approved");
       setTimeout(() => {
-        setBreachReason("Transaction flagged by basic keyword filter #0492.");
-        setWallyRoast("Automated System Notice: Your bank has declined this transfer under Rule #0492. (Degraded mode active: zero memory, zero habit analysis, flat penalty).");
-        setMatchedRuleTitle("Default Cardholder Policy");
-        setBreachPenaltySui(0.05);
-        setWalrusRecalledCount(0);
-        setRepeatInfractionCount(1);
-        setStreakBroken(false);
-        setBehavioralInsight("Legacy Banking Notice: Cross-session pattern synthesis unavailable. Transaction history will not carry over.");
-        setSendSubStep("breach");
-      }, 900);
+        recordApprovedTransaction();
+      }, 700);
       return;
     }
 
@@ -1344,6 +1633,7 @@ export default function YearboundApp() {
           timestamp: new Date().toISOString(),
           rules: activeRulesList.map((r) => ({
             id: r.id,
+            blobId: r.blobId,
             title: r.title,
             condition: r.condition,
             whyItMatters: r.whyItMatters,
@@ -1398,12 +1688,18 @@ export default function YearboundApp() {
 
         const matchedRuleObj = activeRulesList.find(
           (r) =>
+            (data.matchedRuleId && String(r.id) === String(data.matchedRuleId)) ||
+            r.title.toLowerCase() === (data.matchedRule || "").toLowerCase() ||
             r.title.toLowerCase().includes((data.matchedRule || "").toLowerCase()) ||
             (data.matchedRule || "").toLowerCase().includes(r.title.toLowerCase())
         );
         setMatchedRuleMotivation(data.motivation || matchedRuleObj?.whyItMatters || "");
         setMatchedRuleCondition(matchedRuleObj?.condition || "");
-        setMatchedRuleBlobId(data.matchedRuleBlobId || matchedRuleObj?.blobId || walrusBlobId || "");
+        setMatchedRuleBlobId(
+          data.matchedRuleBlobId ||
+            matchedRuleObj?.blobId ||
+            (matchedRuleObj?.id ? `walrus_blob_rule_${matchedRuleObj.id}` : "")
+        );
         if (data.wallyRoast) {
           setWallyRoast(data.wallyRoast);
         }
@@ -1428,6 +1724,7 @@ export default function YearboundApp() {
     } catch (err) {
       console.warn("[Send Check] Verification notice, proceeding gracefully:", err);
       clearTimeout(stageTimer1);
+      clearTimeout(stageTimer2);
       setSendSubStep("approved");
       setTimeout(() => {
         recordApprovedTransaction();
@@ -1440,13 +1737,13 @@ export default function YearboundApp() {
     setIsSubmitting(true);
     setPayFineStage("Settling fine via x402...");
 
-    // Safety timeout: guarantees button never stays stuck in loading
+    // Safety timeout: guarantees button never stays stuck in loading while giving real Testnet PTBs room to settle
     const safetyTimer = setTimeout(() => {
       console.warn("[Fine Settlement] Safety timeout triggered, auto-advancing");
       setIsSubmitting(false);
       setPayFineStage("");
       setSendSubStep("penalty_recorded");
-    }, 12000);
+    }, 30000);
 
     try {
       const penaltyAmt = breachPenaltySui || 0.05;
@@ -1523,7 +1820,7 @@ export default function YearboundApp() {
           const ptbRes = await fetch("/api/sui-transfer", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            signal: AbortSignal.timeout(6000),
+            signal: AbortSignal.timeout(20000),
             body: JSON.stringify({
               senderAddress: activeAccountAddress,
               recipientAddress: sendRecipient,
@@ -1654,7 +1951,8 @@ export default function YearboundApp() {
       );
       setAvailableBalance((prev) => Math.max(0, prev - penaltyAmt - transferAmt));
       setEscrowDeposit((prev) => prev + penaltyAmt);
-      refreshLiveBalance(activeAccountAddress, accountType);
+      refreshLiveBalance(activeAccountAddress, accountType, { syncRetry: true });
+      setBriefingRefreshTick((t) => t + 1);
       setLatestFineBlobId(fineBlobId);
       clearTimeout(safetyTimer);
       setSendSubStep("penalty_recorded");
@@ -1678,13 +1976,14 @@ export default function YearboundApp() {
     setTimeout(() => setCopiedBlob(false), 2000);
   };
 
-  const copyAddress = () => {
+  const handleReceiveClick = async () => {
     const addr =
       accountType === "demo"
         ? (demoAddress || DEMO_SUI_ADDRESS)
         : accountType === "real"
         ? realAddress
         : linkedAddress || (demoAddress || DEMO_SUI_ADDRESS);
+
     if (navigator?.clipboard?.writeText) {
       navigator.clipboard.writeText(addr).catch(() => {});
     } else {
@@ -1699,7 +1998,45 @@ export default function YearboundApp() {
         document.body.removeChild(textarea);
       } catch {}
     }
+
     setCopiedAddress(true);
+    setTimeout(() => setCopiedAddress(false), 2500);
+
+    if (isDegradedMode || isDegradedModeRef.current) {
+      triggerSnackbar(
+        "Address Copied",
+        "Tatum & Walrus are disabled — turn them back on to claim gas or sync balance"
+      );
+      return;
+    }
+
+    if (accountType === "demo") {
+      if (isRequestingFaucet) {
+        triggerSnackbar("Address Copied", "Already claiming 1.00 Testnet SUI for your address...");
+        return;
+      }
+      triggerSnackbar(
+        "Address Copied · Claiming Testnet SUI",
+        `${addr.slice(0, 8)}...${addr.slice(-4)} · Requesting 1.00 SUI drop`
+      );
+      const result = await handleRequestFaucet(addr, {
+        quietStartSnackbar: true,
+        quietResultSnackbar: true,
+      });
+      if (result.success) {
+        setBriefingRefreshTick((t) => t + 1);
+        triggerSnackbar(
+          "Address Copied · +1.00 SUI Claimed",
+          `Tx #${result.digest?.slice(0, 10)}... · Balance updated`
+        );
+      } else {
+        triggerSnackbar(
+          "Address Copied",
+          result.error || "Faucet busy right now — retry shortly"
+        );
+      }
+      return;
+    }
 
     const activeInflowRule = activeRulesList.find((r) => {
       const t = `${r.title} ${r.condition}`.toLowerCase();
@@ -1718,13 +2055,13 @@ export default function YearboundApp() {
       : null;
     const dynamicTarget = numMatch ? `${numMatch[1]} SUI Target` : null;
 
+    await refreshLiveBalance(addr, accountType, { syncRetry: true });
     triggerSnackbar(
-      "Address Copied · Tatum Inflow Tracking Active",
+      "Address Copied · Balance Synced",
       dynamicTarget
         ? `Auditing "${activeInflowRule?.title}" (${dynamicTarget} via Tatum Gateway)`
         : "Audited on-chain via Tatum Sui Gateway"
     );
-    setTimeout(() => setCopiedAddress(false), 2500);
   };
 
   // Persistent milestone cache & Walrus log tracking for idempotent time travel
@@ -1790,7 +2127,7 @@ export default function YearboundApp() {
         : undefined;
 
     if (milestone === "jan1") {
-      setCurrentDateStr("Thursday, Jan 1, 2026");
+      setCurrentDateStr("Thur, Jan 1");
       setCurrentDayOfYear(1);
       setEscrowDeposit(0.20 + userPenaltySum);
       setIsVaultUnlocked(false);
@@ -1801,10 +2138,18 @@ export default function YearboundApp() {
     }
 
     if (milestone === "feb14") {
-      setCurrentDateStr("Saturday, Feb 14, 2026");
+      setCurrentDateStr("Sat, Feb 14");
       setCurrentDayOfYear(45);
       setIsVaultUnlocked(false);
       setIsVaultClaimed(false);
+
+      if (isDegradedMode || isDegradedModeRef.current) {
+        triggerSnackbar(
+          "Time Travel: Feb 14",
+          "Walrus & Tatum disabled — no memory log or x402 penalty applied"
+        );
+        return;
+      }
 
       let febInfrs = milestoneCacheRef.current.get("feb14");
       if (!febInfrs) {
@@ -1828,7 +2173,7 @@ export default function YearboundApp() {
           txHash = x402Result.txHash;
           explorerUrl = x402Result.explorerUrl;
           isRealOnChain = x402Result.isRealOnChain;
-          refreshLiveBalance(activeAccountAddress, accountType);
+          refreshLiveBalance(activeAccountAddress, accountType, { syncRetry: true });
         } catch (depositErr) {
           console.warn("[Time Travel Feb 14] Vault deposit notice:", depositErr);
         }
@@ -1919,9 +2264,20 @@ export default function YearboundApp() {
 
     if (milestone === "jul20" || milestone === "dec25") {
       const isChristmas = milestone === "dec25";
-      setCurrentDateStr(isChristmas ? "Friday, Dec 25, 2026" : "Monday, Jul 20, 2026");
+      setCurrentDateStr(isChristmas ? "Fri, Dec 25" : "Mon, Jul 20");
       setCurrentDayOfYear(isChristmas ? 359 : 201);
       setIsVaultUnlocked(isChristmas);
+      if (isChristmas) {
+        setIsChristmasBannerDismissed(false);
+      }
+
+      if (isDegradedMode || isDegradedModeRef.current) {
+        triggerSnackbar(
+          isChristmas ? "🎅 Time Travel: Dec 25 (Christmas Unlock)" : "Time Travel: Jul 20",
+          "Walrus & Tatum disabled — stateless view only"
+        );
+        return;
+      }
 
       let summerInfrs = milestoneCacheRef.current.get("jul20");
       if (!summerInfrs) {
@@ -1990,7 +2346,7 @@ export default function YearboundApp() {
           txHash3 = x3.txHash;
           explorerUrl3 = x3.explorerUrl;
           isReal3 = x3.isRealOnChain;
-          refreshLiveBalance(activeAccountAddress, accountType);
+          refreshLiveBalance(activeAccountAddress, accountType, { syncRetry: true });
         } catch (depositErr) {
           console.warn("[Time Travel Jul 20] Vault deposit notice:", depositErr);
         }
@@ -2108,6 +2464,7 @@ export default function YearboundApp() {
     const claimedAmt = escrowDeposit;
     setAvailableBalance((prev) => prev + claimedAmt);
     setIsVaultClaimed(true);
+    setBriefingRefreshTick((t) => t + 1);
     triggerSnackbar(
       "🎅 Christmas Vault Unlocked & Claimed!",
       `+${claimedAmt.toFixed(2)} SUI released from Sui Move contract into wallet.`
@@ -2130,7 +2487,7 @@ export default function YearboundApp() {
           MOBILE SHELL (Centered vertical frame on desktop, solid black ground)
           ==================================================================== */}
       <div className={`relative w-full max-w-[420px] h-full md:h-[860px] md:max-h-[92vh] bg-[#000000] md:border md:border-[#222226] md:rounded-[40px] flex flex-col justify-between overflow-hidden shadow-2xl transition-all duration-300 ${
-        isDegradedMode ? "filter grayscale contrast-90" : ""
+        isDegradedMode ? "grayscale-[50%]" : ""
       }`}>
         {/* Global App Background Image (for Sign In & the rest of the app: pure starry sky, no dark overlay) */}
         {step >= 0 && (
@@ -2707,7 +3064,7 @@ export default function YearboundApp() {
 
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-white/70">Initial x402 Deposit</span>
-                  <span className="text-xs text-[#ebaf64] font-mono font-medium">{escrowDeposit} SUI</span>
+                  <span className="text-xs text-[#ebaf64] font-mono font-medium">{(escrowDeposit || 0.2).toFixed(2)} SUI</span>
                 </div>
 
                 <div className="flex items-center justify-between border-t border-[#ebaf64]/20 pt-2.5">
@@ -2798,30 +3155,8 @@ export default function YearboundApp() {
                 </div>
 
                 <p className="text-xs text-white/70 leading-relaxed">
-                  Sandbox environment preloaded with testnet SUI to try out pacts risk-free.
+                  Sui Testnet sandbox. Auto-claims 2.00 test SUI when locking your vault to test real transfers and Time Travel risk-free.
                 </p>
-
-                <div className="flex items-center justify-between pt-1 border-t border-white/10 mt-1">
-                  <span className="text-[11px] font-mono text-white/60">
-                    Testnet: <span className="text-[#ebaf64] font-semibold">{availableBalance.toFixed(2)} SUI</span>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleRequestFaucet(demoAddress || DEMO_SUI_ADDRESS);
-                    }}
-                    disabled={isRequestingFaucet}
-                    className="py-1 px-3 rounded-full bg-[#ebaf64]/15 hover:bg-[#ebaf64]/25 text-[#ebaf64] border border-[#ebaf64]/30 text-[11px] font-mono flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                  >
-                    {isRequestingFaucet ? (
-                      <span className="w-2.5 h-2.5 border border-[#ebaf64] border-t-transparent rounded-full animate-spin inline-block" />
-                    ) : (
-                      <Sparkles size={11} />
-                    )}
-                    <span>{isRequestingFaucet ? "Claiming..." : "Claim 1.00 SUI"}</span>
-                  </button>
-                </div>
               </div>
 
               {/* Option 2: Real Account */}
@@ -2852,7 +3187,7 @@ export default function YearboundApp() {
                 </div>
 
                 <p className="text-xs text-white/70 leading-relaxed">
-                  Self-custodial Sui wallet with real funds and cryptographic enforcement.
+                  Self-custodial Sui Mainnet wallet with real funds and cryptographic enforcement.
                 </p>
               </div>
 
@@ -2950,13 +3285,60 @@ export default function YearboundApp() {
             ================================================================== */}
         {step === 4 && !isSendOpen && (
           <div className="relative z-10 flex-1 flex flex-col justify-between overflow-hidden animate-in fade-in duration-300">
+            {/* FLOATING CHRISTMAS UNLOCK BANNER (Semi-transparent overlay, does not push Home content down) */}
+            {activeTab === "home" && isVaultUnlocked && !isChristmasBannerDismissed && (
+              <div className="absolute top-[74px] sm:top-[84px] left-5 right-5 z-30 bg-black/65 backdrop-blur-2xl border border-[#ebaf64]/45 rounded-3xl p-4 sm:p-5 flex flex-col gap-3 shadow-[0_16px_48px_rgba(0,0,0,0.75)] animate-in fade-in slide-in-from-top-3 duration-200">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Gift size={16} className="text-[#ebaf64] shrink-0" />
+                    <span className="text-xs font-semibold text-white uppercase tracking-wider truncate">
+                      Christmas Vault Unlocked
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-[10px] font-mono text-[#ebaf64] bg-[#ebaf64]/15 px-2 py-0.5 rounded border border-[#ebaf64]/25">
+                      {isVaultClaimed ? "Funds Claimed" : "Time-Lock Expired"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsChristmasBannerDismissed(true)}
+                      className="text-white/55 hover:text-white p-1 rounded-lg transition-colors cursor-pointer"
+                      title="Dismiss reminder"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                </div>
+                <p className="text-xs text-[#D4D4D8] leading-relaxed">
+                  {isVaultClaimed
+                    ? `You claimed ${escrowDeposit.toFixed(2)} SUI back to your wallet. Full-year discipline cycle completed.`
+                    : `Sui network clock reached December 25. You saved ${escrowDeposit.toFixed(2)} SUI from your impulsive self.`}
+                </p>
+                {!isVaultClaimed ? (
+                  <button
+                    type="button"
+                    onClick={handleClaimChristmasVault}
+                    className="w-full py-2.5 px-4 rounded-full bg-[#ebaf64] hover:bg-[#f3ba6f] text-black font-semibold text-xs transition-all duration-150 flex items-center justify-center gap-2 active:scale-[0.98] shadow-sm cursor-pointer"
+                  >
+                    <Gift size={14} />
+                    <span>Claim Christmas Savings ({escrowDeposit.toFixed(2)} SUI)</span>
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2 text-xs font-mono text-[#10B981] bg-[#10B981]/10 p-2.5 rounded-2xl border border-[#10B981]/25">
+                    <Check size={14} className="shrink-0" />
+                    <span>{escrowDeposit.toFixed(2)} SUI released into available balance</span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* TAB: HOME */}
             {activeTab === "home" && (
               <div className="flex-1 overflow-y-auto px-5 sm:px-7 pt-6 sm:pt-8 pb-36 flex flex-col gap-4 overscroll-contain">
                 {/* 1. TOP HEADER: PROMINENT DATE + MINIMALIST WALRUS SWITCH */}
                 <div className="flex items-center justify-between pt-1 pb-1">
                   <div className="text-[26px] sm:text-[30px] font-bold tracking-[0.02em] leading-tight text-[#ebaf64]">
-                    {currentDateStr || "Sunday, Nov 8"}
+                    {currentDateStr || "Mon, Nov 9"}
                   </div>
                   <div className="flex items-center gap-2.5">
                     <span className="text-xs font-mono text-white/70">Walrus</span>
@@ -2968,7 +3350,7 @@ export default function YearboundApp() {
                       className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
                         !isDegradedMode ? "bg-[#ebaf64]" : "bg-white/20"
                       }`}
-                      title={!isDegradedMode ? "Walrus & Tatum Active" : "Walrus Disconnected"}
+                      title={!isDegradedMode ? "Walrus & Tatum Active" : "Walrus & Tatum Disabled"}
                     >
                       <span
                         className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-black shadow-lg ring-0 transition duration-200 ease-in-out ${
@@ -2979,44 +3361,7 @@ export default function YearboundApp() {
                   </div>
                 </div>
 
-                {/* CHRISTMAS UNLOCK BANNER (When Time-Lock Reaches Dec 25) */}
-                {isVaultUnlocked && (
-                  <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 flex flex-col gap-3 shadow-md animate-in zoom-in-95 duration-200">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Gift size={16} className="text-[#ebaf64]" />
-                        <span className="text-xs font-semibold text-white uppercase tracking-wider">
-                          Christmas Vault Unlocked
-                        </span>
-                      </div>
-                      <span className="text-[10px] font-mono text-[#ebaf64] bg-[#ebaf64]/10 px-2 py-0.5 rounded border border-[#ebaf64]/20">
-                        {isVaultClaimed ? "Funds Claimed" : "Time-Lock Expired"}
-                      </span>
-                    </div>
-                    <p className="text-xs text-[#D4D4D8] leading-relaxed">
-                      {isVaultClaimed
-                        ? `You claimed ${escrowDeposit}.00 SUI back to your wallet. Full year discipline cycle completed.`
-                        : `Sui network clock reached December 25. You saved ${escrowDeposit}.00 SUI from your impulsive self.`}
-                    </p>
-                    {!isVaultClaimed ? (
-                      <button
-                        type="button"
-                        onClick={handleClaimChristmasVault}
-                        className="w-full py-3 px-4 rounded-full bg-[#ebaf64] hover:bg-[#f3ba6f] text-black font-semibold text-xs transition-all duration-150 flex items-center justify-center gap-2 active:scale-[0.98] shadow-sm"
-                      >
-                        <Gift size={14} />
-                        <span>Claim Christmas Savings ({escrowDeposit}.00 SUI)</span>
-                      </button>
-                    ) : (
-                      <div className="flex items-center gap-2 text-xs font-mono text-[#10B981] bg-[#10B981]/10 p-2.5 rounded-2xl border border-[#10B981]/20">
-                        <Check size={14} />
-                        <span>55.00 SUI released from Sui Move contract into available balance</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* 2. UNIFIED HERO CARD: BALANCE + ACTIONS + WALLY'S VOICE (Zero Slop, No Divider Line) */}
+                {/* 2. UNIFIED HERO CARD: BALANCE + ACTIONS + WALLY'S VOICE */}
                 <div className="relative bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 sm:p-6 pt-7 sm:pt-8 flex flex-col gap-4 shadow-md transition-all duration-200 mt-8">
                   {/* Wally Mascot with Memories Book: Small, above the card, on the left top edge */}
                   <div className="absolute -top-7 sm:-top-8 left-5 sm:left-6 z-20 pointer-events-none select-none">
@@ -3033,157 +3378,146 @@ export default function YearboundApp() {
                       {availableBalance.toFixed(2)} SUI
                     </span>
                     <div className="flex items-center gap-2 shrink-0">
-                      {accountType === "demo" && (
-                        <button
-                          type="button"
-                          onClick={() => handleRequestFaucet(demoAddress || DEMO_SUI_ADDRESS)}
-                          disabled={isRequestingFaucet}
-                          className="py-2.5 px-3 rounded-full bg-[#ebaf64]/15 hover:bg-[#ebaf64]/25 text-[#ebaf64] border border-[#ebaf64]/30 font-medium text-xs font-mono transition-all duration-150 flex items-center justify-center gap-1 active:scale-95 cursor-pointer"
-                          title="Claim 1.00 SUI Testnet Gas"
-                        >
-                          {isRequestingFaucet ? (
-                            <span className="w-3 h-3 border border-[#ebaf64] border-t-transparent rounded-full animate-spin inline-block" />
-                          ) : (
-                            <Sparkles size={13} />
-                          )}
-                          <span>{isRequestingFaucet ? "Claiming..." : "+1 SUI"}</span>
-                        </button>
-                      )}
                       <button
                         type="button"
                         onClick={openSendFlow}
-                        className="py-2.5 px-4 rounded-full bg-[#ebaf64] hover:bg-[#f3ba6f] text-black font-semibold text-xs transition-all duration-150 flex items-center justify-center gap-1.5 active:scale-95 shadow-sm"
+                        className="py-2.5 px-4 rounded-full bg-[#ebaf64] hover:bg-[#f3ba6f] text-black font-semibold text-xs transition-all duration-150 flex items-center justify-center gap-1.5 active:scale-95 shadow-sm cursor-pointer"
                       >
                         <ArrowUpRight size={14} className="stroke-[2.5]" />
                         <span>Send</span>
                       </button>
                       <button
                         type="button"
-                        onClick={copyAddress}
-                        className="py-2.5 px-4 rounded-full bg-black/40 hover:bg-black/60 text-[#ebaf64] border border-[#ebaf64]/30 hover:border-[#ebaf64]/60 font-medium text-xs transition-all duration-150 flex items-center justify-center gap-1.5 active:scale-95"
+                        onClick={handleReceiveClick}
+                        className="py-2.5 px-4 rounded-full bg-black/40 hover:bg-black/60 text-[#ebaf64] border border-[#ebaf64]/30 hover:border-[#ebaf64]/60 font-medium text-xs transition-all duration-150 flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
+                        title={
+                          isDegradedMode
+                            ? "Copy address (Tatum & Walrus disabled)"
+                            : accountType === "demo"
+                            ? "Copy address & claim 1.00 Testnet SUI"
+                            : "Copy address & sync live balance"
+                        }
                       >
-                        {copiedAddress ? <Check size={14} className="text-[#ebaf64]" /> : <ArrowDownLeft size={14} />}
-                        <span>{copiedAddress ? "Copied" : "Receive"}</span>
+                        {isRequestingFaucet ? (
+                          <span className="w-3 h-3 border border-[#ebaf64] border-t-transparent rounded-full animate-spin inline-block" />
+                        ) : copiedAddress ? (
+                          <Check size={14} className="text-[#ebaf64]" />
+                        ) : (
+                          <ArrowDownLeft size={14} />
+                        )}
+                        <span>
+                          {isRequestingFaucet
+                            ? "Claiming..."
+                            : copiedAddress
+                            ? "Copied"
+                            : "Receive"}
+                        </span>
                       </button>
                     </div>
                   </div>
 
                   <div className="flex flex-col gap-1.5 pt-1">
-                    <span className="text-[11px] font-mono text-[#ebaf64]/80 uppercase tracking-wider font-semibold">
-                      {!isDegradedMode ? "Wally · Walrus Memory" : "Wally · Memory Offline"}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-mono text-[#ebaf64]/80 uppercase tracking-wider font-semibold">
+                        {!isDegradedMode ? "Wally · Walrus Memory" : "Wally · Memory Offline"}
+                      </span>
+                      {!isDegradedMode && isLoadingWallyBriefing && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#ebaf64] animate-pulse" />
+                      )}
+                    </div>
                     <p className="text-sm text-white/90 leading-relaxed font-normal">
-                      {(() => {
-                        if (isDegradedMode) {
-                          return "Stateless Session: Walrus memory is disconnected. Outgoing transfers are not cross-referenced against your resolutions and past infractions are forgotten.";
-                        }
-                        if (isVaultUnlocked && !isVaultClaimed) {
-                          return `🎅 Merry Christmas! The Sui network clock has passed the vault unlock timestamp. Your accumulated savings of ${escrowDeposit.toFixed(2)} SUI are ready to be claimed!`;
-                        }
-                        if (isVaultClaimed) {
-                          return `🎉 Christmas gift claimed! You successfully locked ${escrowDeposit.toFixed(2)} SUI away from your impulsive past self and reclaimed it for the holidays.`;
-                        }
-                        if (activeMilestone === "jul20") {
-                          return `Walrus memory synthesis: Multiple slip-ups recorded on "${activeRulesList[0]?.title || "your resolution"}". ${escrowDeposit.toFixed(2)} SUI total is now locked away in Move storage.`;
-                        }
-                        if (activeMilestone === "feb14") {
-                          return `Day 45: First slip-up logged. You swore in Walrus Memory: "${activeRulesList[0]?.title || "your resolution"}". ${(activeRulesList[0]?.penalty || 0.05).toFixed(2)} SUI was locked into the Move vault via x402.`;
-                        }
-
-                        // Recent breaches in Walrus memory
-                        const recentBreaches = infractions.filter((i) => i.verdict === "broken");
-                        if (recentBreaches.length > 0) {
-                          const latest = recentBreaches[0];
-                          const rule = activeRulesList.find((r) => r.title.toLowerCase() === latest.ruleTitle.toLowerCase());
-                          const paraphrased = rule?.whyItMatters ? paraphraseUserMotivation(rule.whyItMatters) : "";
-                          return `Walrus memory alert: Breach recorded on '${latest.ruleTitle}' (${latest.memo || "impulse transfer"}). ${recentBreaches.length === 1 ? "1 infraction" : `${recentBreaches.length} infractions`} on record · ${escrowDeposit.toFixed(2)} SUI locked in Christmas vault. ${paraphrased ? `Stay mindful: ${paraphrased}.` : "Stay vigilant."}`;
-                        }
-
-                        // Honored transfers in Walrus memory
-                        const honoredTxs = infractions.filter((i) => i.verdict === "honored");
-                        if (honoredTxs.length > 0) {
-                          const primary = activeRulesList[0];
-                          const paraphrased = primary?.whyItMatters ? paraphraseUserMotivation(primary.whyItMatters) : "";
-                          return `Clean streak active. Walrus memory has audited and verified ${honoredTxs.length} compliant ${honoredTxs.length === 1 ? "transfer" : "transfers"}. 0 infractions against your ${activeRulesList.length} commitments. ${paraphrased ? `Holding strong: ${paraphrased}.` : "Keep your streak intact."}`;
-                        }
-
-                        // Genesis Pact
-                        if (activeRulesList.length > 0) {
-                          const primary = activeRulesList[0];
-                          const paraphrased = primary.whyItMatters ? paraphraseUserMotivation(primary.whyItMatters) : "";
-                          return `Genesis Pact locked in Walrus memory across ${activeRulesList.length} commitments. 0 infractions recorded. Monitoring transactions against "${primary.title}" (${(primary.penalty || 0.05).toFixed(2)} SUI penalty standing by). ${paraphrased ? `Committed to: ${paraphrased}.` : ""}`;
-                        }
-
-                        return "Resolutions locked in Walrus memory. I am monitoring your transactions for adherence.";
-                      })()}
+                      {isDegradedMode
+                        ? "Stateless Session: Walrus Memory & Tatum are disabled. Transfers go through unchecked with zero resolution enforcement and nothing saved to memory."
+                        : wallyBriefing ||
+                          (isLoadingWallyBriefing
+                            ? "Synthesizing Walrus Memory..."
+                            : `All ${activeRulesList.length} resolutions are anchored in Walrus Memory with ${escrowDeposit.toFixed(2)} SUI locked in your Christmas vault.`)}
                     </p>
                   </div>
                 </div>
 
                 {/* 3. ACTIVE RESOLUTIONS PREVIEW (Dark Glass Penalties Style) */}
-                <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 shadow-md flex flex-col gap-3.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-base font-semibold text-[#ebaf64]">
-                      {activeRulesList.length} Resolutions
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab("resolutions")}
-                      className="text-xs font-mono text-[#ebaf64]/80 hover:text-white transition-colors"
-                    >
-                      See all →
-                    </button>
-                  </div>
-
-                  <div className="flex flex-col gap-2.5">
-                    {activeRulesList.slice(0, 3).map((rule) => (
-                      <div
-                        key={rule.id}
-                        className="bg-black/30 border border-[#ebaf64]/20 rounded-2xl p-4 flex items-center justify-between gap-3 transition-colors hover:border-[#ebaf64]/40"
+                <div className="relative overflow-hidden bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 shadow-md">
+                  <div
+                    className={`flex flex-col gap-3.5 transition-all duration-300 ${
+                      isDegradedMode ? "blur-md opacity-25 pointer-events-none select-none min-h-[130px]" : ""
+                    }`}
+                    aria-hidden={isDegradedMode}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-base font-semibold text-[#ebaf64]">
+                        {activeRulesList.length} Resolutions
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab("resolutions")}
+                        className="text-xs font-mono text-[#ebaf64]/80 hover:text-white transition-colors"
                       >
-                        <div className="flex flex-col min-w-0">
-                          <span className="text-sm font-medium text-white truncate">
-                            {rule.title}
-                          </span>
-                          <span className="text-[11px] font-mono text-[#ebaf64]/70 mt-0.5">
-                            {rule.penalty} SUI stake per breach
-                          </span>
-                        </div>
+                        See all →
+                      </button>
+                    </div>
 
-                        <div className="relative w-8 h-8 flex items-center justify-center shrink-0">
-                          <svg className="w-8 h-8 -rotate-90" viewBox="0 0 32 32">
-                            <circle
-                              cx="16"
-                              cy="16"
-                              r="13"
-                              fill="none"
-                              stroke="rgba(235, 175, 100, 0.15)"
-                              strokeWidth="2.5"
-                            />
-                            <circle
-                              cx="16"
-                              cy="16"
-                              r="13"
-                              fill="none"
-                              stroke="#ebaf64"
-                              strokeWidth="2.5"
-                              strokeDasharray={81.68}
-                              strokeDashoffset={
-                                rule.breaches && rule.breaches > 0
-                                  ? 81.68 - (rule.breaches / 5) * 81.68
-                                  : 81.68
-                              }
-                              strokeLinecap="round"
-                              className="transition-all duration-700 ease-out"
-                            />
-                          </svg>
-                          <span className="absolute text-[11px] font-mono font-semibold text-[#ebaf64]">
-                            {rule.breaches || 0}
-                          </span>
+                    <div className="flex flex-col gap-2.5">
+                      {activeRulesList.slice(0, 3).map((rule) => (
+                        <div
+                          key={rule.id}
+                          className="bg-black/30 border border-[#ebaf64]/20 rounded-2xl p-4 flex items-center justify-between gap-3 transition-colors hover:border-[#ebaf64]/40"
+                        >
+                          <div className="flex flex-col min-w-0">
+                            <span className="text-sm font-medium text-white truncate">
+                              {rule.title}
+                            </span>
+                            <span className="text-[11px] font-mono text-[#ebaf64]/70 mt-0.5">
+                              {rule.penalty} SUI stake per breach
+                            </span>
+                          </div>
+
+                          <div className="relative w-8 h-8 flex items-center justify-center shrink-0">
+                            <svg className="w-8 h-8 -rotate-90" viewBox="0 0 32 32">
+                              <circle
+                                cx="16"
+                                cy="16"
+                                r="13"
+                                fill="none"
+                                stroke="rgba(235, 175, 100, 0.15)"
+                                strokeWidth="2.5"
+                              />
+                              <circle
+                                cx="16"
+                                cy="16"
+                                r="13"
+                                fill="none"
+                                stroke="#ebaf64"
+                                strokeWidth="2.5"
+                                strokeDasharray={81.68}
+                                strokeDashoffset={
+                                  rule.breaches && rule.breaches > 0
+                                    ? 81.68 - (rule.breaches / 5) * 81.68
+                                    : 81.68
+                                }
+                                strokeLinecap="round"
+                                className="transition-all duration-700 ease-out"
+                              />
+                            </svg>
+                            <span className="absolute text-[11px] font-mono font-semibold text-[#ebaf64]">
+                              {rule.breaches || 0}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
+
+                  {isDegradedMode && (
+                    <div className="absolute inset-0 z-10 bg-black/45 backdrop-blur-xl rounded-3xl flex flex-col items-center justify-center p-6 text-center select-none">
+                      <span className="text-lg sm:text-xl font-bold tracking-tight text-white">
+                        What resolution?
+                      </span>
+                      <span className="text-[11px] font-mono text-white/55 mt-1.5">
+                        Turn on Walrus Memory to recall your commitments
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -3195,7 +3529,28 @@ export default function YearboundApp() {
                   Saved Resolutions
                 </div>
 
-                {/* Resolutions List */}
+                {isDegradedMode ? (
+                  <div className="flex-1 flex items-center justify-center py-10">
+                    <div className="w-full bg-black/20 backdrop-blur-2xl border border-white/15 rounded-3xl p-7 flex flex-col items-center text-center gap-3 shadow-md">
+                      <div className="w-11 h-11 rounded-full bg-white/10 border border-white/15 flex items-center justify-center text-white/60">
+                        <Database size={18} />
+                      </div>
+                      <div className="text-base font-semibold text-white">
+                        Nothing is saved
+                      </div>
+                      <p className="text-xs text-white/60 leading-relaxed max-w-[260px]">
+                        Walrus memory is turned off. Turn on memory to recall and manage your saved resolutions.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setIsDegradedMode(false)}
+                        className="mt-1 py-2.5 px-5 rounded-full bg-white/15 hover:bg-white/25 text-white text-xs font-medium transition-all active:scale-95 cursor-pointer border border-white/15"
+                      >
+                        Turn on Memory
+                      </button>
+                    </div>
+                  </div>
+                ) : (
                 <div className="flex flex-col gap-3">
                   {activeRulesList.map((rule, idx) => {
                     const isExpanded = selectedMemoryRuleId === rule.id;
@@ -3322,6 +3677,7 @@ export default function YearboundApp() {
                     <span>Add another resolution</span>
                   </button>
                 </div>
+                )}
               </div>
             )}
 
@@ -3459,7 +3815,9 @@ export default function YearboundApp() {
                     <div className="flex items-center justify-between">
                       <span className="text-white/60">Settlement Gateway</span>
                       <span className="font-mono text-white/80">
-                        {accountType === "real"
+                        {isDegradedMode
+                          ? "Offline (Tatum disabled)"
+                          : accountType === "real"
                           ? "Tatum Mainnet Gateway"
                           : accountType === "linked"
                           ? "Sui Wallet Standard"
@@ -3470,26 +3828,29 @@ export default function YearboundApp() {
                 </div>
 
                 {/* 2. 365-DAY DISCIPLINE GRID HEATMAP (Activity Visualizer) */}
-                <DisciplineGrid
-                  currentDayOfYear={currentDayOfYear}
-                  infractions={infractions.map((i) => ({
-                    dayOfYear: i.dayOfYear || 45,
-                    dateStr: i.timestamp,
-                    memo: i.memo,
-                    penaltySui: i.penaltySui,
-                    ruleTitle: i.ruleTitle,
-                    blobId: i.blobId,
-                    verdict: i.verdict || (i.penaltySui > 0 ? "broken" : "honored"),
-                    txHash: i.txHash,
-                  }))}
-                  totalEscrowSui={escrowDeposit}
-                  isUnlocked={isVaultUnlocked}
-                  isDegraded={isDegradedMode}
-                  onInspectBlob={(blobId) => {
-                    setExpandedJsonBlobId(blobId);
-                    setIsMemoryInspectorOpen(true);
-                  }}
-                />
+                {!isDegradedMode && (
+                  <DisciplineGrid
+                    currentDayOfYear={currentDayOfYear}
+                    infractions={infractions.map((i) => ({
+                      dayOfYear: i.dayOfYear || 45,
+                      dateStr: i.timestamp,
+                      memo: i.memo,
+                      penaltySui: i.penaltySui,
+                      ruleTitle: i.ruleTitle,
+                      blobId: i.blobId,
+                      verdict: i.verdict || (i.penaltySui > 0 ? "broken" : "honored"),
+                      txHash: i.txHash,
+                    }))}
+                    totalEscrowSui={escrowDeposit}
+                    isUnlocked={isVaultUnlocked}
+                    isDegraded={isDegradedMode}
+                    onInspectBlob={(blobId) => {
+                      setFocusedMemoryBlobId(null);
+                      setExpandedJsonBlobId(blobId);
+                      setIsMemoryInspectorOpen(true);
+                    }}
+                  />
+                )}
 
               </div>
             )}
@@ -3502,34 +3863,39 @@ export default function YearboundApp() {
                 </div>
 
                 {/* Walrus Memory Proof Card */}
-                <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 flex flex-col gap-3 shadow-md">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-white">
-                      Walrus Memory Proof
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setIsMemoryInspectorOpen(true)}
-                      className="text-xs font-mono text-[#ebaf64] hover:underline flex items-center gap-1 active:scale-95"
-                    >
-                      <span>Inspect Memory</span>
-                      <ExternalLink size={12} />
-                    </button>
+                {!isDegradedMode && (
+                  <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 flex flex-col gap-3 shadow-md">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-white">
+                        Walrus Memory Proof
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFocusedMemoryBlobId(null);
+                          setIsMemoryInspectorOpen(true);
+                        }}
+                        className="text-xs font-mono text-[#ebaf64] hover:underline flex items-center gap-1 active:scale-95"
+                      >
+                        <span>Inspect Memory</span>
+                        <ExternalLink size={12} />
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between bg-black/30 border border-[#ebaf64]/20 rounded-2xl px-4 py-3">
+                      <span className="text-xs font-mono text-white/80 truncate mr-2">
+                        Blob #{walrusBlobId ? `${walrusBlobId.slice(0, 16)}...` : "pact_genesis_manifest"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={copyBlobId}
+                        className="text-[#ebaf64]/80 hover:text-[#ebaf64] p-1 transition-colors active:scale-95"
+                        title="Copy Blob ID"
+                      >
+                        {copiedBlob ? <Check size={14} className="text-[#ebaf64]" /> : <Copy size={14} />}
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between bg-black/30 border border-[#ebaf64]/20 rounded-2xl px-4 py-3">
-                    <span className="text-xs font-mono text-white/80 truncate mr-2">
-                      Blob #{walrusBlobId ? `${walrusBlobId.slice(0, 16)}...` : "pact_genesis_manifest"}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={copyBlobId}
-                      className="text-[#ebaf64]/80 hover:text-[#ebaf64] p-1 transition-colors active:scale-95"
-                      title="Copy Blob ID"
-                    >
-                      {copiedBlob ? <Check size={14} className="text-[#ebaf64]" /> : <Copy size={14} />}
-                    </button>
-                  </div>
-                </div>
+                )}
 
                 {/* Wallet Details Card */}
                 <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 flex flex-col gap-3.5 shadow-md">
@@ -3587,8 +3953,10 @@ export default function YearboundApp() {
                   <div className="flex items-center justify-between px-1">
                     <span className="text-xs text-white/60">Live Balance</span>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono text-white font-medium">
-                        {accountType === "demo"
+                      <span className={`text-xs font-mono font-medium ${isDegradedMode ? "text-white/50" : "text-white"}`}>
+                        {isDegradedMode
+                          ? "Tatum disabled"
+                          : accountType === "demo"
                           ? isCheckingLiveBalance
                             ? "Querying..."
                             : `${liveOnChainBalanceSui !== null ? liveOnChainBalanceSui.toFixed(2) : availableBalance.toFixed(2)} SUI`
@@ -3599,20 +3967,37 @@ export default function YearboundApp() {
                       <button
                         type="button"
                         onClick={() => {
+                          if (isDegradedMode) {
+                            const msg = "Cannot query live balance because Tatum is disabled.";
+                            setTatumDisabledNotice(msg);
+                            triggerSnackbar(
+                              "Cannot Query Live Balance",
+                              "Tatum is disabled. Turn Walrus & Tatum back on to refresh."
+                            );
+                            return;
+                          }
                           if (accountType === "demo") {
                             refreshLiveBalance(demoAddress || DEMO_SUI_ADDRESS, "demo");
+                          } else if (accountType === "linked") {
+                            refreshLiveBalance(linkedAddress, "linked");
                           } else {
                             refreshLiveBalance(realAddress, "real");
                           }
                         }}
-                        disabled={isCheckingLiveBalance}
-                        className="text-[#ebaf64]/80 hover:text-[#ebaf64] text-xs transition-colors"
-                        title="Refresh on-chain balance"
+                        disabled={isCheckingLiveBalance && !isDegradedMode}
+                        className="text-[#ebaf64]/80 hover:text-[#ebaf64] text-xs transition-colors cursor-pointer"
+                        title={isDegradedMode ? "Tatum is disabled — click for status" : "Refresh on-chain balance"}
                       >
                         ↻
                       </button>
                     </div>
                   </div>
+
+                  {isDegradedMode && tatumDisabledNotice && (
+                    <div className="bg-amber-500/10 border border-amber-500/25 rounded-xl px-3 py-2 text-[11px] font-mono text-amber-200/90 animate-in fade-in duration-150">
+                      {tatumDisabledNotice}
+                    </div>
+                  )}
 
                   {(accountType === "real" || accountType === "demo") && (
                     <div className="flex flex-col gap-2 pt-1">
@@ -3651,6 +4036,7 @@ export default function YearboundApp() {
                 <button
                   type="button"
                   onClick={() => {
+                    setIsDegradedMode(false);
                     setStep(1);
                     setActiveTab("home");
                   }}
@@ -3833,7 +4219,9 @@ export default function YearboundApp() {
                     );
                   })()}
                   <span className="text-[11px] font-mono text-white/35 text-center tracking-tight mt-2.5">
-                    Walrus Memory validated · Tatum Sui RPC resolved
+                    {isDegradedMode
+                      ? "Walrus Memory & Tatum disabled · Unchecked transfer"
+                      : "Walrus Memory validated · Tatum Sui RPC resolved"}
                   </span>
                 </div>
               </>
@@ -3898,7 +4286,7 @@ export default function YearboundApp() {
                         : "bg-black/40 text-white/40 border border-white/10 cursor-not-allowed"
                     }`}
                   >
-                    <span>Review & Check</span>
+                    <span>{isDegradedMode ? "Send Transfer" : "Review & Check"}</span>
                     <ArrowRight size={16} />
                   </button>
                 </div>
@@ -3955,7 +4343,9 @@ export default function YearboundApp() {
                   Transfer Approved
                 </div>
                 <div className="text-xs font-mono text-[#ebaf64]/80 mt-2">
-                  Resolution adherence verified · 0 penalties applied
+                  {isDegradedMode
+                    ? "Walrus & Tatum disabled · No resolution checks performed"
+                    : "Resolution adherence verified · 0 penalties applied"}
                 </div>
               </div>
             )}
@@ -3995,30 +4385,40 @@ export default function YearboundApp() {
                     <button
                       type="button"
                       onClick={() => {
-                        const targetBlob = matchedRuleBlobId || walrusBlobId || "walrus_blob_rule_sarah_01";
-                        // Ensure blob exists in walrusBlobs so it displays when drawer opens
+                        const warnedRule = activeRulesList.find(
+                          (r) =>
+                            (matchedRuleBlobId && r.blobId === matchedRuleBlobId) ||
+                            r.title.toLowerCase() === (matchedRuleTitle || "").toLowerCase()
+                        );
+                        const targetBlob =
+                          matchedRuleBlobId ||
+                          warnedRule?.blobId ||
+                          `walrus_blob_rule_${warnedRule?.id || "breach"}`;
+                        // Ensure exact warned resolution blob exists in walrusBlobs
                         setWalrusBlobs((prev) => {
                           if (prev.some((b) => b.blobId === targetBlob)) return prev;
                           return [
                             {
                               blobId: targetBlob,
                               type: "resolution_contract",
-                              title: `Resolution: ${matchedRuleTitle || "Committed Oath"}`,
+                              title: `Resolution: ${warnedRule?.title || matchedRuleTitle || "Committed Oath"}`,
                               timestamp: "Genesis",
                               payload: {
                                 protocol: "Yearbound v1",
                                 storage: "Walrus Memory (MemWal)",
                                 type: "commitment_rule",
-                                title: matchedRuleTitle,
-                                behavioralRule: matchedRuleCondition,
-                                why_it_matters: matchedRuleMotivation,
-                                penaltySui: breachPenaltySui || 0.05,
+                                ruleId: warnedRule?.id,
+                                title: warnedRule?.title || matchedRuleTitle,
+                                behavioralRule: matchedRuleCondition || warnedRule?.condition,
+                                why_it_matters: matchedRuleMotivation || warnedRule?.whyItMatters,
+                                penaltySui: breachPenaltySui || warnedRule?.penalty || 0.05,
                                 status: "active",
                               },
                             },
                             ...prev,
                           ];
                         });
+                        setFocusedMemoryBlobId(targetBlob);
                         setExpandedJsonBlobId(targetBlob);
                         setIsMemoryInspectorOpen(true);
                       }}
@@ -4056,7 +4456,7 @@ export default function YearboundApp() {
                         <span>{payFineStage || "Settling penalty..."}</span>
                       </>
                     ) : (
-                      <span>Proceed anyway & pay {breachPenaltySui || 10} SUI penalty</span>
+                      <span>Proceed anyway & pay {breachPenaltySui || 0.05} SUI penalty</span>
                     )}
                   </button>
                 </div>
@@ -4091,7 +4491,7 @@ export default function YearboundApp() {
 
                     <div className="flex items-center justify-between border-t border-white/10 pt-2.5">
                       <span className="text-xs text-white/70">Penalty Avoided</span>
-                      <span className="text-xs font-mono font-semibold text-[#ebaf64]">10 SUI</span>
+                      <span className="text-xs font-mono font-semibold text-[#ebaf64]">{breachPenaltySui || 0.05} SUI</span>
                     </div>
 
                     <div className="flex items-center justify-between border-t border-white/10 pt-2.5">
@@ -4121,7 +4521,7 @@ export default function YearboundApp() {
                     Penalty Recorded
                   </div>
                   <p className="text-xs text-white/70 leading-relaxed">
-                    {breachPenaltySui || 10} SUI penalty has been processed via x402 and inscribed to Walrus memory.
+                    {breachPenaltySui || 0.05} SUI penalty has been processed via x402 and inscribed to Walrus memory.
                   </p>
                 </div>
 
@@ -4137,7 +4537,7 @@ export default function YearboundApp() {
                     <div className="flex items-center justify-between border-t border-white/10 pt-3">
                       <span className="text-xs text-white/70">Penalty Deposit</span>
                       <span className="text-xs font-mono font-semibold text-white">
-                        {breachPenaltySui || 10} SUI → x402 Vault
+                        {breachPenaltySui || 0.05} SUI → x402 Vault
                       </span>
                     </div>
 
@@ -4333,21 +4733,30 @@ export default function YearboundApp() {
         {/* ==================================================================
             DRAWER: WALRUS TOTAL RECALL MEMORY INSPECTOR
             ================================================================== */}
-        {isMemoryInspectorOpen && (
+        {isMemoryInspectorOpen && (() => {
+          const inspectorBlobs = focusedMemoryBlobId
+            ? walrusBlobs.filter((b) => b.blobId === focusedMemoryBlobId).slice(0, 1)
+            : walrusBlobs;
+          return (
           <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
             <div className="w-full max-w-[420px] max-h-[85vh] bg-[#0A0A0C] border border-[#222226] rounded-t-[32px] sm:rounded-[32px] p-6 flex flex-col gap-4 shadow-2xl animate-in slide-in-from-bottom-6 duration-300 overflow-hidden">
               <div className="flex items-center justify-between shrink-0">
                 <div className="flex flex-col">
                   <span className="text-base font-semibold text-white">
-                    Walrus Total Recall Memory
+                    {focusedMemoryBlobId ? "Resolution Memory Payload" : "Walrus Total Recall Memory"}
                   </span>
                   <span className="text-[11px] font-mono text-[#71717A]">
-                    Immutable decentralized autonomous agent memory
+                    {focusedMemoryBlobId
+                      ? "Exact Walrus commitment blob triggering this warning"
+                      : "Immutable decentralized autonomous agent memory"}
                   </span>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setIsMemoryInspectorOpen(false)}
+                  onClick={() => {
+                    setIsMemoryInspectorOpen(false);
+                    setFocusedMemoryBlobId(null);
+                  }}
                   className="p-1.5 text-[#71717A] hover:text-white rounded-lg transition-colors"
                 >
                   <X size={18} />
@@ -4356,7 +4765,7 @@ export default function YearboundApp() {
 
               {/* Memory History List */}
               <div className="flex-1 overflow-y-auto flex flex-col gap-3 pr-1 overscroll-contain">
-                {walrusBlobs.length === 0 ? (
+                {inspectorBlobs.length === 0 ? (
                   /* Fallback display for initial session */
                   <div className="bg-[#131316] border border-[#27272A] rounded-2xl p-4 flex flex-col gap-2.5">
                     <div className="flex items-center justify-between">
@@ -4371,10 +4780,10 @@ export default function YearboundApp() {
                       Yearbound 2026 Accountability Pact
                     </div>
                     <div className="text-[11px] font-mono text-[#A1A1AA] truncate">
-                      Blob #{walrusBlobId || "d4a97f2e8c9b4e11a2f6"}
+                      Blob #{focusedMemoryBlobId || walrusBlobId || "d4a97f2e8c9b4e11a2f6"}
                     </div>
                     <a
-                      href={`https://aggregator.walrus-testnet.walrus.space/v1/blobs/${walrusBlobId || "d4a97f2e8c9b4e11a2f6"}`}
+                      href={`https://aggregator.walrus-testnet.walrus.space/v1/blobs/${focusedMemoryBlobId || walrusBlobId || "d4a97f2e8c9b4e11a2f6"}`}
                       target="_blank"
                       rel="noreferrer"
                       className="text-[11px] text-white hover:underline flex items-center gap-1 mt-1 font-mono"
@@ -4384,7 +4793,7 @@ export default function YearboundApp() {
                     </a>
                   </div>
                 ) : (
-                  walrusBlobs.map((item, idx) => {
+                  inspectorBlobs.map((item, idx) => {
                     const isExpanded = expandedJsonBlobId === item.blobId;
                     return (
                       <div
@@ -4478,7 +4887,8 @@ export default function YearboundApp() {
               </div>
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* ==================================================================
             UNIFIED FEEDBACK SNACKBAR

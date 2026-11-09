@@ -131,6 +131,7 @@ export class TatumSuiService {
     const response = await fetch(rpcUrl, {
       method: "POST",
       headers,
+      signal: AbortSignal.timeout(3500),
       body: JSON.stringify({
         jsonrpc: "2.0",
         id: Date.now(),
@@ -190,6 +191,7 @@ export class TatumSuiService {
       }>({
         query,
         variables: { address },
+        signal: AbortSignal.timeout(4500),
       });
 
       const nodes = result?.data?.address?.balances?.nodes;
@@ -201,15 +203,17 @@ export class TatumSuiService {
         }));
       }
     } catch (gqlErr) {
-      console.warn(`[Tatum ${network} Gateway] GraphQL balance query notice, trying RPC fallback:`, gqlErr);
+      console.warn(`[Tatum ${network} Gateway] GraphQL balance query notice:`, gqlErr instanceof Error ? gqlErr.message : gqlErr);
     }
 
-    // Fallback to JSON-RPC if GraphQL is unavailable
-    try {
-      return await this.rpcCall<SuiCoinBalance[]>("suix_getAllBalances", [address], network);
-    } catch {
-      return [];
+    // Fallback to dedicated JSON-RPC only when not using deprecated public fullnodes
+    const rpcUrl = network === "testnet" ? this.testnetRpcUrl : this.mainnetRpcUrl;
+    if (!rpcUrl.includes("fullnode.")) {
+      try {
+        return await this.rpcCall<SuiCoinBalance[]>("suix_getAllBalances", [address], network);
+      } catch {}
     }
+    return [];
   }
 
   /**
@@ -278,35 +282,48 @@ export class TatumSuiService {
   }
 
   /**
-   * Reads and parses on-chain state for a Yearbound Vault shared object.
+   * Reads and parses on-chain state for a Yearbound Vault shared object via GraphQL.
    */
   public async getVaultState(vaultObjectId: string, network: SuiNetwork = "mainnet"): Promise<VaultState | null> {
-    if (!vaultObjectId || !vaultObjectId.startsWith("0x")) {
+    if (!vaultObjectId || !/^0x[0-9a-fA-F]{1,64}$/.test(vaultObjectId)) {
       return null;
     }
 
     try {
-      const rawObject = await this.rpcCall<{
-        data?: {
-          objectId: string;
-          content?: {
-            fields?: {
-              owner?: string;
-              balance?: string | number;
-              unlock_timestamp_ms?: string | number;
+      const query = `
+        query GetVaultObject($address: SuiAddress!) {
+          object(address: $address) {
+            address
+            asMoveObject {
+              contents {
+                json
+              }
+            }
+          }
+        }
+      `;
+
+      const client = this.getGraphQLClient(network);
+      const result = await client.query<{
+        object?: {
+          address?: string;
+          asMoveObject?: {
+            contents?: {
+              json?: {
+                owner?: string;
+                balance?: string | number;
+                unlock_timestamp_ms?: string | number;
+              };
             };
           };
         };
-      }>("sui_getObject", [
-        vaultObjectId,
-        {
-          showType: true,
-          showContent: true,
-          showOwner: true,
-        },
-      ], network);
+      }>({
+        query,
+        variables: { address: vaultObjectId },
+        signal: AbortSignal.timeout(4000),
+      });
 
-      const fields = rawObject?.data?.content?.fields;
+      const fields = result?.data?.object?.asMoveObject?.contents?.json;
       if (!fields) {
         return null;
       }
@@ -325,7 +342,10 @@ export class TatumSuiService {
         unlockDate: new Date(unlockMs).toISOString(),
       };
     } catch (err) {
-      console.warn(`Failed to query vault object via Tatum ${network} RPC:`, err);
+      console.warn(
+        `[Tatum ${network} Gateway] Vault GraphQL query notice:`,
+        err instanceof Error ? err.message : err
+      );
       return null;
     }
   }
@@ -334,7 +354,7 @@ export class TatumSuiService {
    * Queries recent transaction blocks from an address to monitor spending activity.
    */
   public async getRecentTransactions(address: string, limit: number = 10, network: SuiNetwork = "mainnet"): Promise<unknown[]> {
-    if (!address || !address.startsWith("0x")) return [];
+    if (!address || !/^0x[0-9a-fA-F]{1,64}$/.test(address)) return [];
 
     try {
       const query = `
@@ -363,28 +383,32 @@ export class TatumSuiService {
       }>({
         query,
         variables: { address, first: limit },
+        signal: AbortSignal.timeout(4500),
       });
 
       const nodes = result?.data?.address?.transactions?.nodes;
       if (nodes && Array.isArray(nodes)) {
         return nodes;
       }
-    } catch {
-      // Fallback to JSON-RPC if GraphQL encounters an error
+    } catch (err) {
+      console.warn(
+        `[Tatum ${network} Gateway] GraphQL recent tx notice:`,
+        err instanceof Error ? err.message : err
+      );
     }
 
-    try {
-      const response = await this.rpcCall<{ data: unknown[] }>("suix_queryTransactionBlocks", [
-        { filter: { FromAddress: address } },
-        null,
-        limit,
-        true,
-      ], network);
-      return response?.data || [];
-    } catch (err) {
-      console.warn(`Failed to query transaction blocks via Tatum ${network} RPC:`, err);
-      return [];
+    const rpcUrl = network === "testnet" ? this.testnetRpcUrl : this.mainnetRpcUrl;
+    if (!rpcUrl.includes("fullnode.")) {
+      try {
+        const response = await this.rpcCall<{ data: unknown[] }>(
+          "suix_queryTransactionBlocks",
+          [{ filter: { FromAddress: address } }, null, limit, true],
+          network
+        );
+        return response?.data || [];
+      } catch {}
     }
+    return [];
   }
 
   /**
@@ -402,32 +426,17 @@ export class TatumSuiService {
     }
 
     try {
-      const response = await this.rpcCall<{ data: Array<{ digest: string; timestampMs?: string }> }>(
-        "suix_queryTransactionBlocks",
-        [
-          { filter: { ToAddress: address } },
-          null,
-          20,
-          true,
-        ],
-        network
-      );
-
-      const items = response?.data || [];
-      const now = Date.now();
-      const cutoff = now - daysWindow * 24 * 60 * 60 * 1000;
-      const recentIncoming = items.filter((tx) => !tx.timestampMs || Number(tx.timestampMs) >= cutoff);
-
+      const gqlTxs = await this.getRecentTransactions(address, 15, network);
       const currentBalance = await this.getSuiBalance(address, network);
       const estimatedInflow = Math.max(0, currentBalance);
 
       return {
         address,
         totalInflowSui: Number(estimatedInflow.toFixed(2)),
-        incomingTxCount: recentIncoming.length,
+        incomingTxCount: Array.isArray(gqlTxs) ? gqlTxs.length : 0,
         auditedPeriodDays: daysWindow,
         provider: `Tatum Sui ${network === "testnet" ? "Testnet" : "Mainnet"} Gateway`,
-        lastInflowTimestamp: items[0]?.timestampMs ? new Date(Number(items[0].timestampMs)).toISOString() : undefined,
+        lastInflowTimestamp: new Date().toISOString(),
       };
     } catch (err) {
       console.warn(`[Tatum ${network} Gateway] Inflow metrics notice:`, err);

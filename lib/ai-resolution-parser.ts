@@ -1,3 +1,12 @@
+import dns from "node:dns";
+
+if (typeof dns?.setDefaultResultOrder === "function") {
+  dns.setDefaultResultOrder("ipv4first");
+}
+try {
+  dns.setServers(["8.8.8.8", "1.1.1.1"]);
+} catch {}
+
 import { google } from "@ai-sdk/google";
 import { generateText, Output } from "ai";
 import { z } from "zod";
@@ -158,14 +167,15 @@ export async function analyzeResolutionWithGemini(
   const oathText = `${title}${condition ? ` — Condition: ${condition}` : ""}${whyItMatters ? ` (Why: ${whyItMatters})` : ""}`;
 
   try {
-    const model = google("gemini-3.5-flash");
+    const model = google("gemini-3.5-flash-lite");
 
     const { output } = await generateText({
       model,
       output: Output.object({
         schema: ResolutionAnalysisSchema,
       }),
-      abortSignal: AbortSignal.timeout(1500),
+      maxRetries: 0,
+      abortSignal: AbortSignal.timeout(9000),
       system:
         "You are the analytical engine for Yearbound, an accountable consumer finance platform. " +
         "Users set New Year's resolutions with financial penalties deposited into a time-locked Sui vault. " +

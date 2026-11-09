@@ -4,6 +4,9 @@ import dns from "node:dns";
 if (typeof dns?.setDefaultResultOrder === "function") {
   dns.setDefaultResultOrder("ipv4first");
 }
+try {
+  dns.setServers(["8.8.8.8", "1.1.1.1"]);
+} catch {}
 
 import { NextResponse } from "next/server";
 import {

@@ -25,24 +25,38 @@ export async function GET(req: Request) {
 
     const balanceSui = await tatumService.getSuiBalance(address, network);
 
-    return NextResponse.json({
-      success: true,
-      address,
-      network,
-      balanceSui,
-      provider: `Tatum Sui ${network === "testnet" ? "Testnet" : "Mainnet"} Gateway`,
-      isLive: true,
-      timestamp: new Date().toISOString(),
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        address,
+        network,
+        balanceSui,
+        provider: `Tatum Sui ${network === "testnet" ? "Testnet" : "Mainnet"} Gateway`,
+        isLive: true,
+        timestamp: new Date().toISOString(),
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        },
+      }
+    );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Sui balance query failed";
     console.warn("[Sui Balance API] Notice querying balance:", message);
-    return NextResponse.json({
-      success: true,
-      balanceSui: 0,
-      isLive: false,
-      notice: message,
-      timestamp: new Date().toISOString(),
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        balanceSui: 0,
+        isLive: false,
+        notice: message,
+        timestamp: new Date().toISOString(),
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        },
+      }
+    );
   }
 }

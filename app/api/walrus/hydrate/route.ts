@@ -3,6 +3,9 @@ import dns from "node:dns";
 if (typeof dns?.setDefaultResultOrder === "function") {
   dns.setDefaultResultOrder("ipv4first");
 }
+try {
+  dns.setServers(["8.8.8.8", "1.1.1.1"]);
+} catch {}
 
 import { NextRequest, NextResponse } from "next/server";
 import {
@@ -28,20 +31,48 @@ export async function GET(req: NextRequest) {
       walrusService.recallTyped<BehavioralPatternPayload>("behavioral pattern habit cluster insight recommendation", "behavioral_pattern"),
     ]);
 
-    // Match pacts or default to latest available
-    const activePact = pacts.find((p) => !address || p.wallet_address === address || p.pact_id === address) || pacts[0] || null;
+    const normalizedAddr = address.trim().toLowerCase();
+    const isHexAddress = normalizedAddr.startsWith("0x");
 
-    // Filter rules associated with this pact/address or return all active rules
-    const activeRules = rules.filter(
-      (r) => !activePact || r.commitment_id === activePact.pact_id || !r.wallet_address || r.wallet_address === address
-    );
+    // Match pact for this specific address/pact ID (do not hijack another wallet's pact on a fresh address)
+    const activePact = isHexAddress
+      ? pacts.find((p) => p.wallet_address?.toLowerCase() === normalizedAddr) || null
+      : pacts.find(
+          (p) =>
+            !normalizedAddr ||
+            p.wallet_address?.toLowerCase() === normalizedAddr ||
+            p.pact_id?.toLowerCase() === normalizedAddr
+        ) ||
+        pacts[0] ||
+        null;
 
-    // Filter events associated with this user or active pact
+    // Filter rules associated with this user's active pact/address
+    const activeRules = rules.filter((r) => {
+      if (isHexAddress) {
+        if (r.wallet_address?.toLowerCase() === normalizedAddr) return true;
+        if (activePact && r.commitment_id === activePact.pact_id) return true;
+        return false;
+      }
+      return (
+        !activePact ||
+        r.commitment_id === activePact.pact_id ||
+        !r.wallet_address ||
+        r.wallet_address.toLowerCase() === normalizedAddr
+      );
+    });
+
+    // Filter events associated strictly with this user or active pact
     const matchedEvents = (events || []).filter((e) => {
-      if (!address) return true;
-      if (e.wallet_address && e.wallet_address.toLowerCase() === address.toLowerCase()) return true;
+      if (!normalizedAddr) return true;
+      if (e.wallet_address && e.wallet_address.toLowerCase() === normalizedAddr) return true;
       if (activePact && e.commitment_id === activePact.pact_id) return true;
-      return true;
+      return !isHexAddress;
+    });
+
+    // Filter patterns strictly by address when an address is provided
+    const matchedPatterns = (patterns || []).filter((p) => {
+      if (!isHexAddress) return true;
+      return p.wallet_address?.toLowerCase() === normalizedAddr;
     });
 
     // Format events for client hydration
@@ -69,12 +100,12 @@ export async function GET(req: NextRequest) {
       pact: activePact,
       rules: activeRules.length > 0 ? activeRules : null,
       events: formattedEvents,
-      patterns: patterns || [],
+      patterns: matchedPatterns,
       memoryStats: {
         pactsCount: pacts.length,
-        rulesCount: rules.length,
-        eventsCount: events.length,
-        patternsCount: patterns.length,
+        rulesCount: activeRules.length,
+        eventsCount: formattedEvents.length,
+        patternsCount: matchedPatterns.length,
       },
       source: "Walrus Memory (MemWal Mainnet)",
     });

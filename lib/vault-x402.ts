@@ -175,7 +175,7 @@ export async function executeX402VaultDeposit(params: {
   const initialRes = await fetch("/api/vault", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    signal: AbortSignal.timeout(6000),
+    signal: AbortSignal.timeout(10000),
     body: JSON.stringify({
       amount_sui: params.amountSui,
       reason: params.reason,
@@ -254,7 +254,7 @@ export async function executeX402VaultDeposit(params: {
         "Content-Type": "application/json",
         "x-payment": base64PaymentHeader,
       },
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(25000),
       body: JSON.stringify({
         amount_sui: params.amountSui,
         reason: params.reason,

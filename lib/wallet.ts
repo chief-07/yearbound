@@ -42,14 +42,14 @@ export function getOrCreateDemoKeypair(): { keypair: Ed25519Keypair; isNew: bool
     }
   }
 
-  const demoKp = getDemoKeypair();
+  const freshDemoKp = new Ed25519Keypair();
   try {
-    localStorage.setItem(DEMO_WALLET_STORAGE_KEY, demoKp.getSecretKey());
+    localStorage.setItem(DEMO_WALLET_STORAGE_KEY, freshDemoKp.getSecretKey());
   } catch (err) {
     console.warn("[Wallet] Could not persist demo keypair to localStorage:", err);
   }
 
-  return { keypair: demoKp, isNew: false };
+  return { keypair: freshDemoKp, isNew: true };
 }
 
 export function exportDemoPrivateKeyHex(): string | null {

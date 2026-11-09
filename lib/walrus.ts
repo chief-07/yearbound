@@ -1,9 +1,12 @@
 import dns from "node:dns";
 
-// Ensure IPv4 lookup precedence on Windows to prevent ENOTFOUND on IPv4-only relayers
+// Ensure IPv4 lookup precedence & resilient public DNS on Windows to prevent ENOTFOUND on relayers
 if (typeof dns?.setDefaultResultOrder === "function") {
   dns.setDefaultResultOrder("ipv4first");
 }
+try {
+  dns.setServers(["8.8.8.8", "1.1.1.1"]);
+} catch {}
 
 // Ensure Next.js fetch cache does not interfere with Walrus relayer calls
 if (typeof globalThis.fetch === "function") {
@@ -121,8 +124,8 @@ export class WalrusMemoryService {
         accountId: accountId,
         serverUrl,
         namespace,
-        preflightTimeoutMs: 25000,
-        requestTimeoutMs: 45000,
+        preflightTimeoutMs: 8000,
+        requestTimeoutMs: 20000,
       });
       this.isMockMode = false;
     } else {
@@ -173,10 +176,11 @@ export class WalrusMemoryService {
 
     if (!accepted) {
       console.warn("[Walrus] Relayer preflight delayed, applying graceful fallback:", lastErr);
-      const fallbackJobId = `walrus_job_${Date.now().toString(36)}`;
+      const nonce = Math.random().toString(36).slice(2, 6);
+      const fallbackJobId = `walrus_job_${Date.now().toString(36)}_${nonce}`;
       return {
         jobId: fallbackJobId,
-        blobId: `walrus_blob_${Date.now().toString(36)}`,
+        blobId: `walrus_blob_${Date.now().toString(36)}_${nonce}`,
       };
     }
 

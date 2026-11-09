@@ -1,3 +1,12 @@
+import dns from "node:dns";
+
+if (typeof dns?.setDefaultResultOrder === "function") {
+  dns.setDefaultResultOrder("ipv4first");
+}
+try {
+  dns.setServers(["8.8.8.8", "1.1.1.1"]);
+} catch {}
+
 import { streamText, stepCountIs } from "ai";
 import { google } from "@ai-sdk/google";
 import { yearboundAgentTools } from "@/lib/agent-tools";
@@ -35,7 +44,7 @@ export async function POST(req: Request) {
     }
 
     const result = streamText({
-      model: google("gemini-2.5-flash"),
+      model: google("gemini-3.5-flash-lite"),
       system: SYSTEM_PROMPT,
       messages,
       tools: yearboundAgentTools,
