@@ -5247,8 +5247,8 @@ export default function YearboundApp() {
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto px-5 sm:px-7 py-2 flex flex-col gap-3.5 pb-4 overscroll-contain">
-                  <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-6 flex flex-col gap-4 shadow-md">
+                <div className="flex-1 overflow-y-auto px-5 sm:px-7 py-2 flex flex-col gap-3.5 pb-2 overscroll-contain">
+                  <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-6 flex flex-col gap-4 shadow-md shrink-0">
                     <p className="text-base sm:text-lg text-white font-normal leading-relaxed">
                       {wallyRoast ||
                         synthesizeWallyIntervention({
@@ -5313,11 +5313,11 @@ export default function YearboundApp() {
                     </button>
                   </div>
 
-                  <div className="flex-1 min-h-[130px] flex items-center justify-center pt-1 pb-1 select-none pointer-events-none">
+                  <div className="flex-1 min-h-[220px] flex items-center justify-center pt-1 pb-1 select-none pointer-events-none shrink-0">
                     <img
                       src="/assets/mascot/wally_memories.gif"
                       alt="Wally checking Memories"
-                      className="w-36 sm:w-44 max-h-[200px] object-contain"
+                      className="w-72 sm:w-80 h-auto max-h-[360px] object-contain"
                       draggable={false}
                     />
                   </div>
