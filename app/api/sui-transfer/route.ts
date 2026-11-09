@@ -25,8 +25,19 @@ export async function POST(req: NextRequest) {
     }
 
     // Ensure recipient is a valid 32-byte Sui address for PTB serialization
+    // In Demo Testnet mode, free-text contacts map deterministically; Mainnet requires valid Sui addresses.
     let targetRecipient = recipientAddress.trim();
     if (!isValidSuiAddress(targetRecipient)) {
+      if (walletMode !== "demo") {
+        return NextResponse.json(
+          {
+            success: false,
+            onChain: false,
+            error: "Sui Mainnet transfers require a valid 0x Sui address.",
+          },
+          { status: 400 }
+        );
+      }
       const hash = crypto.createHash("sha256").update(targetRecipient).digest("hex");
       targetRecipient = `0x${hash}`;
     }
@@ -146,39 +157,50 @@ export async function POST(req: NextRequest) {
     // 2. LINKED WALLET EXTENSION (Already signed & executed by browser extension)
     // -------------------------------------------------------------------------
     if (walletMode === "linked") {
-      if (preExecutedDigest) {
-        return NextResponse.json({
-          success: true,
-          mode: "linked",
-          onChain: true,
-          digest: preExecutedDigest,
-          explorerUrl: `https://suiscan.xyz/mainnet/tx/${preExecutedDigest}`,
-          amountSui: numAmount,
-          recipient: recipientAddress,
-          provider: "Tatum Sui Gateway & Connected Extension",
-          status: "SUCCESS",
-        });
+      const validBase58Digest =
+        typeof preExecutedDigest === "string" &&
+        /^[1-9A-HJ-NP-Za-km-z]{32,64}$/.test(preExecutedDigest) &&
+        !preExecutedDigest.startsWith("0x_sui_");
+
+      if (!validBase58Digest) {
+        return NextResponse.json(
+          {
+            success: false,
+            mode: "linked",
+            network: "mainnet",
+            onChain: false,
+            code: "MISSING_ONCHAIN_DIGEST",
+            error: "Real on-chain Sui Mainnet transaction digest from connected wallet extension is required.",
+          },
+          { status: 400 }
+        );
       }
 
-      // If called before signing, verify recipient and balance via Tatum
-      const liveBalance = await tatumService.getSuiBalance(senderAddress);
       return NextResponse.json({
         success: true,
         mode: "linked",
-        readyToExecute: true,
-        liveBalanceSui: liveBalance,
-        recipient: recipientAddress,
+        network: "mainnet",
+        onChain: true,
+        digest: preExecutedDigest,
+        explorerUrl: `https://suiscan.xyz/mainnet/tx/${preExecutedDigest}`,
         amountSui: numAmount,
+        recipient: recipientAddress,
+        provider: "Tatum Sui Gateway & Connected Extension",
+        status: "SUCCESS",
       });
     }
 
     // -------------------------------------------------------------------------
-    // 3. REAL BURNER WALLET (Ed25519 Keypair via Tatum Sui Gateway)
+    // 3. REAL BURNER WALLET (Strict Sui Mainnet Ed25519 Keypair PTB Execution)
     // -------------------------------------------------------------------------
     if (walletMode === "real") {
-      if (!privateKeySecret) {
+      if (!privateKeySecret || typeof privateKeySecret !== "string") {
         return NextResponse.json(
-          { success: false, error: "Missing private key for real burner transaction" },
+          {
+            success: false,
+            onChain: false,
+            error: "Missing private key for real Mainnet transaction",
+          },
           { status: 400 }
         );
       }
@@ -196,7 +218,11 @@ export async function POST(req: NextRequest) {
         }
       } catch (kpErr) {
         return NextResponse.json(
-          { success: false, error: `Invalid keypair secret: ${kpErr instanceof Error ? kpErr.message : "decode error"}` },
+          {
+            success: false,
+            onChain: false,
+            error: `Invalid keypair secret: ${kpErr instanceof Error ? kpErr.message : "decode error"}`,
+          },
           { status: 400 }
         );
       }
@@ -204,74 +230,97 @@ export async function POST(req: NextRequest) {
       const derivedAddress = keypair.toSuiAddress();
 
       // Check live balance on Sui Mainnet via Tatum Gateway
-      const liveBalance = await tatumService.getSuiBalance(derivedAddress, "mainnet");
-      const requiredMist = Math.round(numAmount * 1_000_000_000);
-      const minGasBufferSui = 0.002;
-
-      // If funded, execute real on-chain Sui PTB via Tatum Gateway!
-      if (liveBalance >= numAmount + minGasBufferSui) {
-        try {
-          const tx = new Transaction();
-          tx.setSender(derivedAddress);
-          const [coin] = tx.splitCoins(tx.gas, [requiredMist]);
-          tx.transferObjects([coin], targetRecipient);
-
-          // Build transaction BCS bytes using Tatum's GraphQL Gateway
-          const txBytes = await tx.build({
-            client: tatumService.getGraphQLClient("mainnet"),
-          });
-
-          // Sign transaction with Ed25519 keypair
-          const { signature } = await keypair.signTransaction(txBytes);
-          const txBytesBase64 = Buffer.from(txBytes).toString("base64");
-
-          // Execute on Sui Mainnet via Tatum Gateway GraphQL mutation
-          const execResult = await tatumService.executeTransaction(txBytesBase64, [signature], "mainnet");
-
-          return NextResponse.json({
-            success: true,
+      let liveBalance = 0;
+      try {
+        liveBalance = await tatumService.getSuiBalance(derivedAddress, "mainnet", {
+          throwOnError: true,
+        });
+      } catch (balErr) {
+        return NextResponse.json(
+          {
+            success: false,
             mode: "real",
-            onChain: true,
-            digest: execResult.digest,
-            explorerUrl: execResult.explorerUrl,
-            status: execResult.status,
-            amountSui: numAmount,
-            recipient: recipientAddress,
-            liveBalanceSui: liveBalance,
-            provider: "Tatum Sui Mainnet Gateway",
-          });
-        } catch (execErr) {
-          console.warn("[Tatum PTB] Execution error, falling back to cryptographic intent:", execErr);
-          // Fall through to cryptographic intent signature
-        }
+            network: "mainnet",
+            onChain: false,
+            code: "MAINNET_RPC_UNAVAILABLE",
+            error: `Unable to verify live Sui Mainnet balance: ${
+              balErr instanceof Error ? balErr.message : "RPC unavailable"
+            }`,
+          },
+          { status: 503 }
+        );
       }
 
-      // If unfunded burner on mainnet: produce authentic Ed25519 cryptographic authorization
-      const canonicalIntent = new TextEncoder().encode(
-        `YEARBOUND_PTB:${derivedAddress}->${recipientAddress}:${numAmount}SUI:${Date.now()}`
-      );
-      const signedIntent = await keypair.signPersonalMessage(canonicalIntent);
+      const requiredMist = Math.round(numAmount * 1_000_000_000);
+      const minGasBufferSui = 0.002;
+      const requiredSui = Number((numAmount + minGasBufferSui).toFixed(4));
 
-      const intentDigest = `0x_sui_ptb_${Buffer.from(signedIntent.signature).toString("hex").slice(0, 32)}`;
+      if (liveBalance < numAmount + minGasBufferSui) {
+        return NextResponse.json(
+          {
+            success: false,
+            mode: "real",
+            network: "mainnet",
+            onChain: false,
+            unfunded: true,
+            code: "INSUFFICIENT_MAINNET_FUNDS",
+            liveBalanceSui: liveBalance,
+            requiredSui,
+            error: `Insufficient Sui Mainnet balance (${liveBalance.toFixed(
+              4
+            )} SUI available, need ${requiredSui.toFixed(4)} SUI including gas).`,
+          },
+          { status: 400 }
+        );
+      }
 
-      return NextResponse.json({
-        success: true,
-        mode: "real",
-        onChain: false,
-        unfunded: true,
-        digest: intentDigest,
-        explorerUrl: `https://suiscan.xyz/mainnet/account/${derivedAddress}`,
-        signature: signedIntent.signature,
-        status: "INTENT_AUTHORIZED",
-        amountSui: numAmount,
-        recipient: recipientAddress,
-        liveBalanceSui: liveBalance,
-        provider: "Tatum Sui Gateway (Cryptographically Signed Intent)",
-        message:
-          liveBalance === 0
-            ? "Burner address has 0 SUI balance on Sui Mainnet. Cryptographic authorization signed & persisted to Walrus memory."
-            : "Transaction authorized and persisted to Walrus memory.",
-      });
+      try {
+        const tx = new Transaction();
+        tx.setSender(derivedAddress);
+        const [coin] = tx.splitCoins(tx.gas, [requiredMist]);
+        tx.transferObjects([coin], targetRecipient);
+
+        // Build transaction BCS bytes using Tatum's Mainnet GraphQL Gateway
+        const txBytes = await tx.build({
+          client: tatumService.getGraphQLClient("mainnet"),
+        });
+
+        // Sign transaction with Ed25519 keypair
+        const { signature } = await keypair.signTransaction(txBytes);
+        const txBytesBase64 = Buffer.from(txBytes).toString("base64");
+
+        // Execute on Sui Mainnet via Tatum Gateway GraphQL mutation
+        const execResult = await tatumService.executeTransaction(txBytesBase64, [signature], "mainnet");
+
+        return NextResponse.json({
+          success: true,
+          mode: "real",
+          network: "mainnet",
+          onChain: true,
+          digest: execResult.digest,
+          explorerUrl: execResult.explorerUrl,
+          status: execResult.status,
+          amountSui: numAmount,
+          recipient: recipientAddress,
+          liveBalanceSui: liveBalance,
+          provider: "Tatum Sui Mainnet Gateway",
+        });
+      } catch (execErr) {
+        const errMsg = execErr instanceof Error ? execErr.message : "Sui Mainnet PTB execution failed";
+        console.warn("[Tatum PTB] Mainnet execution error:", errMsg);
+        return NextResponse.json(
+          {
+            success: false,
+            mode: "real",
+            network: "mainnet",
+            onChain: false,
+            code: "MAINNET_EXECUTION_FAILED",
+            liveBalanceSui: liveBalance,
+            error: `Sui Mainnet transfer failed: ${errMsg}`,
+          },
+          { status: 502 }
+        );
+      }
     }
 
     return NextResponse.json(

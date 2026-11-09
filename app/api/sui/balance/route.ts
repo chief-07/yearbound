@@ -23,7 +23,9 @@ export async function GET(req: Request) {
       );
     }
 
-    const balanceSui = await tatumService.getSuiBalance(address, network);
+    const balanceSui = await tatumService.getSuiBalance(address, network, {
+      throwOnError: true,
+    });
 
     return NextResponse.json(
       {

@@ -138,7 +138,7 @@ export function getRealWalletInfo(): WalletInfo {
     address: keypair.toSuiAddress(),
     publicKeyBase64: keypair.getPublicKey().toBase64(),
     hasSigner: true,
-    network: "testnet",
+    network: "mainnet",
   };
 }
 
@@ -241,8 +241,11 @@ export async function signPayloadWithWallet(
   if (detected?.provider && typeof detected.provider.signPersonalMessage === "function") {
     try {
       const signed = await detected.provider.signPersonalMessage({ message });
+      if (!signed?.signature) {
+        throw new Error("Wallet extension did not return a signature.");
+      }
       return {
-        signature: signed.signature || "ext_signed",
+        signature: signed.signature,
         publicKey: signed.publicKey || "ext_pk",
         address: signed.address || "",
       };
@@ -277,9 +280,21 @@ export async function executeTransferWithExtension(params: {
   const provider = detected.provider;
   if (typeof provider.signAndExecuteTransactionBlock === "function") {
     const res = await provider.signAndExecuteTransactionBlock({ transactionBlock: tx });
+    if (!res?.digest) {
+      throw new Error("Connected extension did not return a transaction digest.");
+    }
+    if (res.effects?.status?.status && res.effects.status.status !== "success") {
+      throw new Error(res.effects.status.error || "Extension transaction failed on-chain.");
+    }
     return { digest: res.digest };
   } else if (typeof provider.signAndExecuteTransaction === "function") {
     const res = await provider.signAndExecuteTransaction({ transaction: tx });
+    if (!res?.digest) {
+      throw new Error("Connected extension did not return a transaction digest.");
+    }
+    if (res.effects?.status?.status && res.effects.status.status !== "success") {
+      throw new Error(res.effects.status.error || "Extension transaction failed on-chain.");
+    }
     return { digest: res.digest };
   }
 

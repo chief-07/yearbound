@@ -169,7 +169,8 @@ Write ONE concise, insightful, supportive message (1-2 crisp sentences, ~25-42 w
 - If they just claimed Christmas savings: celebrate completing the year cycle and locking ${Number(escrowDeposit).toFixed(2)} SUI safely until Dec 25.
 - If breaches exist: acknowledge the slip-up specifically without lecturing mechanically, connect it naturally to their bigger goal or next constructive step (e.g. protecting their Japan trip funds, clean focus, or staying steady from here).
 - If they have clean honored transfers and 0 breaches: praise their specific compliant streak and encourage momentum without randomly pasting an unrelated rule's break-up motivation!
-- If 0 transactions yet (fresh Genesis Pact): welcome them calmly, note how many commitments are guarded alongside their ${Number(escrowDeposit).toFixed(2)} SUI x402 pledge, and give one practical forward-looking reminder grounded in their goals.
+- If x402 Vault Locked is 0.00 SUI and 0 transactions yet: welcome them calmly, note how many commitments are guarded in Walrus Memory, and mention their Mainnet vault is at 0.00 SUI awaiting funding (never invent a deposit).
+- If x402 Vault Locked > 0 and 0 transactions yet (fresh Genesis Pact): welcome them calmly, note how many commitments are guarded alongside their ${Number(escrowDeposit).toFixed(2)} SUI x402 pledge, and give one practical forward-looking reminder grounded in their goals.
 - Tone: Sharp, calm, intelligent financial concierge (Stripe/Mercury/Apple editorial vibe). Zero cringe slang, zero roleplay physical gestures, zero robotic prefixes like "Walrus memory synthesis:" or "Genesis Pact locked in Walrus memory:".
       `.trim();
 
@@ -207,14 +208,18 @@ Write ONE concise, insightful, supportive message (1-2 crisp sentences, ~25-42 w
     }
 
     // Clean, non-tacky fallback if AI call is temporarily unavailable
-    let fallbackMsg = `All ${userRules.length || 5} resolutions are anchored in Walrus Memory with ${Number(escrowDeposit).toFixed(2)} SUI committed to your vault — spend deliberately today.`;
+    const numericEscrow = Number(escrowDeposit) || 0;
+    let fallbackMsg =
+      numericEscrow > 0
+        ? `All ${userRules.length || 5} resolutions are anchored in Walrus Memory with ${numericEscrow.toFixed(2)} SUI committed to your vault — spend deliberately today.`
+        : `All ${userRules.length || 5} resolutions are anchored in Walrus Memory. Your Mainnet vault currently holds 0.00 SUI — fund your wallet via Receive when ready to lock on-chain.`;
     if (isVaultUnlocked && !isVaultClaimed) {
-      fallbackMsg = `December 25 is here and your x402 time-lock has opened. Claim your ${Number(escrowDeposit).toFixed(2)} SUI savings whenever you're ready.`;
+      fallbackMsg = `December 25 is here and your x402 time-lock has opened. Claim your ${numericEscrow.toFixed(2)} SUI savings whenever you're ready.`;
     } else if (isVaultClaimed) {
-      fallbackMsg = `You carried your discipline through December 25 and reclaimed ${Number(escrowDeposit).toFixed(2)} SUI from your vault.`;
+      fallbackMsg = `You carried your discipline through December 25 and reclaimed ${numericEscrow.toFixed(2)} SUI from your vault.`;
     } else if (breaches.length > 0) {
       const latest = breaches[0];
-      fallbackMsg = `You hit a bump on "${latest.ruleTitle || "your pact"}"${latest.memo ? ` (${latest.memo})` : ""}, adding to your ${Number(escrowDeposit).toFixed(2)} SUI Christmas vault. Reset today and keep the rest of your goals protected.`;
+      fallbackMsg = `You hit a bump on "${latest.ruleTitle || "your pact"}"${latest.memo ? ` (${latest.memo})` : ""}, adding to your ${numericEscrow.toFixed(2)} SUI vault. Reset today and keep the rest of your goals protected.`;
     } else if (honored.length > 0) {
       fallbackMsg = `You're ${honored.length} for ${honored.length} on recent transfers with zero penalties triggered. Every clean decision keeps your wallet working for your real goals.`;
     }

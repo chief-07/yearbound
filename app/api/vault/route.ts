@@ -70,10 +70,25 @@ export async function POST(req: Request) {
 
     // Step 3: Settle based on active wallet mode
     // -----------------------------------------------------------------------
-    // A. LINKED EXTENSION (Pre-executed on-chain via user's browser extension)
+    // A. LINKED EXTENSION (Requires verified real Mainnet digest from extension)
     // -----------------------------------------------------------------------
     const activeDigest = pre_executed_digest || payload.preExecutedDigest;
-    if (wallet_mode === "linked" && activeDigest) {
+    if (wallet_mode === "linked") {
+      const validBase58Digest =
+        typeof activeDigest === "string" &&
+        /^[1-9A-HJ-NP-Za-km-z]{32,64}$/.test(activeDigest) &&
+        !activeDigest.startsWith("0x_sui_");
+      if (!validBase58Digest) {
+        return NextResponse.json(
+          {
+            error: "Real on-chain Sui Mainnet transaction digest from connected extension is required.",
+            code: "MISSING_ONCHAIN_DIGEST",
+            is_real_on_chain: false,
+          },
+          { status: 400 }
+        );
+      }
+
       return NextResponse.json({
         status: "deposited",
         settlement_type: "on_chain_ptb",
@@ -93,11 +108,33 @@ export async function POST(req: Request) {
     }
 
     // -----------------------------------------------------------------------
-    // B. REAL BURNER WALLET (Sui Mainnet Tatum Gateway execution if funded)
+    // B. REAL BURNER WALLET (Strict Sui Mainnet Tatum Gateway execution only)
     // -----------------------------------------------------------------------
-    if (wallet_mode === "real" && private_key_secret) {
+    if (wallet_mode === "real") {
+      if (payload.signature === "ext_signed") {
+        return NextResponse.json(
+          {
+            error: "Ed25519 signature from the Real account keypair is required.",
+            code: "INVALID_SIGNATURE_TYPE",
+            is_real_on_chain: false,
+          },
+          { status: 400 }
+        );
+      }
+
+      if (!private_key_secret || typeof private_key_secret !== "string") {
+        return NextResponse.json(
+          {
+            error: "Real Mainnet account private key is required for on-chain x402 settlement.",
+            code: "MISSING_PRIVATE_KEY",
+            is_real_on_chain: false,
+          },
+          { status: 400 }
+        );
+      }
+
+      let keypair: Ed25519Keypair;
       try {
-        let keypair: Ed25519Keypair;
         if (private_key_secret.startsWith("suiprivkey")) {
           keypair = Ed25519Keypair.fromSecretKey(private_key_secret);
         } else {
@@ -106,54 +143,89 @@ export async function POST(req: Request) {
           );
           keypair = Ed25519Keypair.fromSecretKey(raw);
         }
+      } catch (kpErr) {
+        return NextResponse.json(
+          {
+            error: `Invalid Mainnet Ed25519 keypair: ${
+              kpErr instanceof Error ? kpErr.message : "decode error"
+            }`,
+            code: "INVALID_PRIVATE_KEY",
+            is_real_on_chain: false,
+          },
+          { status: 400 }
+        );
+      }
 
-        const derivedAddress = keypair.toSuiAddress();
-        const liveBalance = await tatumService.getSuiBalance(derivedAddress, "mainnet");
-        const requiredMist = Math.round(penaltyAmount * 1_000_000_000);
-        const minGasBufferSui = 0.002;
+      const derivedAddress = keypair.toSuiAddress();
+      if (payload.sender_address && payload.sender_address !== derivedAddress) {
+        return NextResponse.json(
+          {
+            error: `Signer mismatch: signed by ${payload.sender_address}, keypair is ${derivedAddress}.`,
+            code: "SIGNER_ADDRESS_MISMATCH",
+            is_real_on_chain: false,
+          },
+          { status: 400 }
+        );
+      }
 
-        // If funded on Mainnet, broadcast real Sui PTB via Tatum Gateway!
-        if (liveBalance >= penaltyAmount + minGasBufferSui) {
-          const tx = new Transaction();
-          tx.setSender(derivedAddress);
-          const [coin] = tx.splitCoins(tx.gas, [requiredMist]);
-          tx.transferObjects([coin], vaultDestination);
+      let liveBalance = 0;
+      try {
+        liveBalance = await tatumService.getSuiBalance(derivedAddress, "mainnet", {
+          throwOnError: true,
+        });
+      } catch (balErr) {
+        return NextResponse.json(
+          {
+            error: `Unable to verify live Sui Mainnet balance via Tatum Gateway: ${
+              balErr instanceof Error ? balErr.message : "RPC unavailable"
+            }`,
+            code: "MAINNET_RPC_UNAVAILABLE",
+            is_real_on_chain: false,
+          },
+          { status: 503 }
+        );
+      }
 
-          const txBytes = await tx.build({ client: tatumService.getGraphQLClient("mainnet") });
-          const { signature } = await keypair.signTransaction(txBytes);
-          const txBytesBase64 = Buffer.from(txBytes).toString("base64");
-          const execResult = await tatumService.executeTransaction(txBytesBase64, [signature], "mainnet");
+      const requiredMist = Math.round(penaltyAmount * 1_000_000_000);
+      const minGasBufferSui = 0.002;
+      const requiredSui = Number((penaltyAmount + minGasBufferSui).toFixed(4));
 
-          return NextResponse.json({
-            status: "deposited",
-            settlement_type: "on_chain_ptb",
-            is_real_on_chain: true,
-            network: "mainnet",
-            tx_hash: execResult.digest,
-            voucher_signature: payload.signature,
-            explorer_url: execResult.explorerUrl,
-            provider: "Tatum Sui Mainnet Gateway (x402 Protocol)",
-            message: "Escrow penalty successfully transferred on Sui Mainnet via Tatum Gateway.",
-            deposited_amount_sui: penaltyAmount,
-            vault_destination: vaultDestination,
-            commitment_id: commitment_id || null,
-            reason: reason || null,
-            timestamp: new Date().toISOString(),
-          });
-        }
+      if (liveBalance < penaltyAmount + minGasBufferSui) {
+        return NextResponse.json(
+          {
+            error: `Insufficient Sui Mainnet balance (${liveBalance.toFixed(
+              4
+            )} SUI available, ${requiredSui.toFixed(4)} SUI required including gas).`,
+            code: "INSUFFICIENT_MAINNET_FUNDS",
+            is_real_on_chain: false,
+            live_balance_sui: liveBalance,
+            required_sui: requiredSui,
+          },
+          { status: 400 }
+        );
+      }
 
-        // Unfunded burner: honest Ed25519 authorization voucher
+      try {
+        const tx = new Transaction();
+        tx.setSender(derivedAddress);
+        const [coin] = tx.splitCoins(tx.gas, [requiredMist]);
+        tx.transferObjects([coin], vaultDestination);
+
+        const txBytes = await tx.build({ client: tatumService.getGraphQLClient("mainnet") });
+        const { signature } = await keypair.signTransaction(txBytes);
+        const txBytesBase64 = Buffer.from(txBytes).toString("base64");
+        const execResult = await tatumService.executeTransaction(txBytesBase64, [signature], "mainnet");
+
         return NextResponse.json({
           status: "deposited",
-          settlement_type: "cryptographic_voucher",
-          is_real_on_chain: false,
+          settlement_type: "on_chain_ptb",
+          is_real_on_chain: true,
           network: "mainnet",
-          tx_hash: undefined,
+          tx_hash: execResult.digest,
           voucher_signature: payload.signature,
-          explorer_url: `https://suiscan.xyz/mainnet/account/${derivedAddress}`,
-          provider: "Tatum Sui Mainnet Gateway (Cryptographic Intent Voucher)",
-          message:
-            "Burner wallet has 0 SUI balance on Sui Mainnet. Cryptographic authorization voucher signed by Ed25519 key & inscribed to Walrus Memory.",
+          explorer_url: execResult.explorerUrl,
+          provider: "Tatum Sui Mainnet Gateway (x402 Protocol)",
+          message: "Escrow penalty successfully transferred on Sui Mainnet via Tatum Gateway.",
           deposited_amount_sui: penaltyAmount,
           vault_destination: vaultDestination,
           commitment_id: commitment_id || null,
@@ -161,7 +233,16 @@ export async function POST(req: Request) {
           timestamp: new Date().toISOString(),
         });
       } catch (burnerErr) {
-        console.warn("[x402 Real Settlement] Execution notice:", burnerErr);
+        const errMsg = burnerErr instanceof Error ? burnerErr.message : "Sui Mainnet PTB execution failed";
+        console.warn("[x402 Real Settlement] Mainnet execution error:", errMsg);
+        return NextResponse.json(
+          {
+            error: `Sui Mainnet x402 execution failed: ${errMsg}`,
+            code: "MAINNET_EXECUTION_FAILED",
+            is_real_on_chain: false,
+          },
+          { status: 502 }
+        );
       }
     }
 

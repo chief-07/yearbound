@@ -6,7 +6,8 @@
     "dev": "node --dns-result-order=ipv4first ./node_modules/next/dist/bin/next dev -H 0.0.0.0 -p 3000",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --env-file-if-exists=.env.local --dns-result-order=ipv4first --import ./tests/register-alias.mjs --test tests/*.test.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.109",

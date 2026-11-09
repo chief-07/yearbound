@@ -41,11 +41,20 @@ import {
   executeTransferWithExtension,
   type InstalledSuiWallet,
 } from "@/lib/wallet";
+import { isValidSuiAddress } from "@mysten/sui/utils";
 import {
   executeX402VaultDeposit,
   YEARBOUND_VAULT_ADDRESS,
   YEARBOUND_TESTNET_VAULT_ADDRESS,
 } from "@/lib/vault-x402";
+import {
+  DEFAULT_GENESIS_PLEDGE_SUI,
+  MAINNET_DUAL_TX_GAS_BUFFER_SUI,
+  MAINNET_MIN_GAS_BUFFER_SUI,
+  checkMainnetPenaltySolvency,
+  checkMainnetTransferReadiness,
+  getVaultDisplayState,
+} from "@/lib/real-account";
 import { synthesizeWallyIntervention } from "@/lib/wally-synthesizer";
 import { DisciplineGrid } from "@/components/discipline-grid";
 import { TimeTravelScrubber, type TimeMilestone } from "@/components/time-travel-scrubber";
@@ -113,6 +122,20 @@ export interface WalrusMemoryBlob {
   title: string;
   timestamp: string;
   payload: any;
+}
+
+export interface SavedBrowserPact {
+  version: 1;
+  savedAt: string;
+  accountType: AccountType;
+  walletAddress: string;
+  rules: RuleItem[];
+  escrowDeposit: number;
+  initialPledgeSui?: number;
+  walrusBlobId: string;
+  walrusBlobs: WalrusMemoryBlob[];
+  infractions: InfractionRecord[];
+  isVaultClaimed?: boolean;
 }
 
 type AccountType = "demo" | "real" | "linked";
@@ -292,6 +315,8 @@ export default function YearboundApp() {
 
   // Screen 2: Escrow Settings
   const [escrowDeposit, setEscrowDeposit] = useState<number>(0);
+  const [initialPledgeSui, setInitialPledgeSui] = useState<number>(0);
+  const [isLockingInitialPledge, setIsLockingInitialPledge] = useState<boolean>(false);
   const [unlockDate] = useState<string>("Dec 25, 2026");
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [sealingStage, setSealingStage] = useState<string>("");
@@ -460,6 +485,8 @@ export default function YearboundApp() {
     txHash?: string;
     voucherSignature?: string;
     explorerUrl?: string;
+    recipientTxHash?: string;
+    recipientExplorerUrl?: string;
     provider: string;
     message?: string;
   } | null>(null);
@@ -491,6 +518,8 @@ export default function YearboundApp() {
   const justCommittedGenesisRef = useRef<boolean>(false);
 
   // Screen 0: Sign In & Restore state
+  const SAVED_PACT_STORAGE_KEY = "yearbound_saved_pact_v1";
+  const [savedBrowserPact, setSavedBrowserPact] = useState<SavedBrowserPact | null>(null);
   const [restoreInput, setRestoreInput] = useState<string>("");
   const [isRestoring, setIsRestoring] = useState<boolean>(false);
   const [showRestoreInput, setShowRestoreInput] = useState<boolean>(false);
@@ -540,7 +569,7 @@ export default function YearboundApp() {
   const [matchedRuleBlobId, setMatchedRuleBlobId] = useState<string>("");
   const [matchedRuleCondition, setMatchedRuleCondition] = useState<string>("");
 
-  // Initialize real persistent self-custodial Sui keypair and detect extensions
+  // Initialize real persistent self-custodial Sui keypair, detect extensions, and check saved browser pact
   useEffect(() => {
     if (typeof window !== "undefined") {
       try {
@@ -551,6 +580,25 @@ export default function YearboundApp() {
       }
       const ext = detectInstalledSuiWallet();
       setDetectedExtension(ext);
+
+      try {
+        const raw = localStorage.getItem(SAVED_PACT_STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw) as SavedBrowserPact;
+          if (
+            parsed &&
+            parsed.version === 1 &&
+            typeof parsed.walletAddress === "string" &&
+            parsed.walletAddress.length > 0 &&
+            Array.isArray(parsed.rules) &&
+            parsed.rules.length > 0
+          ) {
+            setSavedBrowserPact(parsed);
+          }
+        }
+      } catch (err) {
+        console.warn("[Browser Pact] Failed to inspect saved pact:", err);
+      }
     }
   }, []);
 
@@ -561,8 +609,10 @@ export default function YearboundApp() {
       const res = await connectExtensionWallet();
       setLinkedAddress(res.address);
       setAccountType("linked");
+      setLiveOnChainBalanceSui(null);
+      setAvailableBalance(0);
       triggerSnackbar("Wallet Connected", `${res.walletName}: ${res.address.slice(0, 10)}...`);
-      refreshLiveBalance(res.address);
+      refreshLiveBalance(res.address, "linked");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to connect wallet";
       triggerSnackbar("Connection Failed", msg);
@@ -578,8 +628,10 @@ export default function YearboundApp() {
       const res = await connectExtensionWallet();
       setLinkedAddress(res.address);
       setAccountType("linked");
+      setLiveOnChainBalanceSui(null);
+      setAvailableBalance(0);
       triggerSnackbar("Wallet Connected", `${res.walletName}: ${res.address.slice(0, 10)}...`);
-      refreshLiveBalance(res.address);
+      refreshLiveBalance(res.address, "linked");
       await hydrateFromWalrus(res.address);
       setStep(4);
       setActiveTab("home");
@@ -601,9 +653,15 @@ export default function YearboundApp() {
     setIsRestoring(true);
     try {
       if (input.startsWith("0x")) {
+        if (!isValidSuiAddress(input)) {
+          triggerSnackbar("Invalid Sui Address", "Enter a valid 0x Sui Mainnet address or Walrus Blob ID");
+          return;
+        }
         setLinkedAddress(input);
         setAccountType("linked");
-        refreshLiveBalance(input);
+        setLiveOnChainBalanceSui(null);
+        setAvailableBalance(0);
+        refreshLiveBalance(input, "linked");
       }
       await hydrateFromWalrus(input);
       setStep(4);
@@ -616,6 +674,134 @@ export default function YearboundApp() {
     } finally {
       setIsRestoring(false);
     }
+  };
+
+  // Persist current pact session to browser storage (excluding simulated time-travel entries)
+  const persistBrowserPact = (snapshot: SavedBrowserPact) => {
+    const cleaned: SavedBrowserPact = {
+      ...snapshot,
+      rules: snapshot.rules.filter((r) => r.title.trim().length > 0),
+      infractions: (snapshot.infractions || []).filter((i) => i.source !== "timeline").slice(0, 50),
+      walrusBlobs: (snapshot.walrusBlobs || [])
+        .filter((b) => !b.title.startsWith("Milestone "))
+        .slice(0, 40),
+    };
+    if (!cleaned.walletAddress || cleaned.rules.length === 0) return;
+    setSavedBrowserPact(cleaned);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem(SAVED_PACT_STORAGE_KEY, JSON.stringify(cleaned));
+      } catch (err) {
+        console.warn("[Browser Pact] Could not persist snapshot:", err);
+      }
+    }
+  };
+
+  // Keep browser-saved pact synced whenever user is on the live dashboard (not simulated time-travel)
+  useEffect(() => {
+    if (step !== 4 || activeMilestone !== "jan1") return;
+    const activeAddr =
+      accountType === "demo"
+        ? (demoAddress || DEMO_SUI_ADDRESS)
+        : accountType === "real"
+        ? realAddress
+        : linkedAddress;
+    const nonEmptyRules = rules.filter((r) => r.title.trim().length > 0);
+    if (!activeAddr || nonEmptyRules.length === 0) return;
+
+    persistBrowserPact({
+      version: 1,
+      savedAt: new Date().toISOString(),
+      accountType,
+      walletAddress: activeAddr,
+      rules: nonEmptyRules,
+      escrowDeposit,
+      initialPledgeSui,
+      walrusBlobId,
+      walrusBlobs,
+      infractions,
+      isVaultClaimed,
+    });
+  }, [
+    step,
+    activeMilestone,
+    accountType,
+    demoAddress,
+    realAddress,
+    linkedAddress,
+    rules,
+    escrowDeposit,
+    initialPledgeSui,
+    walrusBlobId,
+    walrusBlobs,
+    infractions,
+    isVaultClaimed,
+  ]);
+
+  // Screen 0: 1-tap restore of previously completed pact detected in this browser
+  const handleRestoreFromBrowser = () => {
+    let pact = savedBrowserPact;
+    if (!pact && typeof window !== "undefined") {
+      try {
+        const raw = localStorage.getItem(SAVED_PACT_STORAGE_KEY);
+        if (raw) pact = JSON.parse(raw) as SavedBrowserPact;
+      } catch {}
+    }
+    if (!pact) {
+      triggerSnackbar("No Saved Pact Found", "Create a new pact or restore via Walrus ID.");
+      return;
+    }
+
+    setIsDegradedMode(false);
+    isDegradedModeRef.current = false;
+    setAccountType(pact.accountType);
+    if (pact.accountType === "demo" && pact.walletAddress) {
+      setDemoAddress(pact.walletAddress);
+    } else if (pact.accountType === "real" && pact.walletAddress) {
+      setRealAddress(pact.walletAddress);
+    } else if (pact.accountType === "linked" && pact.walletAddress) {
+      setLinkedAddress(pact.walletAddress);
+    }
+
+    setRules(pact.rules);
+    const restoredEscrow =
+      typeof pact.escrowDeposit === "number" && Number.isFinite(pact.escrowDeposit)
+        ? Math.max(0, pact.escrowDeposit)
+        : 0;
+    const restoredInitial =
+      typeof pact.initialPledgeSui === "number" && Number.isFinite(pact.initialPledgeSui)
+        ? Math.max(0, pact.initialPledgeSui)
+        : pact.accountType === "demo" && restoredEscrow >= DEFAULT_GENESIS_PLEDGE_SUI
+        ? DEFAULT_GENESIS_PLEDGE_SUI
+        : 0;
+    setEscrowDeposit(restoredEscrow);
+    setInitialPledgeSui(restoredInitial);
+    setLiveOnChainBalanceSui(null);
+    setAvailableBalance(0);
+    if (pact.walrusBlobId) {
+      setWalrusBlobId(pact.walrusBlobId);
+    }
+    if (Array.isArray(pact.walrusBlobs) && pact.walrusBlobs.length > 0) {
+      setWalrusBlobs(pact.walrusBlobs);
+    }
+    setInfractions(Array.isArray(pact.infractions) ? pact.infractions : []);
+    setIsVaultClaimed(Boolean(pact.isVaultClaimed));
+
+    // Start cleanly in live present-day mode and sync balance/inflow from network
+    setActiveMilestone("jan1");
+    setCurrentDayOfYear(1);
+    setIsVaultUnlocked(false);
+    setCurrentDateStr(formatShortCalendarDate(new Date()));
+    justCommittedGenesisRef.current = true;
+    setBriefingRefreshTick((t) => t + 1);
+    setStep(4);
+    setActiveTab("home");
+
+    triggerSnackbar(
+      "Restored from Browser",
+      `${pact.accountType === "demo" ? "Testnet" : pact.accountType === "real" ? "Mainnet" : "Linked"} · ${pact.walletAddress.slice(0, 6)}...${pact.walletAddress.slice(-4)}`,
+      pact.walrusBlobId
+    );
   };
 
   // Fetch live on-chain balance via Tatum Gateway (always bypasses HTTP cache)
@@ -730,7 +916,7 @@ export default function YearboundApp() {
         ? (demoAddress || DEMO_SUI_ADDRESS)
         : accountType === "real"
         ? realAddress
-        : linkedAddress || (demoAddress || DEMO_SUI_ADDRESS));
+        : linkedAddress);
     setIsHydrating(true);
     try {
       const res = await fetch(`/api/walrus/hydrate?address=${encodeURIComponent(addr || "")}`);
@@ -739,8 +925,12 @@ export default function YearboundApp() {
         setHasHydratedFromWalrus(true);
         if (data.pact) {
           setHydratedPactId(data.pact.pact_id || data.pact.blob_id || null);
+          const restoredInitial = data.pact.initial_deposit_sui;
+          if (typeof restoredInitial === "number" && restoredInitial >= 0) {
+            setInitialPledgeSui(restoredInitial);
+          }
           const restoredEscrow = data.pact.x402_escrow_deposit_sui ?? data.pact.initial_deposit_sui;
-          if (typeof restoredEscrow === "number" && restoredEscrow > 0) {
+          if (typeof restoredEscrow === "number" && restoredEscrow >= 0) {
             setEscrowDeposit(restoredEscrow);
           }
         }
@@ -825,7 +1015,7 @@ export default function YearboundApp() {
         ? (demoAddress || DEMO_SUI_ADDRESS)
         : accountType === "real"
         ? realAddress
-        : linkedAddress || (demoAddress || DEMO_SUI_ADDRESS));
+        : linkedAddress);
     if (!addr || !addr.startsWith("0x")) return;
 
     try {
@@ -938,7 +1128,7 @@ export default function YearboundApp() {
         ? (demoAddress || DEMO_SUI_ADDRESS)
         : accountType === "real"
         ? realAddress
-        : linkedAddress || (demoAddress || DEMO_SUI_ADDRESS);
+        : linkedAddress;
 
     const activeList = rules.filter((r) => r.title.trim().length > 0);
     setIsLoadingWallyBriefing(true);
@@ -1068,44 +1258,159 @@ export default function YearboundApp() {
 
   // Step 3 Submission to Walrus, Auto-Claim (2 SUI Testnet for Demo), & x402 Vault Lock
   const handleLockVault = async () => {
+    const activeRules = rules.filter((r) => r.title.trim().length > 0);
+    const activeAccountAddress =
+      accountType === "demo"
+        ? (demoAddress || DEMO_SUI_ADDRESS)
+        : accountType === "real"
+        ? realAddress
+        : linkedAddress;
+
+    if (accountType === "linked" && !isValidSuiAddress((activeAccountAddress || "").trim())) {
+      triggerSnackbar(
+        "Valid Mainnet Address Required",
+        "Connect a Sui wallet extension or enter a valid 0x address before continuing."
+      );
+      return;
+    }
+    if (accountType === "real" && !isValidSuiAddress((activeAccountAddress || "").trim())) {
+      triggerSnackbar("Mainnet Keypair Unavailable", "Could not derive self-custodial Mainnet address.");
+      return;
+    }
+
     setIsSubmitting(true);
     setSealingProgress(18);
-    setSealingStage("Committing resolutions to Walrus Memory...");
+    setSealingStage(
+      accountType === "demo"
+        ? "Checking Testnet balance..."
+        : "Querying live Sui Mainnet balance..."
+    );
 
-    const genesisPledgeSui = 0.20;
+    const targetGenesisPledgeSui = DEFAULT_GENESIS_PLEDGE_SUI;
+    let actualGenesisPledge = 0;
+    let vaultSettlement: Awaited<ReturnType<typeof executeX402VaultDeposit>> | null = null;
+    let claimedDrops = 0;
 
     try {
-      const activeRules = rules.filter((r) => r.title.trim().length > 0);
-      const activeAccountAddress =
-        accountType === "demo"
-          ? (demoAddress || DEMO_SUI_ADDRESS)
-          : accountType === "real"
-          ? realAddress
-          : linkedAddress || (demoAddress || DEMO_SUI_ADDRESS);
+      const initialBal = await refreshLiveBalance(activeAccountAddress, accountType);
 
-      // Run Walrus Genesis Pact inscription concurrently with initial live balance query
-      const [walrusRes, initialBal] = await Promise.all([
-        fetch("/api/walrus", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          signal: AbortSignal.timeout(30000),
-          body: JSON.stringify({
-            rules: activeRules,
-            initialDepositSui: genesisPledgeSui,
-            unlockDate: "2026-12-25",
-            walletAddress: activeAccountAddress,
-            accountType,
-          }),
-        })
-          .then((r) => r.json())
-          .catch((fetchErr) => {
-            console.warn(`[Vault] Submission notice:`, fetchErr);
-            return null;
-          }),
-        accountType === "demo"
-          ? refreshLiveBalance(activeAccountAddress, "demo")
-          : Promise.resolve(null),
-      ]);
+      if (accountType === "demo") {
+        // Demo Mode: Auto-claim up to 2.00 SUI Testnet Gas during onboarding loading
+        let currentDemoBal = initialBal;
+        if (currentDemoBal === null || currentDemoBal < 1.95) {
+          const dropsNeeded = currentDemoBal !== null && currentDemoBal >= 0.95 ? 1 : 2;
+          for (let drop = 1; drop <= dropsNeeded; drop++) {
+            setSealingProgress(drop === 1 ? 40 : 60);
+            setSealingStage(`Claiming 2.00 SUI Testnet gas (${drop}/${dropsNeeded})...`);
+            const claimRes = await handleRequestFaucet(activeAccountAddress, {
+              quietStartSnackbar: true,
+              quietResultSnackbar: true,
+              maxTimeoutMs: 115000,
+            });
+            if (!claimRes.success) {
+              break;
+            }
+            claimedDrops++;
+            if (drop < dropsNeeded) {
+              await new Promise((r) => setTimeout(r, 600));
+              const updatedBal = await refreshLiveBalance(activeAccountAddress, "demo");
+              if (updatedBal !== null) currentDemoBal = updatedBal;
+              if (currentDemoBal !== null && currentDemoBal >= 1.95) break;
+            }
+          }
+          if (claimedDrops > 0) {
+            await new Promise((r) => setTimeout(r, 1200));
+          }
+        }
+
+        setSealingProgress(74);
+        setSealingStage("Locking 0.20 SUI in Testnet x402 vault...");
+        try {
+          vaultSettlement = await executeX402VaultDeposit({
+            amountSui: targetGenesisPledgeSui,
+            reason: "Genesis Commitment Pledge",
+            commitmentId: "pact_primary",
+            walletMode: "demo",
+            privateKeySecret: exportDemoPrivateKeyHex() || undefined,
+            senderAddress: activeAccountAddress,
+          });
+        } catch (vaultDepositErr) {
+          console.warn("[x402 Genesis Vault] Demo deposit notice:", vaultDepositErr);
+        }
+        actualGenesisPledge = targetGenesisPledgeSui;
+      } else {
+        // Strict Sui Mainnet Mode ("real" | "linked"):
+        // Never fabricate an initial 0.20 SUI balance when the Mainnet wallet is unfunded.
+        const knownBal = initialBal ?? 0;
+        const minRequiredForInitialLock = targetGenesisPledgeSui + MAINNET_DUAL_TX_GAS_BUFFER_SUI;
+
+        if (knownBal >= minRequiredForInitialLock) {
+          if (accountType === "linked" && !detectInstalledSuiWallet()) {
+            triggerSnackbar(
+              "Extension Required",
+              "Connect a Sui wallet extension to sign the 0.20 SUI Mainnet vault deposit."
+            );
+            return;
+          }
+
+          setSealingProgress(62);
+          setSealingStage(
+            accountType === "linked"
+              ? "Approve 0.20 SUI Mainnet lock in wallet..."
+              : "Locking 0.20 SUI on Sui Mainnet..."
+          );
+
+          try {
+            const privateKey =
+              accountType === "real" ? exportRealPrivateKeyHex() || undefined : undefined;
+            const res = await executeX402VaultDeposit({
+              amountSui: targetGenesisPledgeSui,
+              reason: "Genesis Commitment Pledge",
+              commitmentId: "pact_primary",
+              walletMode: accountType,
+              privateKeySecret: privateKey,
+              senderAddress: activeAccountAddress,
+            });
+            if (!res.isRealOnChain || !res.txHash) {
+              throw new Error("Mainnet x402 lock did not produce an on-chain digest.");
+            }
+            vaultSettlement = res;
+            actualGenesisPledge = targetGenesisPledgeSui;
+          } catch (mainnetLockErr) {
+            const errMsg =
+              mainnetLockErr instanceof Error
+                ? mainnetLockErr.message
+                : "Mainnet x402 deposit did not settle on-chain.";
+            triggerSnackbar("Mainnet Vault Not Locked", errMsg);
+            return;
+          }
+        } else {
+          // Wallet has 0 SUI (or less than 0.205 SUI): enter with honest 0.00 SUI vault.
+          actualGenesisPledge = 0;
+          vaultSettlement = null;
+        }
+      }
+
+      setSealingProgress(88);
+      setSealingStage("Committing resolutions to Walrus Memory...");
+
+      const walrusRes = await fetch("/api/walrus", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(30000),
+        body: JSON.stringify({
+          rules: activeRules,
+          initialDepositSui: actualGenesisPledge,
+          unlockDate: "2026-12-25",
+          walletAddress: activeAccountAddress,
+          accountType,
+        }),
+      })
+        .then((r) => r.json())
+        .catch((fetchErr) => {
+          console.warn(`[Vault] Submission notice:`, fetchErr);
+          return null;
+        });
 
       const data =
         walrusRes && (walrusRes.success || walrusRes.genesisBlobId || walrusRes.primaryBlobId)
@@ -1160,7 +1465,13 @@ export default function YearboundApp() {
             type: "genesis_pact",
             pactId: data.pactId,
             wallet: activeAccountAddress,
-            x402VaultLock: `${genesisPledgeSui.toFixed(2)} SUI until ${unlockDate}`,
+            x402VaultLock:
+              actualGenesisPledge > 0
+                ? `${actualGenesisPledge.toFixed(2)} SUI until ${unlockDate}`
+                : "0.00 SUI (Awaiting Mainnet funding)",
+            isRealOnChain: Boolean(vaultSettlement?.isRealOnChain),
+            vaultTxHash: vaultSettlement?.txHash || null,
+            explorerUrl: vaultSettlement?.explorerUrl || null,
             totalRules: (data.blobs || []).length,
             resolutions: (data.blobs || []).map((b: any, i: number) => ({
               index: i + 1,
@@ -1200,68 +1511,25 @@ export default function YearboundApp() {
         setWalrusBlobs([initialPactBlob, ...individualBlobs]);
       }
 
-      // Demo Mode: Auto-claim up to 2.00 SUI Testnet Gas during onboarding loading
-      let claimedDrops = 0;
-      if (accountType === "demo") {
-        let currentDemoBal = initialBal;
-        if (currentDemoBal === null || currentDemoBal < 1.95) {
-          const dropsNeeded = currentDemoBal !== null && currentDemoBal >= 0.95 ? 1 : 2;
-          for (let drop = 1; drop <= dropsNeeded; drop++) {
-            setSealingProgress(drop === 1 ? 44 : 68);
-            setSealingStage(`Claiming 2.00 SUI Testnet gas (${drop}/${dropsNeeded})...`);
-            const claimRes = await handleRequestFaucet(activeAccountAddress, {
-              quietStartSnackbar: true,
-              quietResultSnackbar: true,
-              maxTimeoutMs: 115000,
-            });
-            if (!claimRes.success) {
-              break;
+      setInitialPledgeSui(actualGenesisPledge);
+      setEscrowDeposit(actualGenesisPledge);
+      setLatestSettlement(
+        vaultSettlement?.isRealOnChain && vaultSettlement.txHash
+          ? {
+              isRealOnChain: true,
+              settlementType: "on_chain_ptb",
+              txHash: vaultSettlement.txHash,
+              voucherSignature: vaultSettlement.voucherSignature,
+              explorerUrl: vaultSettlement.explorerUrl,
+              provider: vaultSettlement.provider,
+              message: vaultSettlement.message,
             }
-            claimedDrops++;
-            if (drop < dropsNeeded) {
-              await new Promise((r) => setTimeout(r, 600));
-              const updatedBal = await refreshLiveBalance(activeAccountAddress, "demo");
-              if (updatedBal !== null) currentDemoBal = updatedBal;
-              if (currentDemoBal !== null && currentDemoBal >= 1.95) break;
-            }
-          }
-          if (claimedDrops > 0) {
-            // Brief pause so newly minted faucet coins are indexed for the x402 Move deposit
-            await new Promise((r) => setTimeout(r, 1200));
-          }
-        }
-      }
+          : null
+      );
 
-      // Execute real on-chain 0.20 SUI deposit to x402 Move vault on Sui
-      setSealingProgress(88);
-      setSealingStage("Locking 0.20 SUI in x402 vault...");
-
-      let vaultTxReal = false;
-      try {
-        const privateKey =
-          accountType === "demo"
-            ? (exportDemoPrivateKeyHex() || undefined)
-            : accountType === "real"
-            ? (exportRealPrivateKeyHex() || undefined)
-            : undefined;
-
-        const vaultRes = await executeX402VaultDeposit({
-          amountSui: genesisPledgeSui,
-          reason: "Genesis Commitment Pledge",
-          commitmentId: data?.pactId || "pact_primary",
-          walletMode: accountType,
-          privateKeySecret: privateKey,
-          senderAddress: activeAccountAddress,
-        });
-        vaultTxReal = Boolean(vaultRes?.isRealOnChain);
-      } catch (vaultDepositErr) {
-        console.warn("[x402 Genesis Vault] Real deposit notice:", vaultDepositErr);
-      }
-
-      setEscrowDeposit(genesisPledgeSui);
       const syncedBal = await refreshLiveBalance(activeAccountAddress, accountType, { syncRetry: true });
-      if (vaultTxReal && syncedBal === null) {
-        setAvailableBalance((prev) => Math.max(0, prev - genesisPledgeSui));
+      if (accountType === "demo" && vaultSettlement?.isRealOnChain && syncedBal === null) {
+        setAvailableBalance((prev) => Math.max(0, prev - actualGenesisPledge));
       }
 
       setSealingProgress(100);
@@ -1272,6 +1540,18 @@ export default function YearboundApp() {
         triggerSnackbar(
           "Vault Locked & Testnet Funded",
           `Claimed ${claimedDrops === 2 ? "2.00" : "1.00"} SUI · 0.20 SUI locked in x402 vault`,
+          resolvedGenesisId
+        );
+      } else if (accountType !== "demo" && actualGenesisPledge === 0) {
+        triggerSnackbar(
+          "Mainnet Pact Sealed · 0.00 SUI Vault",
+          `Wallet holds ${(initialBal ?? 0).toFixed(2)} SUI · Fund via Receive to lock on-chain`,
+          resolvedGenesisId
+        );
+      } else if (accountType !== "demo" && vaultSettlement?.txHash) {
+        triggerSnackbar(
+          "Mainnet Vault Locked (0.20 SUI)",
+          `Tx #${vaultSettlement.txHash.slice(0, 10)}... · Saved to Walrus`,
           resolvedGenesisId
         );
       } else if (data && (data.genesisBlobId || data.primaryBlobId)) {
@@ -1286,14 +1566,99 @@ export default function YearboundApp() {
 
       setStep(4);
       setActiveTab("home");
-    } catch {
-      triggerSnackbar("Notice", "Walrus memory connecting in background. Entering...");
-      setStep(4);
-      setActiveTab("home");
+    } catch (err) {
+      if (accountType === "demo") {
+        triggerSnackbar("Notice", "Walrus memory connecting in background. Entering...");
+        setStep(4);
+        setActiveTab("home");
+      } else {
+        triggerSnackbar(
+          "Mainnet Setup Failed",
+          err instanceof Error ? err.message : "Could not initialize Mainnet pact."
+        );
+      }
     } finally {
       setIsSubmitting(false);
       setSealingStage("");
       setSealingProgress(0);
+    }
+  };
+
+  // Vault Tab Action: Lock initial 0.20 SUI pledge on Mainnet after funding wallet
+  const handleFundGenesisPledge = async () => {
+    if (isDegradedModeRef.current || accountType === "demo" || initialPledgeSui > 0 || isLockingInitialPledge) {
+      return;
+    }
+
+    const activeAccountAddress = accountType === "real" ? realAddress : linkedAddress;
+    if (!isValidSuiAddress((activeAccountAddress || "").trim())) {
+      triggerSnackbar("Valid Mainnet Address Required", "Connect or link a valid 0x Sui address first.");
+      return;
+    }
+
+    if (accountType === "linked" && !detectInstalledSuiWallet()) {
+      triggerSnackbar(
+        "Extension Required",
+        "Connect a Sui wallet extension to sign and broadcast this Mainnet pledge."
+      );
+      return;
+    }
+
+    setIsLockingInitialPledge(true);
+    try {
+      const freshBal = await refreshLiveBalance(activeAccountAddress, accountType);
+      const minRequired = DEFAULT_GENESIS_PLEDGE_SUI + MAINNET_DUAL_TX_GAS_BUFFER_SUI;
+      if (freshBal === null) {
+        triggerSnackbar("Mainnet RPC Unavailable", "Unable to verify live balance via Tatum Gateway.");
+        return;
+      }
+      if (freshBal < minRequired) {
+        triggerSnackbar(
+          "Insufficient Mainnet Funds",
+          `Need at least ${minRequired.toFixed(3)} SUI including gas (${freshBal.toFixed(3)} SUI available).`
+        );
+        return;
+      }
+
+      const privateKey = accountType === "real" ? exportRealPrivateKeyHex() || undefined : undefined;
+      const res = await executeX402VaultDeposit({
+        amountSui: DEFAULT_GENESIS_PLEDGE_SUI,
+        reason: "Genesis Commitment Pledge",
+        commitmentId: hydratedPactId || "pact_primary",
+        walletMode: accountType,
+        privateKeySecret: privateKey,
+        senderAddress: activeAccountAddress,
+      });
+
+      if (!res.isRealOnChain || !res.txHash) {
+        throw new Error("Mainnet x402 transaction did not return an on-chain digest.");
+      }
+
+      setInitialPledgeSui(DEFAULT_GENESIS_PLEDGE_SUI);
+      setEscrowDeposit((prev) => Number((prev + DEFAULT_GENESIS_PLEDGE_SUI).toFixed(4)));
+      setLatestSettlement({
+        isRealOnChain: true,
+        settlementType: "on_chain_ptb",
+        txHash: res.txHash,
+        voucherSignature: res.voucherSignature,
+        explorerUrl: res.explorerUrl,
+        provider: res.provider,
+        message: res.message,
+      });
+
+      await refreshLiveBalance(activeAccountAddress, accountType, { syncRetry: true });
+      setBriefingRefreshTick((t) => t + 1);
+      triggerSnackbar(
+        "0.20 SUI Locked on Mainnet",
+        `Tx #${res.txHash.slice(0, 10)}... · Confirmed via x402`
+      );
+    } catch (err) {
+      triggerSnackbar(
+        "Mainnet Lock Failed",
+        err instanceof Error ? err.message : "Could not settle Mainnet vault pledge."
+      );
+    } finally {
+      setIsLockingInitialPledge(false);
     }
   };
 
@@ -1315,14 +1680,14 @@ export default function YearboundApp() {
           ? (demoAddress || DEMO_SUI_ADDRESS)
           : accountType === "real"
           ? realAddress
-          : linkedAddress || (demoAddress || DEMO_SUI_ADDRESS);
+          : linkedAddress;
 
       const res = await fetch("/api/walrus", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           rules: [newRule],
-          initialDepositSui: escrowDeposit || 0.20,
+          initialDepositSui: escrowDeposit,
           unlockDate: "2026-12-25",
           walletAddress: activeAccountAddress,
         }),
@@ -1418,7 +1783,10 @@ export default function YearboundApp() {
     {
       id: "send_setup",
       targetSelector: '[data-tour-id="tour-send-setup"]',
-      body: "Try a small SUI amount within your balance and enter any Sui address or test contact name, then hit Continue.",
+      body:
+        accountType === "demo"
+          ? "Try a small SUI amount within your balance and enter any Sui address or test contact name, then hit Continue."
+          : "Enter a small SUI amount within your balance (leaving gas) and a valid 0x Sui Mainnet address, then hit Continue.",
       interactive: true,
       hintText: "Tap Continue",
       reserveBottomPx: 98,
@@ -1561,7 +1929,7 @@ export default function YearboundApp() {
   // Handle Approved Transaction Recording to Walrus Memory & Tatum Sui Gateway
   const recordApprovedTransaction = async () => {
     const numAmount = parseFloat(sendAmount) || 0;
-    setAvailableBalance((prev) => Math.max(0, prev - numAmount));
+    const isMainnetStrict = accountType === "real" || accountType === "linked";
 
     const timestampStr = new Intl.DateTimeFormat("en-US", {
       month: "short",
@@ -1572,6 +1940,7 @@ export default function YearboundApp() {
 
     // When Walrus & Tatum are disabled: bypass Tatum transfers, balance polling, and Walrus inscription
     if (isDegradedMode || isDegradedModeRef.current) {
+      setAvailableBalance((prev) => Math.max(0, prev - numAmount));
       const statelessRecord: InfractionRecord = {
         id: `tx_offline_${Date.now()}`,
         ruleTitle: "Unchecked Transfer",
@@ -1606,27 +1975,47 @@ export default function YearboundApp() {
         ? (demoAddress || DEMO_SUI_ADDRESS)
         : accountType === "real"
         ? realAddress
-        : linkedAddress || (demoAddress || DEMO_SUI_ADDRESS);
+        : linkedAddress;
+
+    if (isMainnetStrict && !isValidSuiAddress(sendRecipient.trim())) {
+      triggerSnackbar("Invalid Recipient", "Mainnet transfers require a valid 0x Sui address.");
+      setSendSubStep("amount");
+      return;
+    }
 
     let txHash: string | undefined = undefined;
     let explorerUrl: string | undefined = undefined;
-    let transferProvider = accountType === "demo" ? "Tatum Sui Testnet Gateway" : "Tatum Sui Gateway";
+    let transferProvider =
+      accountType === "demo" ? "Tatum Sui Testnet Gateway" : "Tatum Sui Mainnet Gateway";
     let isUnfunded = false;
     let isRealOnChain = false;
 
-    // 1. If Linked wallet extension, try to execute on-chain directly
+    // 1. If Linked wallet extension, execute on-chain directly via extension
     let preExecutedDigest: string | undefined = undefined;
     if (accountType === "linked") {
+      if (!detectInstalledSuiWallet()) {
+        triggerSnackbar(
+          "Extension Required",
+          "Connect a Sui wallet extension to broadcast Mainnet transfers."
+        );
+        setSendSubStep("amount");
+        return;
+      }
       try {
         const extResult = await executeTransferWithExtension({
-          recipient: sendRecipient,
+          recipient: sendRecipient.trim(),
           amountSui: numAmount,
         });
-        if (extResult?.digest) {
-          preExecutedDigest = extResult.digest;
+        if (!extResult?.digest) {
+          throw new Error("Connected extension did not return an on-chain transaction digest.");
         }
+        preExecutedDigest = extResult.digest;
       } catch (extErr) {
-        console.warn("[Extension PTB] Execution bypass/notice:", extErr);
+        const extMsg =
+          extErr instanceof Error ? extErr.message : "Extension transfer was declined or failed.";
+        triggerSnackbar("Mainnet Transfer Cancelled", extMsg);
+        setSendSubStep("amount");
+        return;
       }
     }
 
@@ -1638,14 +2027,15 @@ export default function YearboundApp() {
         ? (exportRealPrivateKeyHex() || undefined)
         : undefined;
 
+    let ptbError: string | null = null;
     try {
       const ptbRes = await fetch("/api/sui-transfer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        signal: AbortSignal.timeout(20000),
+        signal: AbortSignal.timeout(25000),
         body: JSON.stringify({
           senderAddress: activeAccountAddress,
-          recipientAddress: sendRecipient,
+          recipientAddress: sendRecipient.trim(),
           amountSui: numAmount,
           walletMode: accountType,
           privateKeySecret: privateKey,
@@ -1654,16 +2044,39 @@ export default function YearboundApp() {
       });
 
       const ptbData = await ptbRes.json();
-      if (ptbData && ptbData.digest) {
-        txHash = ptbData.digest;
-        explorerUrl = ptbData.explorerUrl || undefined;
-        transferProvider = ptbData.provider || "Tatum Sui Gateway";
-        isUnfunded = Boolean(ptbData.unfunded);
-        isRealOnChain = Boolean(ptbData.onChain);
-        await refreshLiveBalance(activeAccountAddress, accountType, { syncRetry: true });
+      if (ptbRes.ok && ptbData?.success && ptbData?.digest) {
+        if (isMainnetStrict && ptbData.onChain !== true) {
+          ptbError = ptbData?.error || "Mainnet transfer did not settle on-chain.";
+        } else {
+          txHash = ptbData.digest;
+          explorerUrl = ptbData.explorerUrl || undefined;
+          transferProvider = ptbData.provider || transferProvider;
+          isUnfunded = Boolean(ptbData.unfunded);
+          isRealOnChain = Boolean(ptbData.onChain);
+        }
+      } else if (ptbData?.error) {
+        ptbError = ptbData.error;
+      } else {
+        ptbError = `Transfer request failed (HTTP ${ptbRes.status})`;
       }
     } catch (ptbErr) {
+      ptbError = ptbErr instanceof Error ? ptbErr.message : "Sui transfer request failed";
       console.warn("[PTB Transfer] Tatum API notice:", ptbErr);
+    }
+
+    if (isMainnetStrict && (!isRealOnChain || !txHash)) {
+      triggerSnackbar(
+        "Mainnet Transfer Failed",
+        ptbError || "Could not broadcast transfer on Sui Mainnet."
+      );
+      await refreshLiveBalance(activeAccountAddress, accountType);
+      setSendSubStep("amount");
+      return;
+    }
+
+    const syncedBal = await refreshLiveBalance(activeAccountAddress, accountType, { syncRetry: true });
+    if (syncedBal === null) {
+      setAvailableBalance((prev) => Math.max(0, prev - numAmount));
     }
 
     let txBlobId = `blob_tx_${Date.now().toString(36)}`;
@@ -1681,6 +2094,8 @@ export default function YearboundApp() {
           user_explanation: sendMemo || "Resolution-compliant transfer",
           penalty_deposited_sui: 0,
           vault_tx_hash: txHash,
+          is_real_on_chain: isRealOnChain,
+          explorer_url: explorerUrl,
           recipient: sendRecipient,
           amount_sui: numAmount,
           wallet_address: activeAccountAddress,
@@ -1731,6 +2146,7 @@ export default function YearboundApp() {
         transferAmountSui: numAmount,
         recipient: sendRecipient,
         penaltyDepositedSui: 0,
+        isRealOnChain,
         vaultTxHash: txHash,
         explorerUrl,
         settlementEngine: transferProvider,
@@ -1778,7 +2194,7 @@ export default function YearboundApp() {
         ? (demoAddress || DEMO_SUI_ADDRESS)
         : accountType === "real"
         ? realAddress
-        : linkedAddress || (demoAddress || DEMO_SUI_ADDRESS);
+        : linkedAddress;
 
     try {
       const res = await fetch("/api/verify-transaction", {
@@ -1895,16 +2311,24 @@ export default function YearboundApp() {
 
   // Handle Penalty Payment when Breach is Accepted via x402 Protocol & Execute Transfer
   const handlePayFineAndProceed = async () => {
+    const isMainnetStrict = accountType === "real" || accountType === "linked";
     setIsSubmitting(true);
-    setPayFineStage("Settling fine via x402...");
+    setPayFineStage(
+      isMainnetStrict ? "Checking Mainnet solvency..." : "Settling fine via x402..."
+    );
 
-    // Safety timeout: guarantees button never stays stuck in loading while giving real Testnet PTBs room to settle
+    // Safety timeout: never auto-fabricate a recorded penalty if settlement hangs
     const safetyTimer = setTimeout(() => {
-      console.warn("[Fine Settlement] Safety timeout triggered, auto-advancing");
+      console.warn("[Fine Settlement] Timeout reached before completion");
       setIsSubmitting(false);
       setPayFineStage("");
-      setSendSubStep("penalty_recorded");
-    }, 30000);
+      triggerSnackbar(
+        "Settlement Timed Out",
+        isMainnetStrict
+          ? "Check SuiScan before retrying in case a wallet signature was broadcast."
+          : "Network busy — please retry settling this penalty."
+      );
+    }, 45000);
 
     try {
       const penaltyAmt = breachPenaltySui || 0.05;
@@ -1914,9 +2338,49 @@ export default function YearboundApp() {
           ? (demoAddress || DEMO_SUI_ADDRESS)
           : accountType === "real"
           ? realAddress
-          : linkedAddress || (demoAddress || DEMO_SUI_ADDRESS);
+          : linkedAddress;
+
+      // Pre-flight Mainnet checks BEFORE sending real funds to the x402 vault
+      if (isMainnetStrict) {
+        if (!isValidSuiAddress((activeAccountAddress || "").trim())) {
+          throw new Error("Mainnet sender address is missing or invalid.");
+        }
+        if (transferAmt > 0 && !isValidSuiAddress(sendRecipient.trim())) {
+          throw new Error("Mainnet transfers require a valid 0x Sui address.");
+        }
+        if (accountType === "linked" && !detectInstalledSuiWallet()) {
+          throw new Error(
+            "Connect a Sui wallet extension to sign and broadcast Mainnet penalty and transfer transactions."
+          );
+        }
+
+        const freshBal = await refreshLiveBalance(activeAccountAddress, accountType);
+        if (freshBal === null) {
+          throw new Error(
+            "Unable to verify live Sui Mainnet balance via Tatum Gateway. No funds moved."
+          );
+        }
+
+        const solvency = checkMainnetPenaltySolvency({
+          accountType,
+          transferAmountSui: transferAmt,
+          penaltyAmountSui: penaltyAmt,
+          availableBalance: freshBal,
+        });
+        if (!solvency.ok) {
+          throw new Error(solvency.reason || "Insufficient Sui Mainnet funds.");
+        }
+      }
 
       // 1. Execute Real x402 Challenge-Response Flow with Sui Move Vault
+      setPayFineStage(
+        accountType === "linked"
+          ? "Approve penalty deposit in wallet..."
+          : isMainnetStrict
+          ? "Settling penalty on Sui Mainnet via x402..."
+          : "Settling fine via x402..."
+      );
+
       let isRealOnChain = false;
       let settlementType: "on_chain_ptb" | "cryptographic_voucher" = "cryptographic_voucher";
       let txHash: string | undefined = undefined;
@@ -1949,6 +2413,13 @@ export default function YearboundApp() {
           senderAddress: activeAccountAddress,
         });
 
+        if (isMainnetStrict && (!x402Result.isRealOnChain || !x402Result.txHash)) {
+          throw new Error(
+            x402Result.message ||
+              "Sui Mainnet x402 settlement did not produce an on-chain transaction digest."
+          );
+        }
+
         isRealOnChain = x402Result.isRealOnChain;
         settlementType = x402Result.settlementType;
         txHash = x402Result.txHash;
@@ -1959,7 +2430,70 @@ export default function YearboundApp() {
         settlementMsg = x402Result.message || "";
         console.log("[x402] Penalty successfully settled:", x402Result);
       } catch (x402Err) {
-        console.warn("[x402] Challenge flow notice (proceeding with fallback voucher):", x402Err);
+        if (isMainnetStrict) {
+          throw x402Err instanceof Error
+            ? x402Err
+            : new Error("Mainnet x402 penalty settlement failed.");
+        }
+        console.warn("[x402] Challenge flow notice (demo fallback voucher):", x402Err);
+      }
+
+      // 2. Execute the actual purchase / transfer to the recipient
+      let recipientTxHash: string | undefined = undefined;
+      let recipientExplorerUrl: string | undefined = undefined;
+      let recipientTransferCompleted = false;
+      let recipientTransferError: string | null = null;
+
+      if (transferAmt > 0 && sendRecipient) {
+        setPayFineStage(
+          accountType === "linked"
+            ? "Approve recipient transfer in wallet..."
+            : isMainnetStrict
+            ? "Broadcasting SUI transfer on Mainnet..."
+            : "Sending SUI to recipient..."
+        );
+
+        let preExecutedRecipientDigest: string | undefined = undefined;
+        try {
+          if (accountType === "linked") {
+            const extRes = await executeTransferWithExtension({
+              recipient: sendRecipient.trim(),
+              amountSui: transferAmt,
+            });
+            if (!extRes?.digest) {
+              throw new Error("Extension did not return recipient transfer digest.");
+            }
+            preExecutedRecipientDigest = extRes.digest;
+          }
+
+          const ptbRes = await fetch("/api/sui-transfer", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            signal: AbortSignal.timeout(25000),
+            body: JSON.stringify({
+              senderAddress: activeAccountAddress,
+              recipientAddress: sendRecipient.trim(),
+              amountSui: transferAmt,
+              walletMode: accountType,
+              privateKeySecret,
+              preExecutedDigest: preExecutedRecipientDigest,
+            }),
+          });
+          const ptbData = await ptbRes.json();
+          if (ptbRes.ok && ptbData?.success && ptbData?.digest && (!isMainnetStrict || ptbData.onChain)) {
+            recipientTxHash = ptbData.digest;
+            recipientExplorerUrl = ptbData.explorerUrl;
+            recipientTransferCompleted = true;
+            console.log("[Breach Transfer] Real Sui PTB transfer completed:", ptbData.digest);
+          } else {
+            recipientTransferError =
+              ptbData?.error || `Recipient transfer failed (HTTP ${ptbRes.status})`;
+          }
+        } catch (tErr) {
+          recipientTransferError =
+            tErr instanceof Error ? tErr.message : "Recipient transfer did not complete.";
+          console.warn("[Breach Transfer] Transfer dispatch notice:", tErr);
+        }
       }
 
       setLatestSettlement({
@@ -1968,38 +2502,11 @@ export default function YearboundApp() {
         txHash,
         voucherSignature,
         explorerUrl,
+        recipientTxHash,
+        recipientExplorerUrl,
         provider: settlementProvider,
         message: settlementMsg,
       });
-
-      // 2. Execute the actual purchase / transfer to the recipient!
-      setPayFineStage("Sending SUI to recipient...");
-      let recipientTxHash: string | undefined = undefined;
-      let recipientExplorerUrl: string | undefined = undefined;
-      if (transferAmt > 0 && sendRecipient) {
-        try {
-          const ptbRes = await fetch("/api/sui-transfer", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            signal: AbortSignal.timeout(20000),
-            body: JSON.stringify({
-              senderAddress: activeAccountAddress,
-              recipientAddress: sendRecipient,
-              amountSui: transferAmt,
-              walletMode: accountType,
-              privateKeySecret,
-            }),
-          });
-          const ptbData = await ptbRes.json();
-          if (ptbData?.digest) {
-            recipientTxHash = ptbData.digest;
-            recipientExplorerUrl = ptbData.explorerUrl;
-            console.log("[Breach Transfer] Real Sui PTB transfer completed:", ptbData.digest);
-          }
-        } catch (tErr) {
-          console.warn("[Breach Transfer] Transfer dispatch notice:", tErr);
-        }
-      }
 
       setPayFineStage("Inscribing to Walrus memory...");
 
@@ -2110,18 +2617,40 @@ export default function YearboundApp() {
             : r
         )
       );
-      setAvailableBalance((prev) => Math.max(0, prev - penaltyAmt - transferAmt));
-      setEscrowDeposit((prev) => prev + penaltyAmt);
-      refreshLiveBalance(activeAccountAddress, accountType, { syncRetry: true });
+
+      if (!isMainnetStrict || isRealOnChain) {
+        setEscrowDeposit((prev) => Number((prev + penaltyAmt).toFixed(4)));
+      }
+
+      const syncedBal = await refreshLiveBalance(activeAccountAddress, accountType, { syncRetry: true });
+      if (syncedBal === null) {
+        const localSpent =
+          (isMainnetStrict ? (isRealOnChain ? penaltyAmt : 0) : penaltyAmt) +
+          (recipientTransferCompleted ? transferAmt : 0);
+        setAvailableBalance((prev) => Math.max(0, prev - localSpent));
+      }
+
+      if (isMainnetStrict && transferAmt > 0 && !recipientTransferCompleted) {
+        triggerSnackbar(
+          "Penalty Locked · Transfer Incomplete",
+          recipientTransferError || "Vault penalty settled on Mainnet, but recipient transfer did not complete."
+        );
+      }
+
       setBriefingRefreshTick((t) => t + 1);
       setLatestFineBlobId(fineBlobId);
       clearTimeout(safetyTimer);
       setSendSubStep("penalty_recorded");
-    } catch {
-      // Graceful fallback so demo never gets blocked
-      const fallbackBlobId = `blob_infr_${Date.now().toString(36)}`;
-      setLatestFineBlobId(fallbackBlobId);
-      setSendSubStep("penalty_recorded");
+    } catch (err) {
+      if (isMainnetStrict) {
+        const errMsg =
+          err instanceof Error ? err.message : "Mainnet penalty transaction did not complete.";
+        triggerSnackbar("Mainnet Penalty Not Settled", errMsg);
+      } else {
+        const fallbackBlobId = `blob_infr_${Date.now().toString(36)}`;
+        setLatestFineBlobId(fallbackBlobId);
+        setSendSubStep("penalty_recorded");
+      }
     } finally {
       clearTimeout(safetyTimer);
       setIsSubmitting(false);
@@ -2143,7 +2672,7 @@ export default function YearboundApp() {
         ? (demoAddress || DEMO_SUI_ADDRESS)
         : accountType === "real"
         ? realAddress
-        : linkedAddress || (demoAddress || DEMO_SUI_ADDRESS);
+        : linkedAddress;
 
     if (navigator?.clipboard?.writeText) {
       navigator.clipboard.writeText(addr).catch(() => {});
@@ -2278,7 +2807,7 @@ export default function YearboundApp() {
         ? (demoAddress || DEMO_SUI_ADDRESS)
         : accountType === "real"
         ? realAddress
-        : linkedAddress || (demoAddress || DEMO_SUI_ADDRESS);
+        : linkedAddress;
 
     const privateKey =
       accountType === "demo"
@@ -2287,10 +2816,12 @@ export default function YearboundApp() {
         ? (exportRealPrivateKeyHex() || undefined)
         : undefined;
 
+    const genesisBase = accountType === "demo" ? DEFAULT_GENESIS_PLEDGE_SUI : initialPledgeSui;
+
     if (milestone === "jan1") {
       setCurrentDateStr("Thur, Jan 1");
       setCurrentDayOfYear(1);
-      setEscrowDeposit(0.20 + userPenaltySum);
+      setEscrowDeposit(genesisBase + userPenaltySum);
       setIsVaultUnlocked(false);
       setIsVaultClaimed(false);
       setInfractions([...userTransactions]);
@@ -2414,7 +2945,7 @@ export default function YearboundApp() {
       }
 
       const totalFines = febInfrs.reduce((acc, i) => acc + i.penaltySui, 0);
-      setEscrowDeposit(0.20 + totalFines + userPenaltySum);
+      setEscrowDeposit(genesisBase + totalFines + userPenaltySum);
       setInfractions([...userTransactions, ...febInfrs]);
       triggerSnackbar(
         "Time Travel: Feb 14 (1st Breach)",
@@ -2602,13 +3133,13 @@ export default function YearboundApp() {
       }
 
       const totalFines = summerInfrs.reduce((acc, i) => acc + i.penaltySui, 0);
-      setEscrowDeposit(0.20 + totalFines + userPenaltySum);
+      setEscrowDeposit(genesisBase + totalFines + userPenaltySum);
       setInfractions([...userTransactions, ...summerInfrs]);
 
       if (isChristmas) {
         triggerSnackbar(
           "🎅 Time Travel: Dec 25 (Christmas Unlock)",
-          `Move vault time-lock mature! Claim your ${(0.20 + totalFines + userPenaltySum).toFixed(2)} SUI savings.`
+          `Move vault time-lock mature! Claim your ${(genesisBase + totalFines + userPenaltySum).toFixed(2)} SUI savings.`
         );
       } else {
         triggerSnackbar(
@@ -2830,6 +3361,35 @@ export default function YearboundApp() {
 
             {/* Main Action Cards (Dark Blur Glass, text in #ebaf64, concise & clean) */}
             <div className="flex-1 overflow-y-auto px-7 py-2 flex flex-col gap-4 pb-4 overscroll-contain">
+              {/* Detected Browser Session Restore */}
+              {savedBrowserPact && (
+                <div
+                  onClick={handleRestoreFromBrowser}
+                  className="bg-black/20 backdrop-blur-2xl rounded-3xl p-5 sm:p-6 flex flex-col gap-2 cursor-pointer transition-all duration-200 active:scale-[0.99] border border-[#ebaf64]/45 hover:border-[#ebaf64]/75 shadow-[0_8px_32px_rgba(0,0,0,0.4)] group"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="text-base font-semibold text-[#ebaf64] tracking-[-0.01em]">
+                      Restore from this browser
+                    </div>
+                    <div className="text-xs font-mono text-[#ebaf64]/90 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                      <span>Enter</span>
+                      <ArrowRight size={14} />
+                    </div>
+                  </div>
+                  <div className="text-xs font-mono text-white/60 truncate">
+                    {savedBrowserPact.accountType === "demo"
+                      ? "Testnet"
+                      : savedBrowserPact.accountType === "real"
+                      ? "Mainnet"
+                      : "Linked"}{" "}
+                    · {savedBrowserPact.walletAddress.slice(0, 6)}...
+                    {savedBrowserPact.walletAddress.slice(-4)} ·{" "}
+                    {savedBrowserPact.rules.filter((r) => r.title.trim().length > 0).length}{" "}
+                    resolutions
+                  </div>
+                </div>
+              )}
+
               {/* Option 1: Connect Sui Wallet */}
               <div
                 onClick={handleConnectExtensionAndEnter}
@@ -3227,8 +3787,10 @@ export default function YearboundApp() {
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-white/70">Initial x402 Deposit</span>
-                  <span className="text-xs text-[#ebaf64] font-mono font-medium">{(escrowDeposit || 0.2).toFixed(2)} SUI</span>
+                  <span className="text-xs text-white/70">Target Initial Deposit</span>
+                  <span className="text-xs text-[#ebaf64] font-mono font-medium">
+                    {escrowDeposit > 0 ? `${escrowDeposit.toFixed(2)} SUI` : `${DEFAULT_GENESIS_PLEDGE_SUI.toFixed(2)} SUI (if funded)`}
+                  </span>
                 </div>
 
                 <div className="flex items-center justify-between border-t border-[#ebaf64]/20 pt-2.5">
@@ -3294,6 +3856,8 @@ export default function YearboundApp() {
               <div
                 onClick={() => {
                   setAccountType("demo");
+                  setLiveOnChainBalanceSui(null);
+                  setAvailableBalance(0);
                   const activeDemo = demoAddress || DEMO_SUI_ADDRESS;
                   refreshLiveBalance(activeDemo, "demo");
                 }}
@@ -3327,7 +3891,9 @@ export default function YearboundApp() {
               <div
                 onClick={() => {
                   setAccountType("real");
-                  if (realAddress) refreshLiveBalance(realAddress);
+                  setLiveOnChainBalanceSui(null);
+                  setAvailableBalance(0);
+                  if (realAddress) refreshLiveBalance(realAddress, "real");
                 }}
                 className={`bg-black/20 backdrop-blur-2xl rounded-3xl p-5 sm:p-6 flex flex-col gap-2.5 cursor-pointer transition-all duration-200 active:scale-[0.99] border shadow-md ${
                   accountType === "real"
@@ -3353,6 +3919,19 @@ export default function YearboundApp() {
                 <p className="text-xs text-white/70 leading-relaxed">
                   Self-custodial Sui Mainnet wallet with real funds and cryptographic enforcement.
                 </p>
+
+                {accountType === "real" && realAddress && (
+                  <div className="pt-2 border-t border-[#ebaf64]/15 flex items-center justify-between text-[11px] font-mono text-[#ebaf64]/85">
+                    <span>
+                      Mainnet · {realAddress.slice(0, 6)}...{realAddress.slice(-4)}
+                    </span>
+                    <span>
+                      {isCheckingLiveBalance
+                        ? "Checking..."
+                        : `${(liveOnChainBalanceSui ?? 0).toFixed(2)} SUI`}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Option 3: Link Wallet */}
@@ -3376,7 +3955,11 @@ export default function YearboundApp() {
                     type="button"
                     onClick={() => {
                       setShowLinkInput(!showLinkInput);
-                      if (!showLinkInput) setAccountType("linked");
+                      if (!showLinkInput) {
+                        setAccountType("linked");
+                        setLiveOnChainBalanceSui(null);
+                        setAvailableBalance(0);
+                      }
                     }}
                     className="text-xs font-medium text-[#ebaf64]/70 hover:text-[#ebaf64] transition-colors py-1 flex items-center gap-1.5 active:scale-95"
                   >
@@ -3394,8 +3977,10 @@ export default function YearboundApp() {
                         const val = e.target.value.trim();
                         setLinkedAddress(val);
                         setAccountType("linked");
-                        if (val.startsWith("0x") && val.length > 20) {
-                          refreshLiveBalance(val);
+                        setLiveOnChainBalanceSui(null);
+                        setAvailableBalance(0);
+                        if (isValidSuiAddress(val)) {
+                          refreshLiveBalance(val, "linked");
                         }
                       }}
                       placeholder="Enter Sui address (0x...)"
@@ -3596,7 +4181,9 @@ export default function YearboundApp() {
                         : wallyBriefing ||
                           (isLoadingWallyBriefing
                             ? "Synthesizing Walrus Memory..."
-                            : `All ${activeRulesList.length} resolutions are anchored in Walrus Memory with ${escrowDeposit.toFixed(2)} SUI locked in your Christmas vault.`)}
+                            : escrowDeposit > 0
+                            ? `All ${activeRulesList.length} resolutions are anchored in Walrus Memory with ${escrowDeposit.toFixed(2)} SUI locked in your vault.`
+                            : `All ${activeRulesList.length} resolutions are anchored in Walrus Memory. Vault is currently at 0.00 SUI awaiting Mainnet funding.`)}
                     </p>
                   </div>
                 </div>
@@ -3889,108 +4476,159 @@ export default function YearboundApp() {
                 )}
 
                 {/* 1. PRIMARY HERO VAULT CARD (Top Section) */}
-                <div className="relative bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/30 rounded-3xl p-6 sm:p-7 flex flex-col gap-5 shadow-xl transition-all duration-200 overflow-hidden">
-                  {/* Subtle ambient decorative gold glow */}
-                  <div className="absolute -top-12 -right-12 w-36 h-36 bg-[#ebaf64]/10 rounded-full blur-3xl pointer-events-none" />
+                {(() => {
+                  const vaultState = getVaultDisplayState({
+                    accountType,
+                    escrowDeposit,
+                    initialPledgeSui,
+                    availableBalance,
+                    isDegradedMode,
+                  });
 
-                  {/* Top Row: Label & Release Status */}
-                  <div className="flex items-center justify-between relative z-10">
-                    <span className="text-[11px] font-mono uppercase tracking-wider text-white/50">
-                      Total Locked Value
-                    </span>
-                    <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#ebaf64]/10 border border-[#ebaf64]/25 text-[#ebaf64] text-xs font-mono font-medium">
-                      {isVaultUnlocked ? (
-                        <>
-                          <Check size={12} className="text-[#10B981]" />
-                          <span className="text-[#10B981]">Release Active</span>
-                        </>
-                      ) : (
-                        <>
-                          <Lock size={11} />
-                          <span>Locked until {unlockDate}</span>
-                        </>
-                      )}
-                    </span>
-                  </div>
+                  return (
+                    <div className="relative bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/30 rounded-3xl p-6 sm:p-7 flex flex-col gap-5 shadow-xl transition-all duration-200 overflow-hidden">
+                      {/* Subtle ambient decorative gold glow */}
+                      <div className="absolute -top-12 -right-12 w-36 h-36 bg-[#ebaf64]/10 rounded-full blur-3xl pointer-events-none" />
 
-                  {/* Hero Balance Block */}
-                  <div className="flex items-baseline gap-2 relative z-10">
-                    <span className="text-4xl sm:text-5xl font-bold font-mono text-white tracking-tight">
-                      {escrowDeposit.toFixed(2)}
-                    </span>
-                    <span className="text-xl sm:text-2xl font-bold font-mono text-[#ebaf64]">
-                      SUI
-                    </span>
-                  </div>
+                      {/* Top Row: Label & Release Status */}
+                      <div className="flex items-center justify-between relative z-10">
+                        <span className="text-[11px] font-mono uppercase tracking-wider text-white/50">
+                          Total Locked Value
+                        </span>
+                        <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#ebaf64]/10 border border-[#ebaf64]/25 text-[#ebaf64] text-xs font-mono font-medium">
+                          {isVaultUnlocked ? (
+                            <>
+                              <Check size={12} className="text-[#10B981]" />
+                              <span className="text-[#10B981]">Release Active</span>
+                            </>
+                          ) : (
+                            <>
+                              <Lock size={11} />
+                              <span>Locked until {unlockDate}</span>
+                            </>
+                          )}
+                        </span>
+                      </div>
 
-                  {/* Pledge vs Toll Breakdown Pills */}
-                  <div className="grid grid-cols-2 gap-2.5 relative z-10">
-                    <div className="bg-black/30 border border-[#ebaf64]/15 rounded-2xl p-3.5 flex flex-col gap-0.5">
-                      <span className="text-[10px] font-mono text-white/50 uppercase tracking-wider">
-                        Initial Pledge
-                      </span>
-                      <span className="text-sm font-mono font-semibold text-white">
-                        0.20 SUI
-                      </span>
-                    </div>
-                    <div className="bg-black/30 border border-[#ebaf64]/15 rounded-2xl p-3.5 flex flex-col gap-0.5">
-                      <span className="text-[10px] font-mono text-white/50 uppercase tracking-wider">
-                        Infraction Tolls
-                      </span>
-                      <span className="text-sm font-mono font-semibold text-[#ebaf64]">
-                        +{Math.max(0, escrowDeposit - 0.20).toFixed(2)} SUI
-                      </span>
-                    </div>
-                  </div>
+                      {/* Hero Balance Block */}
+                      <div className="flex items-baseline gap-2 relative z-10">
+                        <span className="text-4xl sm:text-5xl font-bold font-mono text-white tracking-tight">
+                          {vaultState.totalLockedSui.toFixed(2)}
+                        </span>
+                        <span className="text-xl sm:text-2xl font-bold font-mono text-[#ebaf64]">
+                          SUI
+                        </span>
+                      </div>
 
-                  {/* Contract Details Micro-Rows */}
-                  <div className="flex flex-col gap-2 pt-3 border-t border-white/10 text-xs relative z-10">
-                    <div className="flex items-center justify-between">
-                      <span className="text-white/60">Escrow Contract</span>
-                      <div className="flex items-center gap-2">
+                      {/* Pledge vs Toll Breakdown Pills */}
+                      <div className="grid grid-cols-2 gap-2.5 relative z-10">
+                        <div className="bg-black/30 border border-[#ebaf64]/15 rounded-2xl p-3.5 flex flex-col gap-0.5">
+                          <span className="text-[10px] font-mono text-white/50 uppercase tracking-wider">
+                            Initial Pledge
+                          </span>
+                          <span className="text-sm font-mono font-semibold text-white">
+                            {vaultState.initialPledgeSui.toFixed(2)} SUI
+                          </span>
+                        </div>
+                        <div className="bg-black/30 border border-[#ebaf64]/15 rounded-2xl p-3.5 flex flex-col gap-0.5">
+                          <span className="text-[10px] font-mono text-white/50 uppercase tracking-wider">
+                            Infraction Tolls
+                          </span>
+                          <span className="text-sm font-mono font-semibold text-[#ebaf64]">
+                            +{vaultState.infractionTollsSui.toFixed(2)} SUI
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Optional Initial Pledge CTA when funded on Mainnet */}
+                      {vaultState.canFundGenesisPledge && (
                         <button
                           type="button"
-                          onClick={() => {
-                            navigator.clipboard.writeText(YEARBOUND_TESTNET_VAULT_ADDRESS);
-                            triggerSnackbar("Contract Address Copied", YEARBOUND_TESTNET_VAULT_ADDRESS);
-                          }}
-                          className="font-mono text-[#ebaf64] hover:text-[#f3ba6f] flex items-center gap-1.5 transition-colors group"
-                          title={YEARBOUND_TESTNET_VAULT_ADDRESS}
+                          onClick={handleFundGenesisPledge}
+                          disabled={isLockingInitialPledge}
+                          className="relative z-10 w-full py-3 px-4 rounded-full bg-[#ebaf64] hover:bg-[#f3ba6f] text-black font-semibold text-xs transition-all duration-150 flex items-center justify-center gap-2 active:scale-[0.98] shadow-sm cursor-pointer disabled:opacity-60"
                         >
-                          <span>{YEARBOUND_TESTNET_VAULT_ADDRESS.slice(0, 6)}...{YEARBOUND_TESTNET_VAULT_ADDRESS.slice(-4)}</span>
-                          <Copy size={11} className="text-white/40 group-hover:text-white transition-colors" />
+                          <Lock size={13} />
+                          <span>
+                            {isLockingInitialPledge
+                              ? "Locking 0.20 SUI on Mainnet..."
+                              : "Lock 0.20 SUI Initial Pledge (Mainnet)"}
+                          </span>
                         </button>
-                        <a
-                          href={`https://suiscan.xyz/testnet/account/${YEARBOUND_TESTNET_VAULT_ADDRESS}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-white/40 hover:text-white transition-colors"
-                          title="View on SuiScan Testnet"
-                        >
-                          <ExternalLink size={11} />
-                        </a>
+                      )}
+
+                      {vaultState.isUnfundedMainnetVault && !vaultState.canFundGenesisPledge && !isDegradedMode && (
+                        <p className="relative z-10 text-[11px] font-mono text-white/55 leading-relaxed">
+                          No Mainnet funds locked yet. Send at least{" "}
+                          {(DEFAULT_GENESIS_PLEDGE_SUI + MAINNET_DUAL_TX_GAS_BUFFER_SUI).toFixed(3)} SUI
+                          to your address via Receive to lock a 0.20 SUI pledge on-chain, or start enforcing penalties directly once funded.
+                        </p>
+                      )}
+
+                      {/* Contract Details Micro-Rows */}
+                      <div className="flex flex-col gap-2 pt-3 border-t border-white/10 text-xs relative z-10">
+                        <div className="flex items-center justify-between">
+                          <span className="text-white/60">Escrow Contract</span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(vaultState.vaultContractAddress);
+                                triggerSnackbar("Contract Address Copied", vaultState.vaultContractAddress);
+                              }}
+                              className="font-mono text-[#ebaf64] hover:text-[#f3ba6f] flex items-center gap-1.5 transition-colors group"
+                              title={vaultState.vaultContractAddress}
+                            >
+                              <span>
+                                {vaultState.vaultContractAddress.slice(0, 6)}...
+                                {vaultState.vaultContractAddress.slice(-4)}
+                              </span>
+                              <Copy size={11} className="text-white/40 group-hover:text-white transition-colors" />
+                            </button>
+                            <a
+                              href={vaultState.explorerAccountUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-white/40 hover:text-white transition-colors"
+                              title={`View on SuiScan ${vaultState.explorerNetwork === "mainnet" ? "Mainnet" : "Testnet"}`}
+                            >
+                              <ExternalLink size={11} />
+                            </a>
+                          </div>
+                        </div>
+                        {latestSettlement?.isRealOnChain && latestSettlement?.txHash && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-white/60">Last Vault Tx</span>
+                            <a
+                              href={
+                                latestSettlement.explorerUrl ||
+                                `https://suiscan.xyz/${vaultState.explorerNetwork}/tx/${latestSettlement.txHash}`
+                              }
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-mono text-[#ebaf64] hover:underline flex items-center gap-1"
+                            >
+                              <span>{latestSettlement.txHash.slice(0, 10)}...</span>
+                              <ExternalLink size={10} />
+                            </a>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between">
+                          <span className="text-white/60">Release Trigger</span>
+                          <span className="font-mono text-white/80">
+                            Sui Network Epoch Clock (Dec 25)
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-white/60">Settlement Gateway</span>
+                          <span className="font-mono text-white/80 text-right">
+                            {vaultState.settlementGatewayLabel}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-white/60">Release Trigger</span>
-                      <span className="font-mono text-white/80">
-                        Sui Network Epoch Clock (Dec 25)
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-white/60">Settlement Gateway</span>
-                      <span className="font-mono text-white/80">
-                        {isDegradedMode
-                          ? "Offline (Tatum disabled)"
-                          : accountType === "real"
-                          ? "Tatum Mainnet Gateway"
-                          : accountType === "linked"
-                          ? "Sui Wallet Standard"
-                          : "Tatum Sui Testnet Gateway (Live On-Chain)"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                  );
+                })()}
 
                 {/* 2. 365-DAY DISCIPLINE GRID HEATMAP (Activity Visualizer) */}
                 {!isDegradedMode && (
@@ -4104,7 +4742,9 @@ export default function YearboundApp() {
                       <a
                         href={accountType === "demo"
                           ? `https://suiscan.xyz/testnet/account/${demoAddress || DEMO_SUI_ADDRESS}`
-                          : `https://suiscan.xyz/mainnet/account/${realAddress || linkedAddress}`}
+                          : accountType === "real"
+                          ? `https://suiscan.xyz/mainnet/account/${realAddress}`
+                          : `https://suiscan.xyz/mainnet/account/${linkedAddress}`}
                         target="_blank"
                         rel="noreferrer"
                         className="text-[#ebaf64]/80 hover:text-[#ebaf64] p-1 transition-colors"
@@ -4186,7 +4826,7 @@ export default function YearboundApp() {
                       {showExportPrivateKey && exportedKey && (
                         <div className="bg-black/40 border border-[#ebaf64]/20 rounded-2xl p-3 flex flex-col gap-1.5 animate-in fade-in">
                           <span className="text-[10px] font-mono text-white/50">
-                            {accountType === "demo" ? "Testnet" : "Mainnet"} Secret Key (Hex):
+                            {accountType === "demo" ? "Testnet" : "Mainnet"} Secret Key:
                           </span>
                           <div className="bg-black/60 p-2.5 rounded-xl text-[10px] font-mono text-[#ebaf64] break-all select-all border border-[#ebaf64]/20">
                             {exportedKey}
@@ -4212,6 +4852,16 @@ export default function YearboundApp() {
                     type="button"
                     onClick={() => {
                       setIsDegradedMode(false);
+                      isDegradedModeRef.current = false;
+                      setEscrowDeposit(0);
+                      setInitialPledgeSui(0);
+                      setLatestSettlement(null);
+                      setIsVaultClaimed(false);
+                      setIsVaultUnlocked(false);
+                      setActiveMilestone("jan1");
+                      setInfractions([]);
+                      setLiveOnChainBalanceSui(null);
+                      setAvailableBalance(0);
                       setStep(1);
                       setActiveTab("home");
                     }}
@@ -4350,12 +5000,30 @@ export default function YearboundApp() {
                         ))}
                       </div>
 
-                      {/* Insufficient Balance Indicator */}
-                      {parseFloat(sendAmount || "0") > availableBalance && (
-                        <span className="text-[11px] font-mono text-red-400 mt-1">
-                          Insufficient balance (Wallet: {availableBalance.toFixed(2)} SUI)
-                        </span>
-                      )}
+                      {/* Insufficient Balance or Gas Buffer Indicator */}
+                      {(() => {
+                        const parsed = parseFloat(sendAmount || "0");
+                        const isMainnetStrict = accountType === "real" || accountType === "linked";
+                        if (parsed > availableBalance) {
+                          return (
+                            <span className="text-[11px] font-mono text-red-400 mt-1">
+                              Insufficient balance (Wallet: {availableBalance.toFixed(2)} SUI)
+                            </span>
+                          );
+                        }
+                        if (
+                          isMainnetStrict &&
+                          parsed > 0 &&
+                          parsed + MAINNET_MIN_GAS_BUFFER_SUI > availableBalance
+                        ) {
+                          return (
+                            <span className="text-[11px] font-mono text-red-400 mt-1">
+                              Keep at least {MAINNET_MIN_GAS_BUFFER_SUI} SUI for Mainnet gas fees
+                            </span>
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
 
                     {/* Recipient Address */}
@@ -4367,9 +5035,20 @@ export default function YearboundApp() {
                         type="text"
                         value={sendRecipient}
                         onChange={(e) => setSendRecipient(e.target.value)}
-                        placeholder="Enter Sui address or contact name..."
+                        placeholder={
+                          accountType === "demo"
+                            ? "Enter Sui address or contact name..."
+                            : "Enter valid Sui Mainnet address (0x...)"
+                        }
                         className="w-full bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 hover:border-[#ebaf64]/50 focus:border-[#ebaf64] rounded-2xl px-4 py-3.5 text-xs font-mono text-white placeholder-white/30 outline-none transition-colors shadow-sm"
                       />
+                      {(accountType === "real" || accountType === "linked") &&
+                        sendRecipient.trim().length > 0 &&
+                        !isValidSuiAddress(sendRecipient.trim()) && (
+                          <span className="text-[11px] font-mono text-red-400 px-1">
+                            Sui Mainnet requires a valid 0x address (64 hex chars)
+                          </span>
+                        )}
                     </div>
                   </div>
                 </div>
@@ -4377,22 +5056,43 @@ export default function YearboundApp() {
                 <div className="p-5 sm:p-7 pt-2 pb-8 sm:pb-9 bg-transparent shrink-0 flex flex-col items-center">
                   {(() => {
                     const parsed = parseFloat(sendAmount) || 0;
-                    const isExceeding = parsed > availableBalance || availableBalance <= 0;
-                    const canContinue = Boolean(sendAmount && parsed > 0 && sendRecipient.trim().length > 0 && !isExceeding);
+                    const trimmedRecip = sendRecipient.trim();
+                    const transferCheck = checkMainnetTransferReadiness({
+                      accountType,
+                      amountSui: parsed,
+                      availableBalance,
+                      recipient: trimmedRecip,
+                    });
+                    const isMainnetStrict = accountType === "real" || accountType === "linked";
+                    const isBalanceIssue = availableBalance <= 0 || parsed > availableBalance;
+                    const isGasIssue =
+                      !isBalanceIssue &&
+                      isMainnetStrict &&
+                      parsed > 0 &&
+                      parsed + MAINNET_MIN_GAS_BUFFER_SUI > availableBalance;
+                    const isInvalidMainnetAddr =
+                      isMainnetStrict && trimmedRecip.length > 0 && !isValidSuiAddress(trimmedRecip);
+                    const buttonLabel = isBalanceIssue
+                      ? "Insufficient SUI Balance"
+                      : isGasIssue
+                      ? `Need ${MAINNET_MIN_GAS_BUFFER_SUI} SUI Gas Reserve`
+                      : isInvalidMainnetAddr
+                      ? "Invalid 0x Sui Address"
+                      : "Continue";
 
                     return (
                       <button
                         type="button"
                         onClick={() => setSendSubStep("memo")}
-                        disabled={!canContinue}
+                        disabled={!transferCheck.ready}
                         className={`w-full py-4 px-6 rounded-full font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98] ${
-                          canContinue
+                          transferCheck.ready
                             ? "bg-[#ebaf64] text-black hover:bg-[#f3bc75] shadow-lg shadow-black/60 cursor-pointer"
                             : "bg-black/40 text-white/40 border border-white/10 cursor-not-allowed"
                         }`}
                       >
-                        <span>{isExceeding ? "Insufficient SUI Balance" : "Continue"}</span>
-                        {!isExceeding && <ArrowRight size={16} />}
+                        <span>{buttonLabel}</span>
+                        {transferCheck.ready && <ArrowRight size={16} />}
                       </button>
                     );
                   })()}
@@ -4612,6 +5312,15 @@ export default function YearboundApp() {
                       <ExternalLink size={11} className="text-[#ebaf64]/70" />
                     </button>
                   </div>
+
+                  <div className="flex-1 min-h-[130px] flex items-center justify-center pt-1 pb-1 select-none pointer-events-none">
+                    <img
+                      src="/assets/mascot/wally_memories.gif"
+                      alt="Wally checking Memories"
+                      className="w-36 sm:w-44 max-h-[200px] object-contain"
+                      draggable={false}
+                    />
+                  </div>
                 </div>
 
                 {/* Actions: Cancel vs Pay Fine */}
@@ -4730,16 +5439,21 @@ export default function YearboundApp() {
                       <span className="text-xs text-white/70">Settlement Engine</span>
                       <span className="text-xs font-mono text-white/80">
                         {latestSettlement?.isRealOnChain
-                          ? "Sui Mainnet PTB (Tatum Gateway)"
+                          ? accountType === "demo"
+                            ? "Sui Testnet PTB (Tatum Gateway)"
+                            : "Sui Mainnet PTB (Tatum Gateway)"
                           : "Agent Cryptographic Debt Voucher"}
                       </span>
                     </div>
 
                     {latestSettlement?.isRealOnChain && latestSettlement?.txHash && (
                       <div className="flex items-center justify-between border-t border-white/10 pt-2.5">
-                        <span className="text-xs text-white/70">On-Chain Digest</span>
+                        <span className="text-xs text-white/70">Vault Penalty Digest</span>
                         <a
-                          href={latestSettlement.explorerUrl || `https://suiscan.xyz/mainnet/tx/${latestSettlement.txHash}`}
+                          href={
+                            latestSettlement.explorerUrl ||
+                            `https://suiscan.xyz/${accountType === "demo" ? "testnet" : "mainnet"}/tx/${latestSettlement.txHash}`
+                          }
                           target="_blank"
                           rel="noreferrer"
                           className="text-xs font-mono text-[#ebaf64] hover:underline flex items-center gap-1"
@@ -4749,6 +5463,35 @@ export default function YearboundApp() {
                         </a>
                       </div>
                     )}
+
+                    {latestSettlement?.recipientTxHash && (
+                      <div className="flex items-center justify-between border-t border-white/10 pt-2.5">
+                        <span className="text-xs text-white/70">Recipient Transfer</span>
+                        <a
+                          href={
+                            latestSettlement.recipientExplorerUrl ||
+                            `https://suiscan.xyz/${accountType === "demo" ? "testnet" : "mainnet"}/tx/${latestSettlement.recipientTxHash}`
+                          }
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs font-mono text-[#ebaf64] hover:underline flex items-center gap-1"
+                        >
+                          <span>{latestSettlement.recipientTxHash.slice(0, 10)}...</span>
+                          <ExternalLink size={10} />
+                        </a>
+                      </div>
+                    )}
+
+                    {accountType !== "demo" &&
+                      parseFloat(sendAmount || "0") > 0 &&
+                      !latestSettlement?.recipientTxHash && (
+                        <div className="flex items-center justify-between border-t border-white/10 pt-2.5">
+                          <span className="text-xs text-amber-300/90">Recipient Transfer</span>
+                          <span className="text-[11px] font-mono text-amber-300/90">
+                            Not completed on-chain
+                          </span>
+                        </div>
+                      )}
 
                     {!latestSettlement?.isRealOnChain && latestSettlement?.voucherSignature && (
                       <div className="flex items-center justify-between border-t border-white/10 pt-2.5">

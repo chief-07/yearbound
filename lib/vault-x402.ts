@@ -112,8 +112,19 @@ export async function verifyAndSettleX402Payment(
     return { valid: false, error: "Payment destination does not match vault object" };
   }
 
+  if (!payload.signature || payload.signature.startsWith("mock_")) {
+    return { valid: false, error: "Missing or invalid cryptographic signature" };
+  }
+
   // Cryptographic Sui Ed25519 signature verification
-  if (payload.signature && payload.signature !== "ext_signed" && !payload.signature.startsWith("mock_")) {
+  if (payload.signature === "ext_signed") {
+    if (!payload.preExecutedDigest) {
+      return {
+        valid: false,
+        error: "Extension authorization requires an executed Mainnet transaction digest",
+      };
+    }
+  } else {
     try {
       const canonicalChallenge = `x402:${payload.destination}:${payload.amount_sui}:${payload.nonce}${
         payload.preExecutedDigest ? `:${payload.preExecutedDigest}` : ""
@@ -171,6 +182,8 @@ export async function executeX402VaultDeposit(params: {
   amountSui: number;
   challengeNonce: string;
 }> {
+  const isStrictMainnet = params.walletMode === "real" || params.walletMode === "linked";
+
   // Step 1: Initial request to receive HTTP 402 challenge
   const initialRes = await fetch("/api/vault", {
     method: "POST",
@@ -180,6 +193,7 @@ export async function executeX402VaultDeposit(params: {
       amount_sui: params.amountSui,
       reason: params.reason,
       commitment_id: params.commitmentId || "pact_primary",
+      wallet_mode: params.walletMode,
     }),
   });
 
@@ -192,20 +206,17 @@ export async function executeX402VaultDeposit(params: {
     throw new Error("Invalid x402 challenge payload received from vault");
   }
 
-  // Step 2: If connected extension, attempt direct on-chain PTB execution
+  // Step 2: If connected extension, require direct on-chain Mainnet PTB execution
   let preExecutedDigest: string | undefined = undefined;
   if (params.walletMode === "linked") {
-    try {
-      const extRes = await executeTransferWithExtension({
-        recipient: challenge.payment.destination,
-        amountSui: challenge.payment.amount_sui,
-      });
-      if (extRes?.digest) {
-        preExecutedDigest = extRes.digest;
-      }
-    } catch (extErr) {
-      console.warn("[x402 Extension PTB] Extension signing notice:", extErr);
+    const extRes = await executeTransferWithExtension({
+      recipient: challenge.payment.destination,
+      amountSui: challenge.payment.amount_sui,
+    });
+    if (!extRes?.digest) {
+      throw new Error("Connected Sui wallet extension did not return an on-chain transaction digest.");
     }
+    preExecutedDigest = extRes.digest;
   }
 
   // Step 3: Sign the canonical payment challenge with the active wallet
@@ -218,12 +229,24 @@ export async function executeX402VaultDeposit(params: {
   try {
     signerResult = await signPayloadWithWallet(params.walletMode, canonicalMsg);
   } catch (signErr) {
-    console.warn("[x402 Signing] Wallet signing fallback notice:", signErr);
-    signerResult = {
-      signature: `ed25519_auth_${Date.now()}`,
-      publicKey: "pubkey_auth",
-      address: params.senderAddress || YEARBOUND_VAULT_ADDRESS,
-    };
+    if (params.walletMode === "real") {
+      throw signErr instanceof Error ? signErr : new Error("Failed to sign Mainnet x402 challenge");
+    }
+    if (params.walletMode === "linked") {
+      // Extension already executed and proved the transfer on-chain via preExecutedDigest
+      signerResult = {
+        signature: "ext_signed",
+        publicKey: "ext_pk",
+        address: params.senderAddress || "",
+      };
+    } else {
+      console.warn("[x402 Signing] Wallet signing fallback notice:", signErr);
+      signerResult = {
+        signature: `ed25519_auth_${Date.now()}`,
+        publicKey: "pubkey_auth",
+        address: params.senderAddress || YEARBOUND_VAULT_ADDRESS,
+      };
+    }
   }
 
   // Step 4: Construct the signed payment payload
@@ -234,7 +257,7 @@ export async function executeX402VaultDeposit(params: {
     currency: "SUI",
     amount_sui: challenge.payment.amount_sui,
     destination: challenge.payment.destination,
-    sender_address: signerResult.address,
+    sender_address: signerResult.address || params.senderAddress || "",
     signature: signerResult.signature,
     timestamp: new Date().toISOString(),
     preExecutedDigest,
@@ -268,12 +291,20 @@ export async function executeX402VaultDeposit(params: {
 
     const settleData = await settleRes.json();
     if (settleRes.ok && settleData.status === "deposited") {
+      const isReal = Boolean(settleData.is_real_on_chain);
+      if (isStrictMainnet && (!isReal || !settleData.tx_hash)) {
+        throw new Error(
+          settleData.error ||
+            "Sui Mainnet x402 settlement did not produce an on-chain transaction digest."
+        );
+      }
+
       return {
         success: true,
         settlementType:
           settleData.settlement_type ||
-          (settleData.is_real_on_chain ? "on_chain_ptb" : "cryptographic_voucher"),
-        isRealOnChain: Boolean(settleData.is_real_on_chain),
+          (isReal ? "on_chain_ptb" : "cryptographic_voucher"),
+        isRealOnChain: isReal,
         txHash: settleData.tx_hash,
         voucherSignature: settleData.voucher_signature || signerResult.signature,
         explorerUrl: settleData.explorer_url,
@@ -284,11 +315,23 @@ export async function executeX402VaultDeposit(params: {
         challengeNonce: challenge.payment.nonce,
       };
     }
+
+    if (isStrictMainnet) {
+      throw new Error(
+        settleData?.error ||
+          `Sui Mainnet x402 vault settlement failed (HTTP ${settleRes.status}).`
+      );
+    }
   } catch (settleErr) {
+    if (isStrictMainnet) {
+      throw settleErr instanceof Error
+        ? settleErr
+        : new Error("Sui Mainnet x402 settlement failed.");
+    }
     console.warn("[x402 Settle] Network settlement notice, providing fallback authorization:", settleErr);
   }
 
-  // Resilient fallback voucher so user experience is never blocked
+  // Demo Testnet sandbox fallback voucher only
   return {
     success: true,
     settlementType: "cryptographic_voucher",

@@ -62,6 +62,73 @@ export interface TatumSpendingVelocity {
   provider: string;
 }
 
+export interface TatumServiceOptions {
+  apiKey?: string | null;
+  mainnetGqlUrl?: string;
+  testnetGqlUrl?: string;
+  mainnetRpcUrl?: string;
+  testnetRpcUrl?: string;
+  fetchFn?: typeof fetch;
+}
+
+export function createResilientGqlFetch(
+  primaryUrl: string,
+  fallbackUrl: string,
+  baseFetch: typeof fetch = fetch
+): typeof fetch {
+  return async (input, init) => {
+    const attempt = async (
+      targetUrl: string,
+      stripApiKey: boolean,
+      timeoutMs: number
+    ) => {
+      if (init?.signal?.aborted) {
+        throw init.signal.reason ?? new DOMException("Aborted", "AbortError");
+      }
+      const headers = new Headers(init?.headers);
+      if (stripApiKey) {
+        headers.delete("x-api-key");
+      }
+      const attemptTimeout = AbortSignal.timeout(timeoutMs);
+      const signal = init?.signal
+        ? AbortSignal.any([init.signal, attemptTimeout])
+        : attemptTimeout;
+      return baseFetch(targetUrl, {
+        ...init,
+        headers,
+        signal,
+      });
+    };
+
+    try {
+      const res = await attempt(primaryUrl, false, 4500);
+      if (res.status !== 429 && res.status < 500) {
+        return res;
+      }
+
+      // Brief backoff retry on Tatum rate-limit (429) or transient 5xx
+      await new Promise((r) => setTimeout(r, 500));
+      const retryRes = await attempt(primaryUrl, false, 4500);
+      if (retryRes.status !== 429 && retryRes.status < 500) {
+        return retryRes;
+      }
+
+      if (fallbackUrl && fallbackUrl !== primaryUrl) {
+        return await attempt(fallbackUrl, true, 6000);
+      }
+      return retryRes;
+    } catch (primaryErr) {
+      if (init?.signal?.aborted) {
+        throw primaryErr;
+      }
+      if (fallbackUrl && fallbackUrl !== primaryUrl) {
+        return await attempt(fallbackUrl, true, 6000);
+      }
+      throw primaryErr;
+    }
+  };
+}
+
 export class TatumSuiService {
   private apiKey: string | null;
   private mainnetGqlClient: SuiGraphQLClient;
@@ -69,16 +136,23 @@ export class TatumSuiService {
   private mainnetRpcUrl: string;
   private testnetRpcUrl: string;
 
-  constructor() {
+  constructor(options: TatumServiceOptions = {}) {
     this.apiKey =
-      process.env.TATUM_API_KEY && !process.env.TATUM_API_KEY.includes("your_")
+      options.apiKey !== undefined
+        ? options.apiKey
+        : process.env.TATUM_API_KEY && !process.env.TATUM_API_KEY.includes("your_")
         ? process.env.TATUM_API_KEY
         : null;
 
     this.mainnetRpcUrl =
-      process.env.SUI_RPC_URL || "https://fullnode.mainnet.sui.io:443";
+      options.mainnetRpcUrl ||
+      process.env.TATUM_SUI_RPC_URL ||
+      process.env.SUI_RPC_URL ||
+      "https://fullnode.mainnet.sui.io:443";
     this.testnetRpcUrl =
-      process.env.SUI_TESTNET_RPC_URL || "https://fullnode.testnet.sui.io:443";
+      options.testnetRpcUrl ||
+      process.env.SUI_TESTNET_RPC_URL ||
+      "https://fullnode.testnet.sui.io:443";
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -87,16 +161,30 @@ export class TatumSuiService {
       headers["x-api-key"] = this.apiKey;
     }
 
+    const mainnetPrimary =
+      options.mainnetGqlUrl ||
+      process.env.TATUM_SUI_GATEWAY_URL ||
+      "https://sui-mainnet.gateway.tatum.io/graphql";
+    const mainnetFallback = "https://graphql.mainnet.sui.io/graphql";
+
+    const testnetPrimary =
+      options.testnetGqlUrl ||
+      process.env.TATUM_SUI_TESTNET_GATEWAY_URL ||
+      "https://graphql.testnet.sui.io/graphql";
+    const testnetFallback = "https://graphql.testnet.sui.io/graphql";
+
     this.mainnetGqlClient = new SuiGraphQLClient({
-      url: process.env.TATUM_SUI_GATEWAY_URL || "https://sui-mainnet.gateway.tatum.io/graphql",
+      url: mainnetPrimary,
       network: "mainnet",
       headers,
+      fetch: createResilientGqlFetch(mainnetPrimary, mainnetFallback, options.fetchFn),
     });
 
     this.testnetGqlClient = new SuiGraphQLClient({
-      url: process.env.TATUM_SUI_TESTNET_GATEWAY_URL || "https://graphql.testnet.sui.io/graphql",
+      url: testnetPrimary,
       network: "testnet",
       headers,
+      fetch: createResilientGqlFetch(testnetPrimary, testnetFallback, options.fetchFn),
     });
   }
 
@@ -157,11 +245,16 @@ export class TatumSuiService {
   /**
    * Retrieves all token balances for a given Sui wallet address via Tatum GraphQL Gateway.
    */
-  public async getWalletBalances(address: string, network: SuiNetwork = "mainnet"): Promise<SuiCoinBalance[]> {
+  public async getWalletBalances(
+    address: string,
+    network: SuiNetwork = "mainnet",
+    opts?: { throwOnError?: boolean }
+  ): Promise<SuiCoinBalance[]> {
     if (!address || !address.startsWith("0x")) {
       return [];
     }
 
+    let lastErr: unknown = null;
     try {
       const query = `
         query GetBalances($address: SuiAddress!) {
@@ -191,8 +284,12 @@ export class TatumSuiService {
       }>({
         query,
         variables: { address },
-        signal: AbortSignal.timeout(4500),
+        signal: AbortSignal.timeout(12000),
       });
+
+      if (result?.errors?.length) {
+        throw new Error(result.errors.map((e) => e.message).join("; "));
+      }
 
       const nodes = result?.data?.address?.balances?.nodes;
       if (nodes && Array.isArray(nodes)) {
@@ -202,16 +299,31 @@ export class TatumSuiService {
           totalBalance: n.totalBalance,
         }));
       }
+      // Valid empty balances node returns []
+      if (result?.data && "address" in result.data) {
+        return [];
+      }
+      throw new Error(`Tatum ${network} Gateway returned unexpected empty balance payload`);
     } catch (gqlErr) {
-      console.warn(`[Tatum ${network} Gateway] GraphQL balance query notice:`, gqlErr instanceof Error ? gqlErr.message : gqlErr);
+      lastErr = gqlErr;
+      console.warn(
+        `[Tatum ${network} Gateway] GraphQL balance query notice:`,
+        gqlErr instanceof Error ? gqlErr.message : gqlErr
+      );
     }
 
-    // Fallback to dedicated JSON-RPC only when not using deprecated public fullnodes
+    // Fallback to dedicated JSON-RPC only when explicitly configured with a working non-fullnode JSON-RPC URL
     const rpcUrl = network === "testnet" ? this.testnetRpcUrl : this.mainnetRpcUrl;
-    if (!rpcUrl.includes("fullnode.")) {
+    if (!rpcUrl.includes("fullnode.") && !rpcUrl.includes("/v3/blockchain/node/sui-")) {
       try {
         return await this.rpcCall<SuiCoinBalance[]>("suix_getAllBalances", [address], network);
-      } catch {}
+      } catch (rpcErr) {
+        lastErr = rpcErr;
+      }
+    }
+
+    if (opts?.throwOnError && lastErr) {
+      throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
     }
     return [];
   }
@@ -219,8 +331,12 @@ export class TatumSuiService {
   /**
    * Helper to retrieve SUI token balance formatted as a float.
    */
-  public async getSuiBalance(address: string, network: SuiNetwork = "mainnet"): Promise<number> {
-    const balances = await this.getWalletBalances(address, network);
+  public async getSuiBalance(
+    address: string,
+    network: SuiNetwork = "mainnet",
+    opts?: { throwOnError?: boolean }
+  ): Promise<number> {
+    const balances = await this.getWalletBalances(address, network, opts);
     const suiCoin = balances.find(
       (b) => b.coinType === "0x2::sui::SUI" || b.coinType.endsWith("::sui::SUI")
     );
@@ -244,6 +360,9 @@ export class TatumSuiService {
             digest
             status
             timestamp
+            executionError {
+              message
+            }
           }
         }
       }
@@ -256,6 +375,9 @@ export class TatumSuiService {
           digest?: string;
           status?: string;
           timestamp?: string;
+          executionError?: {
+            message?: string | null;
+          } | null;
         };
       };
     }>({
@@ -264,7 +386,12 @@ export class TatumSuiService {
         txBcs: transactionDataBcs,
         sigs: signatures,
       },
+      signal: AbortSignal.timeout(15000),
     });
+
+    if (result?.errors?.length) {
+      throw new Error(result.errors.map((e) => e.message).join("; "));
+    }
 
     const effects = result?.data?.executeTransaction?.effects;
     if (!effects || !effects.digest) {
@@ -273,10 +400,18 @@ export class TatumSuiService {
       );
     }
 
+    if (effects.status && effects.status !== "SUCCESS") {
+      throw new Error(
+        effects.executionError?.message ||
+          `Sui ${network} transaction failed with status: ${effects.status}`
+      );
+    }
+
     return {
       digest: effects.digest,
       status: effects.status || "SUCCESS",
       timestamp: effects.timestamp,
+      executionError: effects.executionError?.message || null,
       explorerUrl: `https://suiscan.xyz/${network}/tx/${effects.digest}`,
     };
   }
