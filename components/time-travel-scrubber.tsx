@@ -21,7 +21,10 @@ export function TimeTravelScrubber({
   ];
 
   return (
-    <div className="absolute bottom-21 left-1/2 -translate-x-1/2 z-40 bg-black/80 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-full p-1 shadow-2xl flex items-center gap-1 select-none animate-in fade-in slide-in-from-bottom-2 duration-300">
+    <div
+      data-tour-id="tour-timetravel"
+      className="absolute bottom-21 left-1/2 -translate-x-1/2 z-40 bg-black/80 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-full p-1 shadow-2xl flex items-center gap-1 select-none animate-in fade-in slide-in-from-bottom-2 duration-300"
+    >
       {milestones.map((m) => {
         const isActive = activeMilestone === m.id;
         return (

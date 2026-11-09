@@ -49,6 +49,7 @@ import {
 import { synthesizeWallyIntervention } from "@/lib/wally-synthesizer";
 import { DisciplineGrid } from "@/components/discipline-grid";
 import { TimeTravelScrubber, type TimeMilestone } from "@/components/time-travel-scrubber";
+import { AppTour, type TourStepConfig } from "@/components/app-tour";
 
 /* ==========================================================================
    YEARBOUND PROTOCOL
@@ -468,6 +469,12 @@ export default function YearboundApp() {
   const isDegradedModeRef = useRef<boolean>(false);
   const prevDegradedModeRef = useRef<boolean>(false);
   const [tatumDisabledNotice, setTatumDisabledNotice] = useState<string>("");
+
+  // Interactive First-Entry Tour state
+  const shellRef = useRef<HTMLDivElement | null>(null);
+  const TOUR_STORAGE_KEY = "yearbound_tour_done_v1";
+  const [isTourOpen, setIsTourOpen] = useState<boolean>(false);
+  const [tourIndex, setTourIndex] = useState<number>(0);
 
   // Walrus Cold-Boot Hydration & Compounding Pattern Synthesis state
   const [isHydrating, setIsHydrating] = useState<boolean>(false);
@@ -1377,6 +1384,154 @@ export default function YearboundApp() {
     }
   };
 
+  // Interactive First-Entry Dashboard + Send Flow Guided Tour
+  const appTourSteps: TourStepConfig[] = [
+    {
+      id: "wally",
+      targetSelector: '[data-tour-id="tour-wally"]',
+      body: "Wally pulls from your Walrus memory to brief you on your activity and spending habits. Watch this adapt as you use the app.",
+      ctaLabel: "Next",
+    },
+    {
+      id: "toggle",
+      targetSelector: '[data-tour-id="tour-walrus-toggle"]',
+      body: "Switch Walrus and Tatum off here anytime to compare against a stateless wallet with zero memory and zero checks.",
+      ctaLabel: "Next",
+    },
+    ...(accountType === "demo"
+      ? [
+          {
+            id: "timetravel" as const,
+            targetSelector: '[data-tour-id="tour-timetravel"]',
+            body: "Scrub ahead across dates to simulate months of real usage and see how accumulated memory reshapes Wally and your account.",
+            ctaLabel: "Next",
+            reserveBottomPx: 20,
+          },
+        ]
+      : []),
+    {
+      id: "send",
+      targetSelector: '[data-tour-id="tour-send-btn"]',
+      body: "Make your first transaction. Tap Send to try an amount, address, and live rule enforcement.",
+      hintText: "Tap Send",
+    },
+    {
+      id: "send_setup",
+      targetSelector: '[data-tour-id="tour-send-setup"]',
+      body: "Try a small SUI amount within your balance and enter any Sui address or test contact name, then hit Continue.",
+      interactive: true,
+      hintText: "Tap Continue",
+      reserveBottomPx: 98,
+    },
+    {
+      id: "send_memo",
+      targetSelector: '[data-tour-id="tour-send-memo"]',
+      body: "Enforced Memo. Every spend is audited against your Walrus rules first. Try breaking one—type 'cigs' or pick an option below—and tap Review & Check.",
+      interactive: true,
+      hintText: "Tap Review & Check",
+      reserveBottomPx: 98,
+    },
+    {
+      id: "hold_decision",
+      targetSelector: '[data-tour-id="tour-hold-actions"]',
+      body: "Your call. Cancel & Honor to protect your pact at 0 cost, or proceed anyway to pay the penalty to x402 and write the breach to Walrus.",
+      ctaLabel: "Got it",
+      dismissDelayMs: 2500,
+      hideSkip: true,
+    },
+  ];
+
+  const finishAppTour = () => {
+    setIsTourOpen(false);
+    setTourIndex(0);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem(TOUR_STORAGE_KEY, "true");
+      } catch {}
+    }
+  };
+
+  const startAppTour = () => {
+    setIsDegradedMode(false);
+    setIsSendOpen(false);
+    setActiveTab("home");
+    setTourIndex(0);
+    setTimeout(() => {
+      setIsTourOpen(true);
+    }, 260);
+  };
+
+  // Auto-start guided tour once upon entering dashboard for the first time
+  useEffect(() => {
+    if (
+      step === 4 &&
+      !isDegradedMode &&
+      activeTab === "home" &&
+      !isSendOpen &&
+      typeof window !== "undefined"
+    ) {
+      try {
+        if (localStorage.getItem(TOUR_STORAGE_KEY) !== "true") {
+          const timer = setTimeout(() => {
+            setTourIndex(0);
+            setIsTourOpen(true);
+          }, 420);
+          return () => clearTimeout(timer);
+        }
+      } catch {}
+    }
+  }, [step]);
+
+  // Keep tour synchronized with Send flow navigation through memo audit and Hold On decision
+  useEffect(() => {
+    if (!isTourOpen) return;
+    const currentStep = appTourSteps[tourIndex];
+    if (!currentStep) {
+      finishAppTour();
+      return;
+    }
+
+    if (isDegradedMode && !isSendOpen) {
+      finishAppTour();
+      return;
+    }
+
+    if (
+      !isSendOpen &&
+      (currentStep.id === "send_setup" ||
+        currentStep.id === "send_memo" ||
+        currentStep.id === "hold_decision")
+    ) {
+      finishAppTour();
+      return;
+    }
+
+    if (isSendOpen) {
+      if (sendSubStep === "amount" && currentStep.id !== "send_setup") {
+        const idx = appTourSteps.findIndex((s) => s.id === "send_setup");
+        if (idx !== -1) setTourIndex(idx);
+      } else if (sendSubStep === "memo" && currentStep.id !== "send_memo") {
+        const idx = appTourSteps.findIndex((s) => s.id === "send_memo");
+        if (idx !== -1) setTourIndex(idx);
+      } else if (sendSubStep === "checking") {
+        // Keep tour state alive silently while transaction audit is in progress
+      } else if (sendSubStep === "breach") {
+        if (isSubmitting) {
+          finishAppTour();
+        } else if (currentStep.id !== "hold_decision") {
+          const idx = appTourSteps.findIndex((s) => s.id === "hold_decision");
+          if (idx !== -1) setTourIndex(idx);
+        }
+      } else if (
+        sendSubStep === "approved" ||
+        sendSubStep === "honored" ||
+        sendSubStep === "penalty_recorded"
+      ) {
+        finishAppTour();
+      }
+    }
+  }, [isTourOpen, isSendOpen, sendSubStep, isDegradedMode, isSubmitting, tourIndex]);
+
   // Open Send Flow
   const openSendFlow = () => {
     setSendSubStep("amount");
@@ -1385,6 +1540,12 @@ export default function YearboundApp() {
     setSendMemo("");
     setBreachReason("");
     setIsSendOpen(true);
+    if (isTourOpen) {
+      const setupIdx = appTourSteps.findIndex((s) => s.id === "send_setup");
+      if (setupIdx !== -1) {
+        setTourIndex(setupIdx);
+      }
+    }
   };
 
   // Close Send Flow
@@ -2486,9 +2647,12 @@ export default function YearboundApp() {
       {/* ====================================================================
           MOBILE SHELL (Centered vertical frame on desktop, solid black ground)
           ==================================================================== */}
-      <div className={`relative w-full max-w-[420px] h-full md:h-[860px] md:max-h-[92vh] bg-[#000000] md:border md:border-[#222226] md:rounded-[40px] flex flex-col justify-between overflow-hidden shadow-2xl transition-all duration-300 ${
-        isDegradedMode ? "grayscale-[50%]" : ""
-      }`}>
+      <div
+        ref={shellRef}
+        className={`relative w-full max-w-[420px] h-full md:h-[860px] md:max-h-[92vh] bg-[#000000] md:border md:border-[#222226] md:rounded-[40px] flex flex-col justify-between overflow-hidden shadow-2xl transition-all duration-300 ${
+          isDegradedMode ? "grayscale-[50%]" : ""
+        }`}
+      >
         {/* Global App Background Image (for Sign In & the rest of the app: pure starry sky, no dark overlay) */}
         {step >= 0 && (
           <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden select-none">
@@ -3340,7 +3504,7 @@ export default function YearboundApp() {
                   <div className="text-[26px] sm:text-[30px] font-bold tracking-[0.02em] leading-tight text-[#ebaf64]">
                     {currentDateStr || "Mon, Nov 9"}
                   </div>
-                  <div className="flex items-center gap-2.5">
+                  <div data-tour-id="tour-walrus-toggle" className="flex items-center gap-2.5">
                     <span className="text-xs font-mono text-white/70">Walrus</span>
                     <button
                       type="button"
@@ -3380,6 +3544,7 @@ export default function YearboundApp() {
                     <div className="flex items-center gap-2 shrink-0">
                       <button
                         type="button"
+                        data-tour-id="tour-send-btn"
                         onClick={openSendFlow}
                         className="py-2.5 px-4 rounded-full bg-[#ebaf64] hover:bg-[#f3ba6f] text-black font-semibold text-xs transition-all duration-150 flex items-center justify-center gap-1.5 active:scale-95 shadow-sm cursor-pointer"
                       >
@@ -3416,7 +3581,7 @@ export default function YearboundApp() {
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-1.5 pt-1">
+                  <div data-tour-id="tour-wally" className="flex flex-col gap-1.5 pt-1">
                     <div className="flex items-center gap-2">
                       <span className="text-[11px] font-mono text-[#ebaf64]/80 uppercase tracking-wider font-semibold">
                         {!isDegradedMode ? "Wally · Walrus Memory" : "Wally · Memory Offline"}
@@ -4032,18 +4197,29 @@ export default function YearboundApp() {
                   )}
                 </div>
 
-                {/* Reset Pact Button */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsDegradedMode(false);
-                    setStep(1);
-                    setActiveTab("home");
-                  }}
-                  className="w-full py-3.5 px-4 rounded-full bg-black/20 hover:bg-black/40 border border-[#ebaf64]/25 hover:border-[#ebaf64]/50 text-xs font-medium text-white/70 hover:text-white transition-all text-center active:scale-[0.99] shadow-sm"
-                >
-                  Reset & Create New Pact
-                </button>
+                {/* Replay Tour & Reset Pact Actions */}
+                <div className="flex flex-col gap-2.5">
+                  <button
+                    type="button"
+                    onClick={startAppTour}
+                    className="w-full py-3.5 px-4 rounded-full bg-black/20 hover:bg-black/40 border border-[#ebaf64]/25 hover:border-[#ebaf64]/50 text-xs font-medium text-[#ebaf64]/85 hover:text-[#ebaf64] transition-all text-center active:scale-[0.99] shadow-sm cursor-pointer"
+                  >
+                    Replay Guided Tour
+                  </button>
+
+                  {/* Reset Pact Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsDegradedMode(false);
+                      setStep(1);
+                      setActiveTab("home");
+                    }}
+                    className="w-full py-3.5 px-4 rounded-full bg-black/20 hover:bg-black/40 border border-[#ebaf64]/25 hover:border-[#ebaf64]/50 text-xs font-medium text-white/70 hover:text-white transition-all text-center active:scale-[0.99] shadow-sm"
+                  >
+                    Reset & Create New Pact
+                  </button>
+                </div>
               </div>
             )}
 
@@ -4137,62 +4313,64 @@ export default function YearboundApp() {
                 </div>
 
                 <div className="flex-1 overflow-y-auto px-5 sm:px-7 py-2 flex flex-col gap-4 pb-4 overscroll-contain">
-                  {/* Big Centered Amount Display Card */}
-                  <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-6 flex flex-col items-center justify-center gap-3 shadow-md">
-                    <div className="flex items-baseline justify-center gap-2">
+                  <div data-tour-id="tour-send-setup" className="flex flex-col gap-4">
+                    {/* Big Centered Amount Display Card */}
+                    <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-6 flex flex-col items-center justify-center gap-3 shadow-md">
+                      <div className="flex items-baseline justify-center gap-2">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={sendAmount}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/[^0-9.]/g, "");
+                            setSendAmount(val);
+                          }}
+                          style={{ width: `${Math.max(1, (sendAmount || "0").length)}ch` }}
+                          className="bg-transparent text-[52px] sm:text-[56px] font-semibold font-mono text-center text-white outline-none tracking-tight p-0"
+                          placeholder="0"
+                        />
+                        <span className="text-xl font-mono text-[#ebaf64]">SUI</span>
+                      </div>
+
+                      {/* Quick Amount Preset Chips */}
+                      <div className="flex items-center gap-2 mt-1">
+                        {AMOUNT_PRESETS.map((amt) => (
+                          <button
+                            key={amt}
+                            type="button"
+                            onClick={() => setSendAmount(amt.toString())}
+                            className={`py-1.5 px-3.5 rounded-full text-xs font-mono transition-all duration-150 active:scale-95 cursor-pointer ${
+                              sendAmount === amt.toString()
+                                ? "bg-[#ebaf64] text-black font-semibold shadow-sm"
+                                : "bg-black/40 text-white/70 border border-[#ebaf64]/30 hover:border-[#ebaf64]/60"
+                            }`}
+                          >
+                            {amt}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Insufficient Balance Indicator */}
+                      {parseFloat(sendAmount || "0") > availableBalance && (
+                        <span className="text-[11px] font-mono text-red-400 mt-1">
+                          Insufficient balance (Wallet: {availableBalance.toFixed(2)} SUI)
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Recipient Address */}
+                    <div className="flex flex-col gap-1.5 pt-1">
+                      <label className="text-xs font-medium text-[#ebaf64]/80 px-1">
+                        Recipient Address
+                      </label>
                       <input
                         type="text"
-                        inputMode="decimal"
-                        value={sendAmount}
-                        onChange={(e) => {
-                          const val = e.target.value.replace(/[^0-9.]/g, "");
-                          setSendAmount(val);
-                        }}
-                        style={{ width: `${Math.max(1, (sendAmount || "0").length)}ch` }}
-                        className="bg-transparent text-[52px] sm:text-[56px] font-semibold font-mono text-center text-white outline-none tracking-tight p-0"
-                        placeholder="0"
+                        value={sendRecipient}
+                        onChange={(e) => setSendRecipient(e.target.value)}
+                        placeholder="Enter Sui address or contact name..."
+                        className="w-full bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 hover:border-[#ebaf64]/50 focus:border-[#ebaf64] rounded-2xl px-4 py-3.5 text-xs font-mono text-white placeholder-white/30 outline-none transition-colors shadow-sm"
                       />
-                      <span className="text-xl font-mono text-[#ebaf64]">SUI</span>
                     </div>
-
-                    {/* Quick Amount Preset Chips */}
-                    <div className="flex items-center gap-2 mt-1">
-                      {AMOUNT_PRESETS.map((amt) => (
-                        <button
-                          key={amt}
-                          type="button"
-                          onClick={() => setSendAmount(amt.toString())}
-                          className={`py-1.5 px-3.5 rounded-full text-xs font-mono transition-all duration-150 active:scale-95 cursor-pointer ${
-                            sendAmount === amt.toString()
-                              ? "bg-[#ebaf64] text-black font-semibold shadow-sm"
-                              : "bg-black/40 text-white/70 border border-[#ebaf64]/30 hover:border-[#ebaf64]/60"
-                          }`}
-                        >
-                          {amt}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Insufficient Balance Indicator */}
-                    {parseFloat(sendAmount || "0") > availableBalance && (
-                      <span className="text-[11px] font-mono text-red-400 mt-1">
-                        Insufficient balance (Wallet: {availableBalance.toFixed(2)} SUI)
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Recipient Address */}
-                  <div className="flex flex-col gap-1.5 pt-1">
-                    <label className="text-xs font-medium text-[#ebaf64]/80 px-1">
-                      Recipient Address
-                    </label>
-                    <input
-                      type="text"
-                      value={sendRecipient}
-                      onChange={(e) => setSendRecipient(e.target.value)}
-                      placeholder="Enter Sui address or contact name..."
-                      className="w-full bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 hover:border-[#ebaf64]/50 focus:border-[#ebaf64] rounded-2xl px-4 py-3.5 text-xs font-mono text-white placeholder-white/30 outline-none transition-colors shadow-sm"
-                    />
                   </div>
                 </div>
 
@@ -4248,30 +4426,32 @@ export default function YearboundApp() {
                 </div>
 
                 <div className="flex-1 overflow-y-auto px-5 sm:px-7 py-3 flex flex-col gap-4 pb-4 overscroll-contain">
-                  {/* Compulsory Memo Input */}
-                  <textarea
-                    value={sendMemo}
-                    onChange={(e) => setSendMemo(e.target.value)}
-                    placeholder="e.g. Late-night food delivery..."
-                    rows={3}
-                    className="w-full bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 hover:border-[#ebaf64]/50 focus:border-[#ebaf64] rounded-2xl p-4 text-xs sm:text-sm text-white placeholder-white/30 outline-none transition-colors leading-relaxed resize-none shadow-sm"
-                  />
+                  <div data-tour-id="tour-send-memo" className="flex flex-col gap-4">
+                    {/* Compulsory Memo Input */}
+                    <textarea
+                      value={sendMemo}
+                      onChange={(e) => setSendMemo(e.target.value)}
+                      placeholder="e.g. Late-night food delivery..."
+                      rows={3}
+                      className="w-full bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 hover:border-[#ebaf64]/50 focus:border-[#ebaf64] rounded-2xl p-4 text-xs sm:text-sm text-white placeholder-white/30 outline-none transition-colors leading-relaxed resize-none shadow-sm"
+                    />
 
-                  {/* Quick Pick Testing Chips for Judges */}
-                  <div className="flex flex-col gap-2">
-                    {QUICK_MEMO_PICKS.map((item, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => setSendMemo(item.text)}
-                        className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/20 hover:border-[#ebaf64]/50 text-left px-4 py-3 rounded-2xl transition-all duration-150 active:scale-[0.99] flex items-center justify-between"
-                      >
-                        <span className="text-xs font-medium text-white/90">
-                          {item.label}
-                        </span>
-                        <ArrowRight size={13} className="text-[#ebaf64]/70" />
-                      </button>
-                    ))}
+                    {/* Quick Pick Testing Chips for Judges */}
+                    <div className="flex flex-col gap-2">
+                      {QUICK_MEMO_PICKS.map((item, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setSendMemo(item.text)}
+                          className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/20 hover:border-[#ebaf64]/50 text-left px-4 py-3 rounded-2xl transition-all duration-150 active:scale-[0.99] flex items-center justify-between"
+                        >
+                          <span className="text-xs font-medium text-white/90">
+                            {item.label}
+                          </span>
+                          <ArrowRight size={13} className="text-[#ebaf64]/70" />
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
@@ -4435,30 +4615,35 @@ export default function YearboundApp() {
                 </div>
 
                 {/* Actions: Cancel vs Pay Fine */}
-                <div className="p-5 sm:p-7 pt-2 pb-8 sm:pb-9 bg-transparent shrink-0 flex flex-col gap-2.5 items-center">
-                  <button
-                    type="button"
-                    onClick={() => setSendSubStep("honored")}
-                    className="w-full py-4 px-6 rounded-full font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 bg-[#ebaf64] text-black hover:bg-[#f3bc75] active:scale-[0.98] shadow-lg shadow-black/60 cursor-pointer"
+                <div className="p-5 sm:p-7 pt-2 pb-8 sm:pb-9 bg-transparent shrink-0 flex flex-col items-center">
+                  <div
+                    data-tour-id="tour-hold-actions"
+                    className="w-full flex flex-col gap-2.5 items-center"
                   >
-                    <span>Cancel & Honor Resolution</span>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setSendSubStep("honored")}
+                      className="w-full py-4 px-6 rounded-full font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 bg-[#ebaf64] text-black hover:bg-[#f3bc75] active:scale-[0.98] shadow-lg shadow-black/60 cursor-pointer"
+                    >
+                      <span>Cancel & Honor Resolution</span>
+                    </button>
 
-                  <button
-                    type="button"
-                    onClick={handlePayFineAndProceed}
-                    disabled={isSubmitting}
-                    className="w-full py-2.5 text-center text-xs font-medium text-white/60 hover:text-white transition-colors flex items-center justify-center gap-2"
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin inline-block shrink-0" />
-                        <span>{payFineStage || "Settling penalty..."}</span>
-                      </>
-                    ) : (
-                      <span>Proceed anyway & pay {breachPenaltySui || 0.05} SUI penalty</span>
-                    )}
-                  </button>
+                    <button
+                      type="button"
+                      onClick={handlePayFineAndProceed}
+                      disabled={isSubmitting}
+                      className="w-full py-2.5 text-center text-xs font-medium text-white/60 hover:text-white transition-colors flex items-center justify-center gap-2"
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin inline-block shrink-0" />
+                          <span>{payFineStage || "Settling penalty..."}</span>
+                        </>
+                      ) : (
+                        <span>Proceed anyway & pay {breachPenaltySui || 0.05} SUI penalty</span>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </>
             )}
@@ -4634,7 +4819,7 @@ export default function YearboundApp() {
             DRAWER: ADD ANOTHER RESOLUTION
             ================================================================== */}
         {isAddResolutionOpen && (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
+          <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
             <div className="w-full max-w-[420px] bg-black/40 backdrop-blur-3xl border border-[#ebaf64]/30 rounded-t-[32px] sm:rounded-[32px] p-6 flex flex-col gap-5 shadow-2xl animate-in slide-in-from-bottom-6 duration-300">
               <div className="flex items-center justify-between">
                 <div className="flex flex-col">
@@ -4738,7 +4923,7 @@ export default function YearboundApp() {
             ? walrusBlobs.filter((b) => b.blobId === focusedMemoryBlobId).slice(0, 1)
             : walrusBlobs;
           return (
-          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
+          <div className="fixed inset-0 z-[60] bg-black/85 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
             <div className="w-full max-w-[420px] max-h-[85vh] bg-[#0A0A0C] border border-[#222226] rounded-t-[32px] sm:rounded-[32px] p-6 flex flex-col gap-4 shadow-2xl animate-in slide-in-from-bottom-6 duration-300 overflow-hidden">
               <div className="flex items-center justify-between shrink-0">
                 <div className="flex flex-col">
@@ -4891,10 +5076,39 @@ export default function YearboundApp() {
         })()}
 
         {/* ==================================================================
+            FIRST-ENTRY INTERACTIVE APP TOUR
+            ================================================================== */}
+        {step === 4 && (
+          <AppTour
+            isOpen={isTourOpen}
+            steps={appTourSteps}
+            currentIndex={tourIndex}
+            shellRef={shellRef}
+            onNext={() => {
+              if (tourIndex + 1 < appTourSteps.length) {
+                const nextStep = appTourSteps[tourIndex + 1];
+                if (
+                  nextStep?.id === "send_setup" ||
+                  nextStep?.id === "send_memo" ||
+                  nextStep?.id === "hold_decision"
+                ) {
+                  finishAppTour();
+                } else {
+                  setTourIndex((prev) => prev + 1);
+                }
+              } else {
+                finishAppTour();
+              }
+            }}
+            onSkip={finishAppTour}
+          />
+        )}
+
+        {/* ==================================================================
             UNIFIED FEEDBACK SNACKBAR
             ================================================================== */}
         {showSnackbar && (
-          <div className="absolute bottom-24 left-5 right-5 z-50 bg-[#141417] border border-[#3F3F46] rounded-2xl p-4 shadow-2xl flex items-center justify-between gap-3 animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <div className="absolute bottom-24 left-5 right-5 z-[70] bg-[#141417] border border-[#3F3F46] rounded-2xl p-4 shadow-2xl flex items-center justify-between gap-3 animate-in fade-in slide-in-from-bottom-3 duration-200">
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-5 h-5 rounded-full bg-white text-black flex items-center justify-center shrink-0">
                 <Check size={12} strokeWidth={3} />

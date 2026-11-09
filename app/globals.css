@@ -197,6 +197,19 @@ html, body {
   animation: emberPulse 4s ease-in-out infinite;
 }
 
+@keyframes tourDotsMarch {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -27;
+  }
+}
+
+.animate-tour-dots {
+  animation: tourDotsMarch 1.8s linear infinite;
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
