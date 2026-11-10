@@ -56,26 +56,17 @@ function drawTinyStarGlint(
 
 function getCenterTextDampening(x: number, y: number, width: number, height: number): number {
   if (width <= 0 || height <= 0) return 1;
-  const nx = Math.abs(x / width - 0.5) / 0.28;
-  const ny = Math.abs(y / height - 0.5) / 0.24;
+  const nx = Math.abs(x / width - 0.5) / 0.26;
+  const ny = Math.abs(y / height - 0.48) / 0.2;
   const distSq = nx * nx + ny * ny;
   if (distSq >= 1) return 1;
-  return 0.42 + 0.58 * distSq;
+  return 0.56 + 0.44 * distSq;
 }
 
 function pickSkyRatio(): { xRatio: number; yRatio: number } {
-  // Favor upper sky & flanks naturally while keeping soft celestial sparkle everywhere
-  for (let attempt = 0; attempt < 4; attempt++) {
-    const xRatio = 0.03 + Math.random() * 0.94;
-    const yRatio = 0.05 + Math.random() * 0.88;
-    const inCenterTextZone = xRatio > 0.26 && xRatio < 0.74 && yRatio > 0.34 && yRatio < 0.66;
-    if (!inCenterTextZone || Math.random() < 0.3) {
-      return { xRatio, yRatio };
-    }
-  }
   return {
-    xRatio: 0.04 + Math.random() * 0.92,
-    yRatio: 0.06 + Math.random() * 0.84,
+    xRatio: 0.015 + Math.random() * 0.97,
+    yRatio: 0.02 + Math.random() * 0.95,
   };
 }
 
@@ -98,7 +89,7 @@ export function AmbientSparkles({ afterglowTrigger }: AmbientSparklesProps) {
 
     const seedRestingMotes = () => {
       restingMotes.length = 0;
-      const count = width < 640 ? 22 : 34;
+      const count = width < 640 ? 64 : 116;
       for (let i = 0; i < count; i++) {
         const { xRatio, yRatio } = pickSkyRatio();
         restingMotes.push({
@@ -106,11 +97,11 @@ export function AmbientSparkles({ afterglowTrigger }: AmbientSparklesProps) {
           yRatio,
           vx: (Math.random() - 0.5) * 4.5,
           vy: 1.5 + Math.random() * 4.2,
-          size: 0.85 + Math.random() * 1.15,
+          size: 0.85 + Math.random() * 1.25,
           phase: Math.random() * Math.PI * 2,
           twinkleSpeed: 1.1 + Math.random() * 1.6,
-          hasStarGlint: i % 3 === 0,
-          isWarmWhite: i % 4 === 0,
+          hasStarGlint: i % 2 === 0,
+          isWarmWhite: i % 3 === 0,
         });
       }
     };
@@ -129,11 +120,10 @@ export function AmbientSparkles({ afterglowTrigger }: AmbientSparklesProps) {
     seedRestingMotes();
 
     const spawnCascade = () => {
-      const burstCount = width < 640 ? 36 : 56;
+      const burstCount = width < 640 ? 68 : 112;
       for (let i = 0; i < burstCount; i++) {
-        // Concentrated mostly across upper & middle bands where Beat 2 crowns bloomed
-        const xRatio = 0.05 + Math.random() * 0.9;
-        const yRatio = 0.06 + Math.pow(Math.random(), 0.85) * 0.68;
+        const xRatio = 0.02 + Math.random() * 0.96;
+        const yRatio = 0.03 + Math.random() * 0.88;
         cascadeEmbers.push({
           x: xRatio * width,
           y: yRatio * height,
@@ -223,23 +213,23 @@ export function AmbientSparkles({ afterglowTrigger }: AmbientSparklesProps) {
         const x = m.xRatio * width;
         const y = m.yRatio * height;
         const zoneFade = getCenterTextDampening(x, y, width, height);
-        const wave = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(totalTimeSec * m.twinkleSpeed + m.phase));
-        const alpha = wave * 0.66 * zoneFade;
+        const wave = 0.42 + 0.58 * (0.5 + 0.5 * Math.sin(totalTimeSec * m.twinkleSpeed + m.phase));
+        const alpha = wave * 0.82 * zoneFade;
 
-        ctx.fillStyle = `rgba(235, 175, 100, ${(alpha * 0.24).toFixed(3)})`;
+        ctx.fillStyle = `rgba(235, 175, 100, ${(alpha * 0.28).toFixed(3)})`;
         ctx.beginPath();
-        ctx.arc(x, y, m.size * 2.6, 0, Math.PI * 2);
+        ctx.arc(x, y, m.size * 2.7, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.fillStyle = m.isWarmWhite
-          ? `rgba(255, 247, 224, ${(alpha * 0.92).toFixed(3)})`
-          : `rgba(235, 175, 100, ${(alpha * 0.92).toFixed(3)})`;
+          ? `rgba(255, 248, 228, ${(alpha * 0.96).toFixed(3)})`
+          : `rgba(235, 175, 100, ${(alpha * 0.95).toFixed(3)})`;
         ctx.beginPath();
-        ctx.arc(x, y, m.size * 0.78, 0, Math.PI * 2);
+        ctx.arc(x, y, m.size * 0.82, 0, Math.PI * 2);
         ctx.fill();
 
-        if (m.hasStarGlint && wave > 0.58) {
-          drawTinyStarGlint(ctx, x, y, 2.2 * wave + 0.7, alpha * 0.78);
+        if (m.hasStarGlint && wave > 0.54) {
+          drawTinyStarGlint(ctx, x, y, 2.6 * wave + 0.8, alpha * 0.84);
         }
       }
 
