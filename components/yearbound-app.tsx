@@ -5369,8 +5369,8 @@ export default function YearboundApp() {
                   </p>
                 </div>
 
-                <div className="flex-1 overflow-y-auto px-5 sm:px-7 py-2 flex flex-col gap-4 pb-4 overscroll-contain">
-                  <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 flex flex-col gap-3.5 shadow-md">
+                <div className="flex-1 overflow-y-auto px-5 sm:px-7 py-2 flex flex-col gap-3.5 pb-2 overscroll-contain">
+                  <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 flex flex-col gap-3.5 shadow-md shrink-0">
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] font-mono uppercase tracking-wider text-[#ebaf64]">
                         Discipline Report
@@ -5392,6 +5392,15 @@ export default function YearboundApp() {
                       <span className="text-xs text-white/50">Memory Ledger</span>
                       <span className="text-xs font-mono text-white/70">No Infraction Committed</span>
                     </div>
+                  </div>
+
+                  <div className="flex-1 min-h-[220px] flex items-center justify-center pt-1 pb-1 select-none pointer-events-none shrink-0">
+                    <img
+                      src="/assets/mascot/wally_thumbs.gif"
+                      alt="Wally approving your discipline"
+                      className="w-72 sm:w-80 h-auto max-h-[360px] object-contain"
+                      draggable={false}
+                    />
                   </div>
                 </div>
 
@@ -5419,8 +5428,8 @@ export default function YearboundApp() {
                   </p>
                 </div>
 
-                <div className="flex-1 overflow-y-auto px-5 sm:px-7 py-2 flex flex-col gap-4 pb-4 overscroll-contain">
-                  <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 flex flex-col gap-3.5 shadow-md">
+                <div className="flex-1 overflow-y-auto px-5 sm:px-7 py-2 flex flex-col gap-3.5 pb-2 overscroll-contain">
+                  <div className="bg-black/20 backdrop-blur-2xl border border-[#ebaf64]/25 rounded-3xl p-5 flex flex-col gap-3.5 shadow-md shrink-0">
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] font-mono uppercase tracking-wider text-[#ebaf64]">
                         Infraction Log
@@ -5541,6 +5550,15 @@ export default function YearboundApp() {
                         <ExternalLink size={11} />
                       </a>
                     )}
+                  </div>
+
+                  <div className="flex-1 min-h-[220px] flex items-center justify-center pt-1 pb-1 select-none pointer-events-none shrink-0">
+                    <img
+                      src="/assets/mascot/wally_bad.gif"
+                      alt="Wally recording infraction in Memories"
+                      className="w-72 sm:w-80 h-auto max-h-[360px] object-contain"
+                      draggable={false}
+                    />
                   </div>
                 </div>
 

@@ -8,10 +8,9 @@ Every January, millions of people make New Year's resolutions, and by February m
 
 Breaking a promise does not pay the app or burn your tokens. Any penalty you choose to push through settles via **x402** into a vault locked until **December 25**, turning weak moments into forced savings for your future self.
 
-<!-- Save your capture of the Home screen as docs/home-screen.png -->
-![Yearbound home screen](docs/home-screen.png)
-
-*Screenshot slot: capture the active Home screen (balance card, Wally's briefing, and active resolutions) and save it to `docs/home-screen.png`.*
+<p align="center">
+  <img src="docs/home-screen.jpg" alt="Yearbound home screen" width="320" />
+</p>
 
 ---
 
