@@ -1,7 +1,8 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: 'Outfit', system-ui, -apple-system, sans-serif;
+  --font-sans: var(--font-outfit), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), monospace;
 }
 
 :root {
@@ -16,30 +17,44 @@
   --flare-crimson: #C82800;
   --text-primary: #F5F1EB;
   --text-muted: #9E968F;
+  --yb-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --yb-ease-enter: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 html, body {
   background-color: #000000;
-  color: #FFFFFF;
-  font-family: 'Outfit', system-ui, -apple-system, sans-serif;
-  overflow: hidden;
-  height: 100%;
+  color: #F5F1EB;
+  font-family: var(--font-outfit), system-ui, -apple-system, sans-serif;
   margin: 0;
   padding: 0;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
 }
 
+/* Pre-hydration veil when intro curtain should play on `/` (prevents hero flash) */
+html.yb-intro-active {
+  overflow: hidden;
+}
+
+html.yb-intro-active::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-color: #000000;
+  z-index: 90;
+  pointer-events: auto;
+}
+
 .font-sans-clean {
-  font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-outfit), system-ui, -apple-system, sans-serif;
 }
 
 .font-display {
-  font-family: 'Space Grotesk', 'Outfit', sans-serif;
+  font-family: var(--font-outfit), system-ui, -apple-system, sans-serif;
 }
 
 .font-syne {
-  font-family: 'Syne', sans-serif;
+  font-family: var(--font-outfit), sans-serif;
 }
 
 .font-serif {
@@ -47,7 +62,7 @@ html, body {
 }
 
 .font-mono {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-jetbrains-mono), monospace;
 }
 
 @font-face {
